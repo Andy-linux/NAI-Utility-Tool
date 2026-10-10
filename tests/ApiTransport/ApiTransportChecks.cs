@@ -70,10 +70,10 @@ internal static class ApiTransportChecks
         Check(handler.PostCount == 9, "Each operation has exactly one POST, no automatic retries.");
 
         int getsBeforeKnownRequest = handler.GetCount;
-        foreach (var account in settings.Accounts) account.RefreshedAt = DateTimeOffset.MinValue;
+        foreach (var account in settings.Accounts) account.RefreshedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
         await service.GenerateAsync(1024, 1024, "test", "");
-        Check(handler.GetCount == getsBeforeKnownRequest, "Known account selection does not refresh by elapsed time or request invalidation.");
-        foreach (var account in settings.Accounts) { account.Info = null; account.IsTokenValid = null; }
+        Check(handler.GetCount == getsBeforeKnownRequest, "Known account selection does not refresh by elapsed time.");
+        foreach (var account in settings.Accounts) account.RefreshedAt = DateTimeOffset.MinValue;
         int postsBeforeEdit = handler.PostCount;
         var pendingGeneration = service.GenerateAsync(1024, 1024, "test", "");
         settings.Settings.ApiBaseUrl = "https://changed.invalid";

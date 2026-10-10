@@ -90,10 +90,10 @@ public partial class NovelAIService
         var configuredAccounts = _settings.Accounts;
         {
             foreach (var account in _settings.Accounts) EnsureAccountIdentity(account);
-            // Only an uninitialized identity needs preflight data. Known balances
-            // refresh through startup/settings/result/manual events, not elapsed time.
+            // Identity changes and business results invalidate freshness explicitly.
+            // The existing refresh lock coalesces an in-flight result refresh.
             var stale = ApiAccountRouter.UniqueAccounts(_settings.Accounts)
-                .Where(a => a.Info == null && a.IsTokenValid == null).ToArray();
+                .Where(a => a.RefreshedAt == DateTimeOffset.MinValue).ToArray();
             await Parallel.ForEachAsync(stale, new ParallelOptions
             {
                 MaxDegreeOfParallelism = 4, CancellationToken = ct,
