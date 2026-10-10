@@ -155,9 +155,12 @@ try
     undecryptable.Load();
     Check(undecryptable.ApiTokenDecryptFailed && undecryptable.Accounts.Single().EncryptedApiToken == "invalid-base64",
         "undecryptable copies retain ciphertext with warning");
-    Check(!undecryptable.Save() && File.ReadAllText(undecryptablePath) == undecryptableJson &&
-        File.ReadAllText(undecryptablePath + ".bak") == undecryptableJson,
-        "undecryptable credential save does not overwrite either copy");
+    undecryptable.Settings.ThemeMode = "Dark";
+    Check(undecryptable.Save() && File.ReadAllText(undecryptablePath).Contains("invalid-base64") &&
+        File.ReadAllText(undecryptablePath + ".bak").Contains("invalid-base64"),
+        "ordinary settings save preserves undecryptable credential in both copies");
+    undecryptable.Load();
+    Check(undecryptable.Settings.ThemeMode == "Dark", "ordinary settings survive restart with undecryptable credential");
     File.Delete(undecryptablePath + ".bak");
     undecryptable.Load();
     Check(undecryptable.ApiTokenDecryptFailed && undecryptable.Accounts.Single().EncryptedApiToken == "invalid-base64",

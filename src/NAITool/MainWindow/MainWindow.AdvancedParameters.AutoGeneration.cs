@@ -101,12 +101,7 @@ public sealed partial class MainWindow
                 else
                 {
                     int? statusCode = _lastGenerationFailureStatusCode;
-                    // A status alone does not prove that an upstream generation was
-                    // rejected before admission. Never replay a potentially charged
-                    // request, including truncated/preview-only streams or timeouts.
-                    // Saved legacy retry preferences are retained but cannot override
-                    // this safety boundary; explicit admission evidence is required.
-                    int retryLimit = 0;
+                    int retryLimit = automationSettings.ErrorHandling.GetRetryLimit(statusCode);
 
                     if (retryLimit == 0)
                     {

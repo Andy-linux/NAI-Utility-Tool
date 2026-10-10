@@ -212,8 +212,6 @@ public sealed partial class MainWindow
         var totals = ApiQuotaTotals.From(_settings.Accounts);
         if (_settings.Settings.UsesCustomApiBaseUrl)
         {
-            // Display one labelled credential snapshot, never sum potentially
-            // shared upstream wallets or imply a random generation binding.
             var snapshot = _settings.Accounts.FirstOrDefault(a => a.Token.Length > 0 &&
                 a.IsTokenValid != false && a.Info?.IsAccountInfoAvailable == true)?.Info;
             _anlasBalance = snapshot?.AnlasBalance;
@@ -454,8 +452,9 @@ public sealed partial class MainWindow
         int currentAnlasCost = EstimateCurrentRequestAnlasCost();
         string anlasImageCount = currentAnlasCost > 0 && anlas.HasValue
             ? Math.Max(0, anlas.Value / currentAnlasCost).ToString("N0")
-            : "--";
-        _quotaSummaryAnlasEstimateText.Text = currentAnlasCost > 0 && anlas.HasValue
+            : currentAnlasCost == 0 && !CurrentParams.Model.StartsWith("nai-diffusion-5", StringComparison.Ordinal)
+                ? "∞" : "";
+        _quotaSummaryAnlasEstimateText.Text = anlasImageCount.Length > 0
             ? Lf("settings.quota.summary.anlas_estimate", anlasImageCount) : "";
         _quotaSummaryAnlasEstimateText.Visibility = string.IsNullOrEmpty(_quotaSummaryAnlasEstimateText.Text)
             ? Visibility.Collapsed : Visibility.Visible;
@@ -471,7 +470,11 @@ public sealed partial class MainWindow
             ? Math.Max(v5Usage.Value, 0)
             : 0;
         _quotaSummaryV5UsageProgress.Opacity = v5Usage.HasValue ? 1 : 0.45;
-        _quotaSummaryV5UsageEstimateText.Visibility = Visibility.Collapsed;
+        _quotaSummaryV5UsageEstimateText.Text = v5Usage.HasValue
+            ? Lf("settings.quota.summary.v5_estimate", Math.Floor(1_730d * Math.Max(v5Usage.Value, 0) / 100).ToString("N0"))
+            : "";
+        _quotaSummaryV5UsageEstimateText.Visibility = v5Usage.HasValue ? Visibility.Visible : Visibility.Collapsed;
+        ToolTipService.SetToolTip(_quotaSummaryV5UsageEstimateText, "High · 23 steps · ≈1 MP");
         _quotaSummaryV5UsageRecoveryText.Visibility = Visibility.Collapsed;
 
         _quotaSummaryAnlasLabel.Foreground = summaryTextBrush;

@@ -240,19 +240,17 @@ public class SettingsService
             {
                 if (!string.IsNullOrWhiteSpace(account.Token))
                 {
-                    // Token is publicly mutable; never retain encryption of an older credential.
+                    // Re-encrypt changed credentials.
                     if (account.EncryptedApiToken == null || DecryptToken(account.EncryptedApiToken) != account.Token)
                         account.EncryptedApiToken = EncryptToken(account.Token);
                 }
                 // Keep undecryptable ciphertext for recovery; explicit UI clearing creates a new empty account.
             }
             var apiJson = JsonSerializer.Serialize(CachedApiConfig, JsonOptions);
-            // Prepare both current documents (including encryption) before publishing either.
-            // Legacy recovery-copy encryption happens during that file's backup rotation.
-            ValidateUsableApiConfigJson(apiJson);
+            ValidateApiConfigJson(apiJson);
             AtomicJsonFile.Write(SettingsFilePath, settingsJson, ValidateSettingsJson);
             AtomicJsonFile.Write(ApiConfigFilePath, apiJson,
-                ValidateUsableApiConfigJson, ProtectLegacyBackup);
+                ValidateApiConfigJson, ProtectLegacyBackup);
 
             return true;
         }

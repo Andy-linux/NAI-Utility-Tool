@@ -158,13 +158,13 @@ public sealed partial class MainWindow
             if (dialog != null)
             {
                 dialog.IsPrimaryButtonEnabled = !overCostLimit;
-                dialog.PrimaryButtonText = cost > 0 ? $"≈ {cost} Anlas · {L("enhance.start")}" : $"{L("quota.opus_free")} · {L("enhance.start")}";
+                dialog.PrimaryButtonText = cost > 0 ? $"≈ {cost} Anlas · {L("enhance.start")}" : $"0 Anlas · {L("enhance.start")}";
             }
             if (confirmationButton != null)
             {
                 confirmationButton.Content = cost > 0
                     ? CreateAnlasActionButtonContent("≈ " + L("enhance.start"), cost)
-                    : $"{L("quota.opus_free")} · {L("enhance.start")}";
+                    : $"0 Anlas · {L("enhance.start")}";
                 if (cost > 0) ApplyGoldAccentButtonStyle(confirmationButton);
                 else ClearGoldAccentButtonStyle(confirmationButton);
             }

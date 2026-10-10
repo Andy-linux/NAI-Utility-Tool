@@ -226,7 +226,7 @@ public sealed partial class MainWindow
         });
         content.Children.Add(new TextBlock
         {
-            Text = anlasCost.ToString(),
+            Text = anlasCost.ToString() + " Anlas",
             Opacity = 0.9,
             VerticalAlignment = VerticalAlignment.Center,
         });
@@ -263,7 +263,7 @@ public sealed partial class MainWindow
         {
             content.Children.Add(new TextBlock
             {
-                Text = anlasCost.Value.ToString(),
+                Text = anlasCost.Value.ToString() + " Anlas",
                 Opacity = 0.9,
                 VerticalAlignment = VerticalAlignment.Center,
             });
@@ -412,7 +412,7 @@ public sealed partial class MainWindow
         }
         else
         {
-            BtnRedoGenerate.Content = CreateSymbolActionButtonContent(Symbol.Refresh, L("button.regenerate"));
+            BtnRedoGenerate.Content = CreateAnlasActionButtonContent(L("button.regenerate"), EstimateCurrentRequestAnlasCost());
             ClearGoldAccentButtonStyle(BtnRedoGenerate);
         }
     }
@@ -430,7 +430,7 @@ public sealed partial class MainWindow
         }
         else
         {
-            BtnEnhanceGenResult.Content = CreateFontIconActionButtonContent("\uE771", L("button.enhance"));
+            BtnEnhanceGenResult.Content = CreateFontIconActionButtonContent("\uE771", L("button.enhance"), estimatedAnlas);
             ClearGoldAccentButtonStyle(BtnEnhanceGenResult);
         }
     }
@@ -440,6 +440,7 @@ public sealed partial class MainWindow
         if (IsAnyGenerateLoopRunning()) return;
         BtnGenerate.IsEnabled = !_generateRequestRunning;
         bool hasKey = _settings.HasApiTokens;
+        ToolTipService.SetToolTip(BtnGenerate, null);
         var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         if (hasKey && _anlasRefreshRunning && !_anlasInitialFetchDone)
         {
@@ -473,6 +474,7 @@ public sealed partial class MainWindow
             else
             {
                 content.Children.Add(new SymbolIcon(Symbol.Send));
+                content.Children.Add(new TextBlock { Text = "0 Anlas", Opacity = 0.9 });
             }
             ToolTipService.SetToolTip(BtnGenerate, L("quota.estimate_hint"));
             content.Children.Add(new TextBlock { Text = L("button.send") });

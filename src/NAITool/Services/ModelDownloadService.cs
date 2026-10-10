@@ -25,8 +25,6 @@ public class ModelDownloadProgress
 
 public static class ModelDownloadService
 {
-    // Defensive disk budget, not an asserted upstream model size; 16 GiB leaves room for large taggers.
-    internal const long DefaultMaximumTotalBytes = 16L * 1024 * 1024 * 1024;
     private const string HuggingFaceRepo = "https://huggingface.co/deepghs/pixai-tagger-v0.9-onnx/resolve/main";
     private static readonly string[] RequiredFiles = ["model.onnx", "selected_tags.csv"];
     public static string DefaultDownloadPath => Path.Combine(AppPathResolver.AppRootDir, "models", "tagger", "pixai-tagger-v0.9-onnx");
@@ -42,15 +40,13 @@ public static class ModelDownloadService
             onProgress, cancellationToken);
     }
 
-    // Injection seam for local HTTP fixtures; no production credentials or large downloads required.
     internal static async Task<string> DownloadModelAsync(HttpClient client, Uri baseUri, string targetDir,
         Action<ModelDownloadProgress>? onProgress = null, CancellationToken cancellationToken = default,
-        IReadOnlyDictionary<string, string>? expectedSha256 = null, long maximumTotalBytes = DefaultMaximumTotalBytes)
+        IReadOnlyDictionary<string, string>? expectedSha256 = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (maximumTotalBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maximumTotalBytes));
         Directory.CreateDirectory(targetDir);
-        // Cross-process exclusion, released even on cancellation. Never replace another writer's files.
+        // Cross-process download lock.
         using var downloadLock = new FileStream(Path.Combine(targetDir, ".model-download.lock"),
             FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, FileOptions.DeleteOnClose);
         string suffix = "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -68,8 +64,6 @@ public static class ModelDownloadService
                 using var response = await client.GetAsync(new Uri(baseUri, file), HttpCompletionOption.ResponseHeadersRead, cancellationToken);
                 response.EnsureSuccessStatusCode();
                 long? expectedLength = response.Content.Headers.ContentLength;
-                if (expectedLength.HasValue && expectedLength.Value > maximumTotalBytes - completedBytes)
-                    throw new InvalidDataException("Model response exceeds download disk budget.");
                 string? responseHash = ReadResponseSha256(response);
                 await using (var source = await response.Content.ReadAsStreamAsync(cancellationToken))
                 await using (var destination = new FileStream(temps[index], FileMode.CreateNew, FileAccess.Write,
@@ -82,8 +76,6 @@ public static class ModelDownloadService
                     {
                         int count = await source.ReadAsync(buffer, cancellationToken);
                         if (count == 0) break;
-                        if (count > maximumTotalBytes - completedBytes - received)
-                            throw new InvalidDataException("Model response exceeds download disk budget.");
                         await destination.WriteAsync(buffer.AsMemory(0, count), cancellationToken);
                         received += count;
                         if (expectedLength.HasValue && received > expectedLength.Value)
@@ -151,7 +143,7 @@ public static class ModelDownloadService
 
     private static string? ReadResponseSha256(HttpResponseMessage response)
     {
-        // RFC Digest/Content-Digest, when supplied by the server. No guessed model hashes.
+        // RFC Digest/Content-Digest supplied by the server.
         foreach (string header in new[] { "Content-Digest", "Digest" })
         {
             if (!response.Headers.TryGetValues(header, out var values) &&

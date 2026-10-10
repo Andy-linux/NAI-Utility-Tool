@@ -425,6 +425,7 @@ public sealed partial class MainWindow
             else
                 UpdateFloatingResultBarsVisibility();
             await ShowGenPreviewAsync(bytes);
+            UpdateGenEnhanceButtonWarning();
             UpdateDynamicMenuStates();
         }
         catch (Exception ex) { TxtStatus.Text = Lf("common.load_failed", ex.Message); }

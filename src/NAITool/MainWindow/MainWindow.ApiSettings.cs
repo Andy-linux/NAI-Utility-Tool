@@ -257,35 +257,12 @@ public sealed partial class MainWindow
             SaveApiSettings();
             UpdateGenerateButtonWarning();
         };
-        var timeoutPanel = new StackPanel { Spacing = 10 };
-        void AddTimeout(string key, int value, Action<int> apply)
-        {
-            var box = new NumberBox
-            {
-                Header = L(key), Value = value, Minimum = 1, Maximum = 3600,
-                SmallChange = 1, LargeChange = 30,
-                SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
-            };
-            box.ValueChanged += (_, args) =>
-            {
-                if (!double.IsFinite(args.NewValue)) return;
-                apply(Math.Clamp((int)args.NewValue, 1, 3600));
-                _settings.Save();
-            };
-            timeoutPanel.Children.Add(box);
-        }
-        AddTimeout("settings.api.timeout.waiting", _settings.Settings.ApiWaitingTimeoutSeconds, value => _settings.Settings.ApiWaitingTimeoutSeconds = value);
-        AddTimeout("settings.api.timeout.generation", _settings.Settings.ApiGenerationTimeoutSeconds, value => _settings.Settings.ApiGenerationTimeoutSeconds = value);
-        AddTimeout("settings.api.timeout.upscale", _settings.Settings.ApiUpscaleTimeoutSeconds, value => _settings.Settings.ApiUpscaleTimeoutSeconds = value);
-        AddTimeout("settings.api.timeout.text", _settings.Settings.ApiTextTimeoutSeconds, value => _settings.Settings.ApiTextTimeoutSeconds = value);
-        AddTimeout("settings.api.timeout.readonly", _settings.Settings.ApiReadOnlyTimeoutSeconds, value => _settings.Settings.ApiReadOnlyTimeoutSeconds = value);
         var page = CreateSettingsHubPage(
             CreateSettingsHubLayer("\uE71B", L("settings.hub.network.base_url"),
                 L("settings.hub.network.base_url_hint"), baseUrlBox),
             CreateSettingsHubLayer("\uE8D7", L("settings.hub.network.api_token"),
                 L("settings.api.tokens_hint"), tokenPanel, expanded: true),
-            CreateSettingsHubLayer("\uE8AB", L("settings.api.mode"), L("settings.api.mode_hint"), modeBox),
-            CreateSettingsHubLayer("\uE823", L("settings.api.timeout.title"), L("settings.api.timeout.hint"), timeoutPanel));
+            CreateSettingsHubLayer("\uE8AB", L("settings.api.mode"), L("settings.api.mode_hint"), modeBox));
         ((FrameworkElement)page).Unloaded += (_, _) =>
         {
             testCts?.Cancel();

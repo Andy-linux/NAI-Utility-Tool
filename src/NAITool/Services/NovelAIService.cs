@@ -984,9 +984,7 @@ public partial class NovelAIService : IDisposable
         if (!_settings.HasApiTokens)
             return (null, L("api.error.token_missing_network"));
 
-        // Enhance uses the verified single-result route; production stream
-        // Enhance did not provide an acceptable final result. Do not retry it.
-        bool streamGeneration = _settings.Settings.StreamGeneration && !isEnhance;
+        bool streamGeneration = _settings.Settings.StreamGeneration;
         var naiParams = ModelCapabilities.CreateRequestSnapshot(parametersOverride ?? _settings.Settings.I2IDenoiseParameters);
         if ((isEnhance && (width <= 0 || height <= 0 || (long)width * height > EnhanceRules.MaxPixels)) ||
             (upscaledEnhance && (!isEnhance || !EnhanceRules.CanUseMax(naiParams.Model, width, height))))

@@ -66,11 +66,7 @@ internal static class Program
 
             using (var truncatedClient = new HttpClient(new TruncatedHandler()))
                 await Failure("declared length mismatch", () => ModelDownloadService.DownloadModelAsync(truncatedClient, server.Uri, directory, progress.Add), progress, directory);
-            await Failure("declared disk budget", () => ModelDownloadService.DownloadModelAsync(client, server.Uri, directory, progress.Add,
-                maximumTotalBytes: Onnx.Length - 1), progress, directory);
             server.Chunked = true;
-            await Failure("unknown-length disk budget", () => ModelDownloadService.DownloadModelAsync(client, server.Uri, directory, progress.Add,
-                maximumTotalBytes: Onnx.Length + Csv.Length - 1), progress, directory);
             await ModelDownloadService.DownloadModelAsync(client, server.Uri, directory);
             Check(ModelDownloadService.IsModelDownloaded(directory), "unknown length chunked validated");
             server.Chunked = false;

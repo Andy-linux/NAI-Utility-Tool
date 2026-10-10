@@ -52,7 +52,10 @@ internal static class EnhanceChecks
         Check(Rule<bool>("CanUseMax", V5, 1024, 1024), "V5 supports Max.");
         Check(!Rule<bool>("CanUseMax", "nai-diffusion-4-5-full", 1024, 1024), "V4.5 omits Max.");
         Check(!Rule<bool>("CanUseMax", V5, 2048, 1536), "Near-limit images omit Max.");
-        Check(Rule<(int, int)>("GetOutputDimensions", 832, 1216, 1.5, false) == (1248, 1824), "Portrait 1.5x dimensions.");
+        Check(Rule<(int, int)>("GetOutputDimensions", 832, 1216, 1.5, false) == (1280, 1856), "Portrait 1.5x uses official nearest-64 rounding, ties upward.");
+        Check(Rule<(int, int)>("GetOutputDimensions", 1216, 832, 1.5, false) == (1856, 1280), "Landscape 1.5x rounding.");
+        Check(Rule<(int, int)>("GetOutputDimensions", 500, 500, 1d, false) == (512, 512), "Imported unaligned source rounds before preparation.");
+        Check(Rule<(int, int)>("GetOutputDimensions", 1, 1, 1d, false) == (64, 64), "Official minimum dimension.");
         foreach (var size in new[] { (512, 512), (832, 1216), (1216, 832), (1024, 1024), (1024, 2048) })
         {
             var output = Rule<(int W, int H)>("GetOutputDimensions", size.Item1, size.Item2, 1d, true);
@@ -124,8 +127,8 @@ internal static class EnhanceChecks
         settings.Settings.StreamGeneration = true;
         await service.ImageToImageAsync("AA==", 512, 512, "landscape", "",
             parametersOverride: parameters, isEnhance: true);
-        Check(!handler.Payload.GetProperty("parameters").TryGetProperty("stream", out _) &&
-            handler.LastPath == "/ai/generate-image", "Enhance selects the verified single-result route before dispatch, without retrying a stream.");
+        Check(handler.Payload.GetProperty("parameters").GetProperty("stream").GetString() == "msgpack" &&
+            handler.LastPath == "/ai/generate-image-stream", "Enhance preserves the user's stream preference without fallback or retry.");
         int count = handler.Count;
         parameters.Steps = 100;
         parameters.DenoiseStrength = 0.99;

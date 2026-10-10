@@ -68,6 +68,18 @@ internal static class ApiTransportChecks
         Check(sequence.SequenceEqual(new[] { "test-a", "test-b", "test-a", "test-b" }),
             "Free generation rotates even in random mode, without duplicate weighting.");
         Check(handler.PostCount == 9, "Each operation has exactly one POST, no automatic retries.");
+        var retryOptions = new NAITool.Models.AutomationErrorHandlingOptions();
+        Check(retryOptions.GetRetryLimit((int?)null) == 0 && retryOptions.GetRetryLimit(504) == 0,
+            "Unknown failures have no configured automation retries.");
+        Check(retryOptions.GetRetryLimit(429) == -1 && retryOptions.GetRetryLimit(500) == 3,
+            "Existing automation retry defaults remain available.");
+        foreach (int limit in new[] { 0, 2, -1 })
+        {
+            retryOptions.SetRetryLimit(400, limit);
+            Check(service.LastGenerationErrorStatusCode == 400 &&
+                retryOptions.GetRetryLimit(service.LastGenerationErrorStatusCode) == limit,
+                "Mock HTTP failure respects the user's automation retry setting.");
+        }
 
         int getsBeforeKnownRequest = handler.GetCount;
         foreach (var account in settings.Accounts) account.RefreshedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
@@ -143,6 +155,16 @@ internal static class ApiTransportChecks
             partiallyDecrypted.Accounts[0].Token == "test-a", "One undecryptable token does not erase other accounts.");
         Check(ReferenceEquals(partiallyDecrypted.Accounts[0], partiallyDecrypted.Accounts[1]),
             "Duplicate credentials loaded from disk share quota and validation state.");
+        partiallyDecrypted.Settings.ThemeMode = "Dark";
+        partiallyDecrypted.Settings.RememberedPrompts.GenPositivePrompt = "synthetic saved prompt";
+        Check(partiallyDecrypted.Save(), "Undecryptable unused credential does not block ordinary settings save.");
+        Check(File.ReadAllText(configPath).Contains("invalid-ciphertext"), "Ordinary save preserves old ciphertext.");
+        var savedPartial = new SettingsService();
+        savedPartial.Load();
+        Check(savedPartial.Settings.ThemeMode == "Dark" &&
+            savedPartial.Settings.RememberedPrompts.GenPositivePrompt == "synthetic saved prompt" &&
+            savedPartial.Accounts.Any(a => a.EncryptedApiToken == "invalid-ciphertext"),
+            "Theme, prompt and old ciphertext survive restart together.");
         await CheckQuotaRoutingAsync(settings, service, handler);
         Console.WriteLine($"Passed {_checks} API transport and persistence checks (in-memory HTTP; synthetic tokens only).");
     }

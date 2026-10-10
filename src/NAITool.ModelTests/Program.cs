@@ -48,7 +48,7 @@ Check(NovelAiPromptPresets.HintId("heavy") == 2 && NovelAiPromptPresets.HintId("
 Check(NovelAiPromptPresets.ResolveUc("nai-diffusion-5-full-medium", "heavy", "portrait", "").StartsWith("nsfw, lowres"), "Medium fixed heavy UC includes verified prefix");
 Check(NovelAiAnlasCalculator.PaidBaseCost("nai-diffusion-5-full-medium", 1024, 1024, 14) == 18, "Medium verified pricing factors");
 Check(EnhanceRules.GetAvailableAmounts(500, 500).SequenceEqual(new[] { 1d, 1.5, 2d }), "Enhance500 safe scale choices");
-Check(EnhanceRules.GetOutputDimensions(500, 500, 1.5) == (750, 750), "Enhance500 dimensions preserve source ratio");
+Check(EnhanceRules.GetOutputDimensions(500, 500, 1.5) == (768, 768), "Enhance500 dimensions use official nearest64 rounding");
 Check(NovelAiPromptPresets.ResolveUcId(new NAIParameters { UcPresetId = "corrupt" }) == "heavy", "Invalid imported UC ID falls back coherently");
 Check(NovelAiPromptPresets.QualityTags("nai-diffusion-5-full", "none") == "", "None quality tags empty");
 foreach (string model in new[] { "nai-diffusion-5-full", "nai-diffusion-4-5-full", "nai-diffusion-4-5-curated", "nai-diffusion-4-full", "nai-diffusion-4-curated-preview", "nai-diffusion-3", "nai-diffusion-furry-3" })
