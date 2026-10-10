@@ -401,6 +401,7 @@ public sealed partial class MainWindow
     {
         if (BtnRedoGenerate == null) return;
 
+        BtnRedoGenerate.Style = (Style)Application.Current.Resources[EstimateCurrentRequestAnlasCost() > 0 ? "AccentButtonStyle" : "SubtleButtonStyle"];
         bool warn = _currentMode == AppMode.I2I &&
                     MaskCanvas.IsInPreviewMode &&
                     EstimateCurrentRequestAnlasCost() > 0;
@@ -423,9 +424,10 @@ public sealed partial class MainWindow
 
         BtnEnhanceGenResult.IsEnabled = _currentGenImageBytes != null && !_generateRequestRunning;
         int estimatedAnlas = EstimateGenEnhanceAnlasCost();
+        BtnEnhanceGenResult.Style = (Style)Application.Current.Resources[estimatedAnlas > 0 ? "AccentButtonStyle" : "SubtleButtonStyle"];
         if (estimatedAnlas > 0)
         {
-            BtnEnhanceGenResult.Content = CreateFontIconActionButtonContent("\uE771", L("button.enhance"), estimatedAnlas);
+            BtnEnhanceGenResult.Content = CreateAnlasActionButtonContent(L("button.enhance"), estimatedAnlas);
             ApplyGoldAccentButtonStyle(BtnEnhanceGenResult);
         }
         else
@@ -473,7 +475,12 @@ public sealed partial class MainWindow
             }
             else
             {
-                content.Children.Add(new SymbolIcon(Symbol.Send));
+                content.Children.Add(new FontIcon
+                {
+                    FontFamily = SymbolFontFamily,
+                    Glyph = "\uF159",
+                    FontSize = 16,
+                });
                 content.Children.Add(new TextBlock { Text = "0 Anlas", Opacity = 0.9 });
             }
             ToolTipService.SetToolTip(BtnGenerate, L("quota.estimate_hint"));

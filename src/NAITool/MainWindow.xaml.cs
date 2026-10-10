@@ -219,7 +219,7 @@ public sealed partial class MainWindow : Window
     private bool _newImageDeleteProtectionCoversUnsavedResult;
     private DateTimeOffset _newImageDeleteProtectionUntilUtc;
     private bool _genResultBarRequested;
-    private bool _genResultBarAutoOpenEnabled = true;
+    private bool _genResultBarAutoOpenEnabled;
     private bool _genResultBarResident;
 
     // ═══ 检视模式 ═══
@@ -361,6 +361,17 @@ public sealed partial class MainWindow : Window
         _loc.LanguageChanged += OnAppLanguageChanged;
 
         this.InitializeComponent();
+        foreach (var bar in new[] { GenResultBar, ResultActionBar })
+        {
+            GenerationPreviewHost.Children.Remove(bar);
+            Grid.SetColumn(bar, 2);
+            Grid.SetColumnSpan(bar, 2);
+            bar.HorizontalAlignment = HorizontalAlignment.Left;
+            MainContentGrid.Children.Add(bar);
+        }
+        GenerationPreviewHost.SizeChanged += (_, _) => AlignFloatingResultBars();
+        GenResultBar.SizeChanged += (_, _) => AlignFloatingResultBars();
+        ResultActionBar.SizeChanged += (_, _) => AlignFloatingResultBars();
         _updatingImageRequestParameters = false;
         SetupGenerationPreviewPulse();
         HistoryListView.ItemsSource = _historyRows;

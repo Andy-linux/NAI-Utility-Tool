@@ -388,11 +388,18 @@ public sealed partial class MainWindow
         UpdateFloatingResultBarsVisibility();
     }
 
+    private void AlignFloatingResultBars()
+    {
+        double width = GenerationPreviewHost.ActualWidth;
+        if (width <= 0) return;
+        GenResultBar.Margin = new Thickness(Math.Max(0, (width - GenResultBar.ActualWidth) / 2), 0, 0, 20);
+        ResultActionBar.Margin = new Thickness(Math.Max(0, (width - ResultActionBar.ActualWidth) / 2), 0, 0, 20);
+    }
+
     private void UpdateFloatingResultBarsVisibility()
     {
         bool showGenResultBar =
-            (_genResultBarRequested ||
-             (_genResultBarResident && _currentGenImageBytes != null)) &&
+            _genResultBarResident &&
             _currentMode == AppMode.ImageGeneration &&
             !_autoGenRunning &&
             _currentGenImageBytes != null;
