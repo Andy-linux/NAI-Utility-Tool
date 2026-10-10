@@ -20,7 +20,7 @@ internal readonly record struct ApiRequestCost(
         !characterReference && width > 0 && height > 0 && steps > 0 && steps <= 28 && (long)width * height <= 1048576);
 }
 
-/// <summary>One cursor shared by every operation. Selection never changes global credentials.</summary>
+/// <summary>One cursor shared by every operation.</summary>
 internal sealed class ApiAccountRouter
 {
     private readonly object _gate = new();
@@ -38,7 +38,7 @@ internal sealed class ApiAccountRouter
         var candidates = UniqueAccounts(accounts)
             .Where(a => a.IsTokenValid != false && Eligible(a.Info, cost)).ToArray();
 
-        // A request that can be free should not accidentally spend another account's Anlas.
+        // Prefer zero-Anlas accounts.
         {
             var free = candidates.Where(a => cost.AnlasFor(a.Info) == 0).ToArray();
             if (free.Length > 0) return free;
@@ -53,7 +53,7 @@ internal sealed class ApiAccountRouter
         {
             var all = UniqueAccounts(accounts);
             int start = Array.FindIndex(all, a => Identity(a) == _lastIdentity) + 1;
-            // Modes only choose among eligible accounts; none may bypass the shared rules.
+            // Filter eligible accounts before selecting.
             var candidates = GetCandidates(all.Skip(start).Concat(all.Take(start)), cost, customEndpoint);
             if (candidates.Length == 0) return null;
 

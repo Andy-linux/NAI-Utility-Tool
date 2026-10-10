@@ -20,7 +20,7 @@ internal static class ModelIntegrity
     private static int _sessionValidationCount;
     internal static int SessionValidationCount => _sessionValidationCount;
 
-    // Cache stores no runtime sessions/weights, only a freshness fingerprint. Bounded for imported paths.
+    // Cache the file freshness fingerprint.
     private static string Stamp(string path)
     {
         var file = new FileInfo(path);
@@ -58,8 +58,7 @@ internal static class ModelIntegrity
     internal static void ValidatePair(string onnxPath, string csvPath)
     {
         var tags = ReverseTaggerModelCatalog.LoadTagDefinitionsFromFile(csvPath);
-        // Default CPU provider only: validation must not depend on DirectML/GPU availability.
-        // Session construction checks graph/weights/operators, not numerical accuracy or inference quality.
+        // Validate the graph with the default CPU provider.
         using var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_DISABLE_ALL };
         System.Threading.Interlocked.Increment(ref _sessionValidationCount);
         using var session = new InferenceSession(onnxPath, options);
@@ -93,7 +92,7 @@ internal static class ModelIntegrity
                     if (actual.Length != file.Length || !string.Equals(actual.Sha256, file.Sha256, StringComparison.OrdinalIgnoreCase))
                         return false;
                 }
-                // Manifest is a local completeness/change detector, not a trusted upstream signature.
+                // Manifest records file completeness and changes.
                 ValidatePair(Path.Combine(directory, "model.onnx"), Path.Combine(directory, "selected_tags.csv"));
                 if (fingerprint != Fingerprint(Path.Combine(directory, "model.onnx"), Path.Combine(directory, "selected_tags.csv"), File.ReadAllText(manifestPath)))
                     return false;

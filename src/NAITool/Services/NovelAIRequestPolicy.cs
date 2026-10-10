@@ -2,8 +2,7 @@ namespace NAITool.Services;
 
 internal static class NovelAIRequestPolicy
 {
-    // Without a verified queue-start signal, waiting and execution cannot be timed separately.
-    // Apply their bounded sum end-to-end (including streamed body), never a per-chunk reset.
+    // One timeout covers the request and response body.
     public static TimeSpan Budget(int waitingSeconds, int operationSeconds, bool readOnly = false)
         => TimeSpan.FromSeconds(Clamp(operationSeconds) + (readOnly ? 0 : Clamp(waitingSeconds)));
     private static int Clamp(int value) => Math.Clamp(value, 1, 3600);

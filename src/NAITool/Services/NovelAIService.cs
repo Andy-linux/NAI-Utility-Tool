@@ -234,7 +234,7 @@ public partial class NovelAIService : IDisposable
             using var accountStream = await response.Content.ReadAsStreamAsync(requestCt);
             string json = Encoding.UTF8.GetString(await NovelAIImageResponse.ReadBoundedAsync(accountStream, requestCt, 64 * 1024));
             if (endpointIdentity != GetApiEndpoints().Identity) return UnavailableAccountInfo();
-            // Account bodies may contain personal data; never log the raw response.
+            // Omit account response bodies from logs.
 
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
@@ -678,7 +678,7 @@ public partial class NovelAIService : IDisposable
             if (imageBytes != null)
             {
                 builder.AppendLine($"Response image: {imageBytes.Length} bytes");
-                // Image metadata may contain user prompts and identifying data; do not log it.
+                // Omit image metadata from logs.
             }
 
             builder.AppendLine();

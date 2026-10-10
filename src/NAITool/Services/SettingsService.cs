@@ -24,7 +24,6 @@ public class SettingsService
 
     public SettingsService() : this(DefaultConfigDir) { }
 
-    // Tests pass a new temporary directory; never redirect production user data.
     internal SettingsService(string configDir)
     {
         ConfigDir = Path.GetFullPath(configDir);
@@ -44,7 +43,7 @@ public class SettingsService
     public bool HasApiTokens => Accounts.Any(a => !string.IsNullOrWhiteSpace(a.Token));
     private readonly object _saveLock = new();
 
-    // Retain cache by credential identity, never by editable row index.
+    // Retain cache by credential identity.
     public void SetApiTokens(IEnumerable<string> tokens)
     {
         lock (_saveLock)
@@ -263,7 +262,7 @@ public class SettingsService
 
     private static string ProtectLegacyBackup(string json)
     {
-        // Legacy plaintext credentials must not be duplicated into the new recovery file.
+        // Encrypt legacy credentials in the recovery copy.
         using var parsed = JsonDocument.Parse(json);
         if (parsed.RootElement.TryGetProperty(nameof(ApiConfig.Accounts), out _)) return json;
         var legacy = JsonSerializer.Deserialize<LegacyApiConfig>(json, JsonOptions)!;
