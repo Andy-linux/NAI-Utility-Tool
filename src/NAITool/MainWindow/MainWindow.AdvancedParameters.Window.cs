@@ -358,10 +358,18 @@ public sealed partial class MainWindow
 
         var flyout = new Flyout
         {
-            Content = rootPanel,
+            Content = new ScrollViewer
+            {
+                Content = rootPanel,
+                MaxHeight = ((this.Content as FrameworkElement)?.ActualHeight ?? 600) - 32,
+                HorizontalScrollMode = ScrollMode.Disabled,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                VerticalScrollMode = ScrollMode.Enabled,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            },
             Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.RightEdgeAlignedTop,
-            ShouldConstrainToRootBounds = false,
-            FlyoutPresenterStyle = CreateUnconstrainedAdvancedFlyoutPresenterStyle(),
+            ShouldConstrainToRootBounds = true,
+            FlyoutPresenterStyle = CreateAdvancedFlyoutPresenterStyle(),
         };
 
         _advParamsFlyout = flyout;
@@ -381,11 +389,11 @@ public sealed partial class MainWindow
         UpdateEffortUI();
     }
 
-    private static Style CreateUnconstrainedAdvancedFlyoutPresenterStyle()
+    private static Style CreateAdvancedFlyoutPresenterStyle()
     {
         var style = new Style(typeof(FlyoutPresenter));
         style.Setters.Add(new Setter(FrameworkElement.MaxWidthProperty, 10000d));
-        style.Setters.Add(new Setter(FrameworkElement.MaxHeightProperty, 10000d));
+        // Content scrolls within the root height in short windows.
         style.Setters.Add(new Setter(Control.CornerRadiusProperty, new CornerRadius(8)));
         style.Setters.Add(new Setter(ScrollViewer.HorizontalScrollModeProperty, ScrollMode.Disabled));
         style.Setters.Add(new Setter(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Disabled));
