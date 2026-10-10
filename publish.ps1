@@ -91,7 +91,7 @@ function Copy-TrackedResource([string]$Relative, [string]$TargetRelative) {
     Copy-Item -LiteralPath $source -Destination $target
 }
 function Get-ReleaseSourceFingerprint {
-    $paths = @(& git -C $RootDir ls-files --cached --others --exclude-standard -- src/NAITool src/NAIToolLauncher assets models Directory.Build.props global.json publish.ps1)
+    $paths = @(& git -C $RootDir ls-files --cached --others --exclude-standard -- src/NAITool src/NAIToolLauncher assets models Directory.Build.props global.json LICENSE publish.ps1)
     if ($LASTEXITCODE -ne 0) { throw 'Cannot fingerprint release sources.' }
     $lines = foreach ($relative in $paths | Sort-Object -Unique) {
         $file = Join-Path $RootDir $relative
@@ -152,6 +152,9 @@ foreach ($relative in $TrackedResources) {
 # ── 其他根级目录 ──
 New-Item -ItemType Directory -Force (Join-Path $PublishDir "output") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $PublishDir "logs")   | Out-Null
+
+# Original GPL-3.0 license distributed with the binary.
+Copy-Item -LiteralPath (Join-Path $RootDir "LICENSE") -Destination (Join-Path $PublishDir "LICENSE")
 
 # ── 清理不需要的文件 ──
 Remove-PublishBloat -Path $PublishDir
