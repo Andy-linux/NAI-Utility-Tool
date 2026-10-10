@@ -967,6 +967,11 @@
                                 </Grid>
                                 <ComboBox x:Name="CboModel"
                                           HorizontalAlignment="Stretch"/>
+                                <StackPanel x:Name="EffortPanel" Orientation="Horizontal" Spacing="0" Visibility="Collapsed">
+                                    <TextBlock x:Name="EffortLabel" Text="Effort" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <ToggleButton x:Name="EffortHigh" Content="High" IsChecked="True" Click="OnEffortChanged" Height="28" MinWidth="70" CornerRadius="4,0,0,4"/>
+                                    <ToggleButton x:Name="EffortMedium" Content="Medium" Click="OnEffortChanged" Height="28" MinWidth="70" CornerRadius="0,4,4,0"/>
+                                </StackPanel>
                             </StackPanel>
 
                             <Grid x:Name="PromptTabRow" Grid.Row="1" ColumnSpacing="8"

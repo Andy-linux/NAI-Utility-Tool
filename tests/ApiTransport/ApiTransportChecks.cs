@@ -46,7 +46,7 @@ internal static class ApiTransportChecks
         await service.GenerateAsync(1024, 1024, "test", "");
         Check(handler.LastPostToken == "test-b", "V5 generation chooses maximum V5 balance.");
         await service.GenerateAsync(1024, 1536, "test", "");
-        Check(handler.LastPostToken == "test-a", "Paid V5 generation prioritizes Anlas and skips zero V5.");
+        Check(handler.LastPostToken == "test-zero", "Paid V5 generation prioritizes Anlas without excluding zero percent.");
         settings.Settings.ApiCallMode = ApiCallMode.LeastQuota;
         await service.GenerateAsync(1024, 1536, "test", "");
         Check(handler.LastPostToken == "test-b", "Paid V5 generation chooses minimum sufficient Anlas.");
@@ -117,10 +117,22 @@ internal static class ApiTransportChecks
         migrated.Load();
         Check(migrated.Accounts.Count == 1 && migrated.Accounts[0].Token == "test-a" &&
             migrated.Accounts[0].Info?.V5UsagePercent == 120, "Existing single-account encrypted configuration imports without losing overage.");
-        File.WriteAllText(configPath, JsonSerializer.Serialize(new ApiConfig
+        string invalidMixedConfig = JsonSerializer.Serialize(new ApiConfig
         {
             Accounts = [loaded.Accounts[0], loaded.Accounts[0], new ApiAccount { EncryptedApiToken = "invalid-ciphertext" }],
-        }));
+        });
+        // A valid whole-document backup wins over a partly decryptable primary.
+        // Both paths are inside this executable's isolated synthetic config root.
+        File.WriteAllText(configPath + ".bak", config);
+        File.WriteAllText(configPath, invalidMixedConfig);
+        var recovered = new SettingsService();
+        recovered.Load();
+        Check(recovered.ApiConfigRecoveredFromBackup && !recovered.ApiTokenDecryptFailed &&
+            recovered.Accounts.Select(a => a.Token).SequenceEqual(new[] { "test-a", "test-b" }),
+            "Valid encrypted whole-document backup is restored before partial decryption fallback.");
+        // Exercise partial preservation separately, with no valid backup available.
+        File.Delete(configPath + ".bak");
+        File.WriteAllText(configPath, invalidMixedConfig);
         var partiallyDecrypted = new SettingsService();
         partiallyDecrypted.Load();
         Check(partiallyDecrypted.ApiTokenDecryptFailed && partiallyDecrypted.HasApiTokens &&
@@ -133,7 +145,7 @@ internal static class ApiTransportChecks
 
     private static async Task CheckQuotaRoutingAsync(SettingsService settings, NovelAIService service, AccountHandler handler)
     {
-        settings.SetApiTokens(["test-too-small", "test-exact", "test-zero", "test-exact"]);
+        settings.SetApiTokens(["test-too-small", "test-exact", "test-exact"]);
         settings.Settings.GenParameters.Model = "nai-diffusion-5-full";
         handler.Balances["test-too-small"] = (44, 90);
         foreach (var mode in Enum.GetValues<ApiCallMode>())
@@ -158,9 +170,10 @@ internal static class ApiTransportChecks
         }
 
         settings.SetApiTokens(["test-preview-opus", "test-preview-tablet"]);
+        service.InvalidateMismatchedAccountCaches();
         settings.Accounts[0].Info = new NovelAiAccountInfo
         {
-            AnlasBalance = 100, V5UsagePercent = 90, IsOpus = true, HasActiveSubscription = true,
+            AnlasBalance = 100, V5UsagePercent = 90, V5UsageIsNegative = false, IsOpus = true, HasActiveSubscription = true,
         };
         settings.Accounts[1].Info = new NovelAiAccountInfo
         {
@@ -169,7 +182,7 @@ internal static class ApiTransportChecks
         settings.Settings.ApiCallMode = ApiCallMode.Random;
         var costType = typeof(NovelAIService).Assembly.GetType("NAITool.Services.ApiRequestCost")!;
         var cost = costType.GetMethod("Image", BindingFlags.Public | BindingFlags.Static)!
-            .Invoke(null, ["nai-diffusion-5-full", 1024, 1024, 28, false, 1d, 1]);
+            .Invoke(null, ["nai-diffusion-5-full", 1024, 1024, 28, false, 1d, 1, false, false]);
         var estimate = typeof(NovelAIService).GetMethod("EstimateAnlas", BindingFlags.NonPublic | BindingFlags.Instance)!
             .Invoke(service, [cost]);
         Check(Equals(estimate, 1), "Random cost preview excludes the higher cost of an account that cannot afford the request.");
@@ -202,7 +215,7 @@ internal static class ApiTransportChecks
                     {
                         subscription = new
                         {
-                            tier = 3, active = true, trainingStepsLeft = balance,
+                            tier = 3, active = true, expiresAt = DateTimeOffset.UtcNow.AddDays(7).ToUnixTimeSeconds(), trainingStepsLeft = balance,
                             usage = new { percent = v5, isNegative = false, timeUntilNextPercent = 60 },
                         },
                     })),

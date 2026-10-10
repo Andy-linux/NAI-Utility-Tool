@@ -73,7 +73,7 @@ internal static class UpscaleChecks
         handler.ResponseBytes = Zip(output);
         var result = await service.UpscaleImageAsync(input);
         Check(result.Error == null && result.ImageBytes!.SequenceEqual(output), "ZIP metadata entry is skipped; original result bytes survive.");
-        Check(handler.Uri == "https://image.novelai.net/ai/upscale", "Official route ignores custom generation URL.");
+        Check(handler.Uri == "https://unused.invalid/custom-generation/ai/upscale", "Upscale uses the configured credential boundary, never official fallback.");
         Check(handler.Authorization == "Bearer upscale-test-token" && handler.Accept == "application/zip", "Explicit token and ZIP negotiation.");
         Check(handler.Payload.EnumerateObject().Count() == 3, "Only current protocol fields are sent, no legacy width/height/scale.");
         Check(handler.Payload.GetProperty("model").GetString() == "nai-diffusion-5-curated", "Official upscaler model.");
@@ -116,12 +116,14 @@ internal static class UpscaleChecks
         foreach (var status in new[] { HttpStatusCode.Unauthorized, HttpStatusCode.PaymentRequired, HttpStatusCode.TooManyRequests, HttpStatusCode.InternalServerError })
         {
             handler.Status = status;
+            settings.Accounts[0].IsTokenValid = null;
             before = handler.Count;
             result = await service.UpscaleImageAsync(input);
             Check(result.ImageBytes == null && result.Error!.Contains(((int)status).ToString()) && handler.Count == before + 1,
                 $"HTTP {(int)status} is surfaced without an automatic paid retry.");
         }
         handler.Status = HttpStatusCode.OK;
+        settings.Accounts[0].IsTokenValid = null;
         handler.ResponseBytes = Zip(null);
         result = await service.UpscaleImageAsync(input);
         Check(result.ImageBytes == null && result.Error != null, "ZIP without image fails safely.");
@@ -150,6 +152,8 @@ internal static class UpscaleChecks
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
+            if (request.Method == HttpMethod.Get)
+                return new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("Unsupported account route") };
             Check(request.Method == HttpMethod.Post, "POST upscale request.");
             Uri = request.RequestUri!.AbsoluteUri;
             Authorization = request.Headers.Authorization!.ToString();

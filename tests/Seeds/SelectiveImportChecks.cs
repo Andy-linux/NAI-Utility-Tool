@@ -73,6 +73,29 @@ internal static class SelectiveImportChecks
                 "PNG import keeps original prompts available independently of actual prompts");
         }
 
+        foreach (bool sm in new[] { false, true })
+        foreach (bool dynamicSm in new[] { false, true })
+        foreach (bool variety in new[] { false, true })
+        {
+            var parsed = ImageMetadataService.TryParseJson($"{{\"prompt\":\"test\",\"sm\":{sm.ToString().ToLowerInvariant()},\"sm_dyn\":{dynamicSm.ToString().ToLowerInvariant()},\"skip_cfg_above_sigma\":{(variety ? "19" : "null")},\"quality_toggle\":false,\"ucPreset\":1}}");
+            Check(parsed != null && parsed.Sm == sm && parsed.SmDyn == dynamicSm && parsed.Variety == variety,
+                "SMEA, dynamic SMEA and Variety metadata parse independently");
+            Check(parsed!.QualityToggle == false && parsed.UcPreset == 1,
+                "Explicit quality and UC metadata flags remain available for import");
+        }
+        var draftMetadata = ImageMetadataService.TryParseJson("""
+            {"prompt":"portrait","model":"nai-diffusion-5-full-medium","steps":14,
+             "nai_tool_effort":"medium","nai_tool_high_negative":"High negative draft",
+             "nai_tool_high_parameters":{"Model":"nai-diffusion-5-full","Effort":"medium","Steps":31,"Sampler":"k_dpmpp_2m","CfgRescale":0.35,"UcPresetId":"humanFocus"}}
+            """);
+        Check(draftMetadata?.HighDraft?.Steps == 31 && draftMetadata.HighDraft.Sampler == "k_dpmpp_2m" && draftMetadata.HighDraft.CfgRescale == 0.35,
+            "Local Medium metadata retains High parameter draft separately from wire steps14");
+        Check(draftMetadata?.HighNegativePrompt == "High negative draft" && draftMetadata.Effort == "medium",
+            "Local Medium metadata retains High negative and effort");
+        bool rejectedNonPng = false;
+        try { ImageMetadataService.ReplacePngComment(new byte[] { 82, 73, 70, 70, 0, 0, 0, 0, 87, 69, 66, 80 }, "{}"); }
+        catch (ArgumentException) { rejectedNonPng = true; }
+        Check(rejectedNonPng, "PNG-only metadata writer rejects non-PNG bytes rather than corrupting format");
         Console.WriteLine($"Passed {checks} selective import metadata checks.");
         return checks;
     }

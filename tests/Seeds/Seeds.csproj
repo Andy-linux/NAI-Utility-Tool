@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/NAITool/Services/ModelCapabilities.cs" Link="ModelCapabilities.cs" />
+    <Compile Include="../../src/NAITool/Services/NovelAiPromptPresets.cs" Link="NovelAiPromptPresets.cs" />
     <Compile Include="../../src/NAITool/Services/SeedValue.cs" Link="SeedValue.cs" />
     <Compile Include="../../src/NAITool/Services/NAIParameters.cs" Link="NAIParameters.cs" />
     <Compile Include="../../src/NAITool/Services/ImageMetadataService.cs" Link="ImageMetadataService.cs" />

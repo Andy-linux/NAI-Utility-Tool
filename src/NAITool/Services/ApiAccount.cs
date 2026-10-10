@@ -11,6 +11,7 @@ public sealed class ApiAccount
     public NovelAiAccountInfo? Info { get; set; }
     [JsonIgnore] public bool? IsTokenValid { get; set; }
     [JsonIgnore] public DateTimeOffset RefreshedAt { get; set; }
+    [JsonIgnore] public string? CacheIdentity { get; set; }
     [JsonIgnore] public SemaphoreSlim RefreshLock { get; } = new(1, 1);
 }
 

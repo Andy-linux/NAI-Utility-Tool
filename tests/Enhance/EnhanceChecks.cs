@@ -44,7 +44,8 @@ internal static class EnhanceChecks
             Check(Rule<List<double>>("GetAvailableAmounts", size.Item1, size.Item2).SequenceEqual(new[] { 1d, 1.5 }), "Portrait/square supported amounts.");
         var small = Rule<List<double>>("GetAvailableAmounts", 512, 512);
         Check(small.SequenceEqual(new[] { 1d, 1.5, 2d }), "Small images permit 2x.");
-        Check(Rule<List<double>>("GetAvailableAmounts", 1000, 1000).SequenceEqual(new[] { 1d }), "Unaligned scaling is omitted.");
+        Check(Rule<List<double>>("GetAvailableAmounts", 1000, 1000).SequenceEqual(new[] { 1d, 1.5 }), "Unaligned source supports safe scaling.");
+        Check(Rule<List<double>>("GetAvailableAmounts", 500, 500).SequenceEqual(new[] { 1d, 1.5, 2d }), "500px source supports safe scaling.");
         foreach (var size in new[] { (0, 1024), (-1, 512), (2048, 2048), (int.MaxValue, int.MaxValue) })
             Check(Rule<List<double>>("GetAvailableAmounts", size.Item1, size.Item2).Count == 0, "Invalid/oversized source rejected.");
         Check(Rule<double>("GetPreferredAmount", new List<double> { 1d }, 2d) == 1, "Remembered unsupported scale falls back.");
@@ -115,8 +116,8 @@ internal static class EnhanceChecks
             if (mode.Item1)
             {
                 Check(sent.GetProperty("extra_noise_seed").GetUInt64() == 4294967294, "Extra noise seed preserves large integers.");
-                Check(!sent.GetProperty("sm").GetBoolean() && !sent.GetProperty("color_correct").GetBoolean() &&
-                    sent.GetProperty("add_original_image").GetBoolean(), "Enhance request flags.");
+                Check((!sent.TryGetProperty("sm", out var smea) || !smea.GetBoolean()) && !sent.GetProperty("color_correct").GetBoolean() &&
+                    !sent.GetProperty("add_original_image").GetBoolean(), "Enhance request excludes original image for single-result ZIP.");
             }
             else Check(!sent.TryGetProperty("extra_noise_seed", out _), "Plain img2img is unchanged.");
         }

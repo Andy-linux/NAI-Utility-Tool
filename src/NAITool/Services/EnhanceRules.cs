@@ -43,12 +43,12 @@ internal static class EnhanceRules
             return amounts;
 
         amounts.Add(1.0);
-        bool standardPortrait = width == 832 && height == 1216 || width == 1216 && height == 832;
-        foreach (double amount in standardPortrait ? new[] { 1.5 } : new[] { 1.5, 2.0 })
+        foreach (double amount in new[] { 1.5, 2.0 })
         {
             var dims = GetOutputDimensions(width, height, amount);
-            if ((long)dims.Width * dims.Height <= MaxPixels &&
-                (standardPortrait || dims.Width % 64 == 0 && dims.Height % 64 == 0))
+            // Imported source images (including500px) need not be multiples of64.
+            // Retain the decoded source ratio and enforce the actual output pixel cap.
+            if ((long)dims.Width * dims.Height <= MaxPixels)
                 amounts.Add(amount);
         }
         return amounts;

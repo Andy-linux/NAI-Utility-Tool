@@ -931,9 +931,8 @@ public sealed partial class MainWindow
 
             if (IsAssetProtectionStepLimitEnabled())
             {
-                _settings.Settings.GenParameters.Steps = Math.Min(_settings.Settings.GenParameters.Steps, 28);
-                _settings.Settings.InpaintParameters.Steps = Math.Min(_settings.Settings.InpaintParameters.Steps, 28);
-                _settings.Settings.I2IDenoiseParameters.Steps = Math.Min(_settings.Settings.I2IDenoiseParameters.Steps, 28);
+                foreach (var parameters in new[] { _settings.Settings.GenParameters, _settings.Settings.InpaintParameters, _settings.Settings.I2IDenoiseParameters })
+                    HighDraftRules.ApplyProtectedStepLimit(parameters);
             }
 
             bool hasProtectionBehaviorChange =

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <BaseIntermediateOutputPath>obj\</BaseIntermediateOutputPath>
+    <OutputPath>bin\$(Configuration)\</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\NAITool\Services\AtomicJsonFile.cs" Link="AtomicJsonFile.cs" />
+    <Compile Include="..\NAITool\Services\SettingsService.cs" Link="SettingsService.cs" />
+    <Compile Include="..\NAITool\Services\AppPathResolver.cs" Link="AppPathResolver.cs" />
+    <Compile Include="..\NAITool\Services\ApiAccount.cs" Link="ApiAccount.cs" />
+    <Compile Include="..\NAITool\Services\NAIParameters.cs" Link="NAIParameters.cs" />
+    <Compile Include="..\NAITool\Services\SeedValue.cs" Link="SeedValue.cs" />
+    <Compile Include="..\NAITool\Services\ModelCapabilities.cs" Link="ModelCapabilities.cs" />
+    <Compile Include="..\NAITool\Services\NovelAiPromptPresets.cs" Link="NovelAiPromptPresets.cs" />
+    <Compile Include="..\NAITool\Services\NovelAiAnlasCalculator.cs" Link="NovelAiAnlasCalculator.cs" />
+    <Compile Include="..\NAITool\Models\AutomationModels.cs" Link="AutomationModels.cs" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+  </ItemGroup>
+</Project>

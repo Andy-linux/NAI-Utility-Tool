@@ -95,6 +95,11 @@ public sealed partial class MainWindow
         var p = _settings.Settings.GenParameters;
         string restoreSeed = p.Seed;
         string? pendingHistoryId = null;
+        bool previewsOpen = true;
+        bool finalAccepted = false;
+        var previousPreviewSource = GenPreviewImage.Source;
+        double previousPreviewWidth = GenPreviewImage.Width;
+        double previousPreviewHeight = GenPreviewImage.Height;
 
         try
         {
@@ -177,13 +182,15 @@ public sealed partial class MainWindow
             IProgress<byte[]>? progress = _settings.Settings.StreamGeneration
                 ? new Progress<byte[]>(bytes =>
                 {
-                    _currentGenImageBytes = bytes;
-                    _ = ShowGenPreviewAsync(bytes, w, h);
+                    if (!previewsOpen || ct.IsCancellationRequested) return;
+                    _ = ShowGenPreviewAsync(bytes, w, h, () => previewsOpen && !ct.IsCancellationRequested);
                 })
                 : null;
+            var requestDraft = CaptureClientParameterDraft(p);
             var (imageBytes, error) = await _naiService.GenerateAsync(
                 w, h, prompt, negPrompt,
                 chars, vibes, preciseReferences, progress, ct);
+            previewsOpen = false;
             _lastUsedSeed = actualSeed;
 
             if (error != null)
@@ -204,6 +211,7 @@ public sealed partial class MainWindow
                 return false;
             }
 
+            imageBytes = AddClientParameterDraftMetadata(imageBytes, requestDraft);
             byte[] finalBytes = imageBytes;
             string? originalSavedPath = await SaveToOutputAsync(imageBytes);
             string? finalSavedPath = originalSavedPath;
@@ -217,6 +225,7 @@ public sealed partial class MainWindow
                 postSummary = postResult.Summary;
             }
 
+            finalAccepted = true;
             _currentGenImageBytes = finalBytes;
             _currentGenImagePath = finalSavedPath;
             ArmNewImageDeleteProtection(finalSavedPath);
@@ -259,19 +268,27 @@ public sealed partial class MainWindow
         {
             if (pendingHistoryId != null)
                 RemovePendingHistoryItem(pendingHistoryId);
-            DebugLog($"[Generate] Failed: {ex}");
-            TxtStatus.Text = Lf("generate.status.failed", ex.Message);
+            DebugLog($"[Generate] Failed: {ex.GetType().Name}");
+            TxtStatus.Text = L(NovelAIRequestPolicy.ExceptionKey(ex));
             return false;
         }
         finally
         {
+            previewsOpen = false;
+            if (!finalAccepted)
+            {
+                GenPreviewImage.Source = previousPreviewSource;
+                GenPreviewImage.Width = previousPreviewWidth;
+                GenPreviewImage.Height = previousPreviewHeight;
+                GenPlaceholder.Visibility = previousPreviewSource == null ? Visibility.Visible : Visibility.Collapsed;
+            }
             SetGenerationRequestRunning(false);
             UpdateBtnGenerateForApiKey();
             p.Seed = restoreSeed;
         }
     }
 
-    private async Task ShowGenPreviewAsync(byte[] imageBytes, int targetW = 0, int targetH = 0)
+    private async Task ShowGenPreviewAsync(byte[] imageBytes, int targetW = 0, int targetH = 0, Func<bool>? acceptPreview = null)
     {
         var bitmapImage = new BitmapImage();
         using var ms = new Windows.Storage.Streams.InMemoryRandomAccessStream();
@@ -281,6 +298,7 @@ public sealed partial class MainWindow
         writer.DetachStream();
         ms.Seek(0);
         await bitmapImage.SetSourceAsync(ms);
+        if (acceptPreview != null && !acceptPreview()) return;
         GenPreviewImage.Source = bitmapImage;
         GenPreviewImage.Stretch = Microsoft.UI.Xaml.Media.Stretch.Uniform;
         if (targetW > 0 && targetH > 0)
@@ -717,13 +735,19 @@ public sealed partial class MainWindow
         string negativePrompt = presetMatch.NegativePrompt;
 
         _genPositivePrompt = positivePrompt;
-        _genNegativePrompt = negativePrompt;
+        if (meta.HighNegativePrompt != null || !ModelCapabilities.IsMedium(p)) _genNegativePrompt = meta.HighNegativePrompt ?? negativePrompt;
+        RestoreImportedHighDraft(meta, p);
         _genStylePrompt = "";
 
-        p.QualityToggle = presetMatch.QualityMatched;
-        p.UcPreset = presetMatch.UcPresetMatched ?? 2;
+        p.QualityToggle = meta.QualityToggle ?? presetMatch.QualityMatched;
+        p.QualityPreset = meta.QualityPreset ?? presetMatch.QualityPreset;
+        if (!ModelCapabilities.IsMedium(p))
+        {
+            p.UcPreset = meta.UcPreset ?? presetMatch.UcPresetMatched ?? 2;
+            p.UcPresetId = meta.UcPresetId ?? presetMatch.UcPresetId ?? (p.UcPreset == 0 ? "heavy" : p.UcPreset == 1 ? "light" : "none");
+        }
 
-        if (meta.Steps > 0)
+        if (meta.Steps > 0 && !ModelCapabilities.IsMedium(p))
         {
             if (blockOversizedSteps && meta.Steps > 28)
                 skipped.Add(Lf("metadata.skipped.steps", meta.Steps));
@@ -732,12 +756,14 @@ public sealed partial class MainWindow
         }
         if (!skipSeed && !string.IsNullOrEmpty(meta.Seed)) p.Seed = meta.Seed;
         if (meta.Scale > 0) p.Scale = meta.Scale;
-        p.CfgRescale = meta.CfgRescale;
+        if (!ModelCapabilities.IsMedium(p)) p.CfgRescale = meta.CfgRescale;
         if (meta.TagHintTransparentBackground.HasValue) p.TagHintTransparentBackground = meta.TagHintTransparentBackground.Value;
         if (meta.StraightAlpha.HasValue) p.StraightAlpha = meta.StraightAlpha.Value;
-        if (!string.IsNullOrEmpty(meta.Sampler)) p.Sampler = meta.Sampler;
+        if (!ModelCapabilities.IsMedium(p) && !string.IsNullOrEmpty(meta.Sampler)) p.Sampler = meta.Sampler;
         if (!string.IsNullOrEmpty(meta.NoiseSchedule)) p.Schedule = meta.NoiseSchedule;
-        p.Variety = meta.SmDyn || meta.Sm;
+        p.Sm = meta.Sm;
+        p.SmDyn = meta.SmDyn;
+        p.Variety = meta.Variety;
 
         if (meta.Width > 0 && meta.Height > 0)
         {
@@ -754,10 +780,14 @@ public sealed partial class MainWindow
         if (!skipSeed) NbSeed.Value = p.Seed;
         ChkVariety.IsChecked = p.Variety;
 
+        var characterNegativeDrafts = meta.HighCharacterNegativePrompts?.ToArray() ?? _genCharacters.Select(entry => entry.NegativePrompt).ToArray();
         if (meta.CharacterPrompts.Count > 0)
             SetGenCharactersFromMetadata(meta);
         else
             _genCharacters.Clear();
+        if (ModelCapabilities.IsMedium(p))
+            for (int i = 0; i < _genCharacters.Count; i++)
+                _genCharacters[i].NegativePrompt = i < characterNegativeDrafts.Length ? characterNegativeDrafts[i] : "";
         ApplyReferenceDataFromMetadata(meta);
         RefreshCharacterPanel();
 
@@ -766,6 +796,7 @@ public sealed partial class MainWindow
         UpdateSizeWarningVisuals();
 
         if (IsAdvancedWindowOpen) SyncSidebarToAdvanced();
+        UpdateEffortUI();
 
         if (presetMatch.QualityMatched) notes.Add(L("metadata.note.quality_extracted"));
         if (presetMatch.UcPresetMatched.HasValue)

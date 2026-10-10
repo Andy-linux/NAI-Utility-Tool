@@ -147,6 +147,11 @@ public sealed partial class MainWindow
             UpdateSizeControlMode();
             UpdateAdvSizeControlMode();
         }
+        if (IsPromptMode(mode))
+        {
+            UpdateEffortUI();
+            RefreshCharacterPanel();
+        }
         UpdateSizeWarningVisuals();
         UpdateAnlasBalanceText();
         UpdateFloatingResultBarsVisibility();

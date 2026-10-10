@@ -209,10 +209,21 @@ public sealed partial class MainWindow
 
     private void ApplyCachedAccountInfo()
     {
-        var totals = _settings.Settings.UsesCustomApiBaseUrl
-            ? default : ApiQuotaTotals.From(_settings.Accounts);
-        _anlasBalance = totals.Anlas;
-        _v5UsagePercent = totals.V5Percent;
+        var totals = ApiQuotaTotals.From(_settings.Accounts);
+        if (_settings.Settings.UsesCustomApiBaseUrl)
+        {
+            // Display one labelled credential snapshot, never sum potentially
+            // shared upstream wallets or imply a random generation binding.
+            var snapshot = _settings.Accounts.FirstOrDefault(a => a.Token.Length > 0 &&
+                a.IsTokenValid != false && a.Info?.IsAccountInfoAvailable == true)?.Info;
+            _anlasBalance = snapshot?.AnlasBalance;
+            _v5UsagePercent = snapshot?.V5UsagePercent;
+        }
+        else
+        {
+            _anlasBalance = totals.Anlas;
+            _v5UsagePercent = totals.V5Percent;
+        }
         _hasActiveSubscription = _settings.Accounts.Any(a => a.Token.Length > 0 &&
             a.IsTokenValid != false && a.Info?.HasActiveSubscription == true);
     }
@@ -228,7 +239,7 @@ public sealed partial class MainWindow
         if (!visible)
             return;
 
-        TxtAnlasBalance.Text = _anlasBalance?.ToString("N0") ?? "--";
+        TxtAnlasBalance.Text = _anlasBalance?.ToString("N0") ?? L("quota.unavailable");
         TxtV5UsagePercent.Text = _v5UsagePercent.HasValue
             ? $"{Math.Max(_v5UsagePercent.Value, 0)}%"
             : "--%";
@@ -407,26 +418,27 @@ public sealed partial class MainWindow
 
         long? anlas = _anlasBalance;
         long? v5Usage = _v5UsagePercent;
-        var totals = ApiQuotaTotals.From(_settings.Accounts);
+        var totals = _settings.Settings.UsesCustomApiBaseUrl ? default : ApiQuotaTotals.From(_settings.Accounts);
         bool isDark = this.Content is FrameworkElement root && root.ActualTheme == ElementTheme.Dark;
         var summaryTextBrush = new SolidColorBrush(isDark
             ? Windows.UI.Color.FromArgb(255, 245, 245, 245)
             : Windows.UI.Color.FromArgb(255, 32, 32, 32));
 
-        _quotaSummaryAnlasLabel.Text = L("settings.api.total_anlas");
-        _quotaSummaryAnlasText.Text = anlas?.ToString("N0") ?? "--";
+        _quotaSummaryAnlasLabel.Text = L(_settings.Settings.UsesCustomApiBaseUrl ? "quota.gateway_shared" : "settings.api.total_anlas");
+        _quotaSummaryAnlasText.Text = anlas?.ToString("N0") ?? L("quota.unavailable");
         _quotaSummaryAnlasProgress.Maximum = Math.Max(10_000L * Math.Max(1, totals.AccountCount), anlas ?? 0);
         _quotaSummaryAnlasProgress.Value = anlas.HasValue
             ? Math.Max(anlas.Value, 0)
             : 0;
         _quotaSummaryAnlasProgress.Opacity = anlas.HasValue ? 1 : 0.45;
         int currentAnlasCost = EstimateCurrentRequestAnlasCost();
-        string anlasImageCount = currentAnlasCost == 0
-            ? "∞"
-            : anlas.HasValue
-                ? Math.Max(0, anlas.Value / currentAnlasCost).ToString("N0")
-                : "--";
-        _quotaSummaryAnlasEstimateText.Text = Lf("settings.quota.summary.anlas_estimate", anlasImageCount);
+        string anlasImageCount = currentAnlasCost > 0 && anlas.HasValue
+            ? Math.Max(0, anlas.Value / currentAnlasCost).ToString("N0")
+            : "--";
+        _quotaSummaryAnlasEstimateText.Text = !anlas.HasValue
+            ? L("quota.unavailable")
+            : currentAnlasCost == 0 ? L("quota.opus_free")
+            : Lf("settings.quota.summary.anlas_estimate", anlasImageCount);
 
         _quotaSummaryV5UsageLabel.Text = L("settings.api.total_v5");
         _quotaSummaryV5UsageText.Text = v5Usage.HasValue
@@ -439,11 +451,10 @@ public sealed partial class MainWindow
             ? Math.Max(v5Usage.Value, 0)
             : 0;
         _quotaSummaryV5UsageProgress.Opacity = v5Usage.HasValue ? 1 : 0.45;
-        string v5ImageCount = v5Usage.HasValue
-            ? Math.Floor(1_730d * Math.Max(v5Usage.Value, 0) / 100).ToString("N0")
-            : "--";
-        _quotaSummaryV5UsageEstimateText.Text = Lf("settings.quota.summary.v5_estimate", v5ImageCount);
-        _quotaSummaryV5UsageRecoveryText.Text = Lf("settings.api.total_hint", totals.KnownCount, totals.AccountCount);
+        _quotaSummaryV5UsageEstimateText.Text = v5Usage.HasValue
+            ? L("quota.v5_separate") : L("quota.unavailable");
+        _quotaSummaryV5UsageRecoveryText.Text = _settings.Settings.UsesCustomApiBaseUrl
+            ? L("quota.gateway_shared_hint") : Lf("settings.api.total_hint", totals.KnownCount, totals.AccountCount);
 
         _quotaSummaryAnlasLabel.Foreground = summaryTextBrush;
         _quotaSummaryAnlasText.Foreground = summaryTextBrush;

@@ -36,11 +36,19 @@ public class ImageMetadata
     public string NoiseSchedule { get; set; } = "";
     public bool Sm { get; set; }
     public bool SmDyn { get; set; }
+    public double? SkipCfgAboveSigma { get; set; }
+    public bool Variety => SkipCfgAboveSigma is > 0;
     public string? Software { get; set; }
     public string? Source { get; set; }
     public Dictionary<string, string> TextChunks { get; set; } = new(StringComparer.Ordinal);
     public bool? QualityToggle { get; set; }
+    public string? QualityPreset { get; set; }
     public int? UcPreset { get; set; }
+    public string? UcPresetId { get; set; }
+    public string? Effort { get; set; }
+    public NAIParameters? HighDraft { get; set; }
+    public string? HighNegativePrompt { get; set; }
+    public List<string>? HighCharacterNegativePrompts { get; set; }
     public bool? TagHintTransparentBackground { get; set; }
     public bool? StraightAlpha { get; set; }
     public string RawJson { get; set; } = "";
@@ -386,6 +394,8 @@ public static class ImageMetadataService
 
     public static byte[] ReplacePngTextChunks(byte[] pngData, IReadOnlyDictionary<string, string>? textChunks)
     {
+        if (pngData.Length < PngSignature.Length || !pngData.AsSpan(0, PngSignature.Length).SequenceEqual(PngSignature))
+            throw new ArgumentException("PNG metadata editing requires a PNG image.", nameof(pngData));
         using var output = new MemoryStream();
         output.Write(PngSignature, 0, 8);
 
@@ -651,8 +661,28 @@ public static class ImageMetadataService
                 meta.Sm = sm.GetBoolean();
             if (root.TryGetProperty("sm_dyn", out var smDyn))
                 meta.SmDyn = smDyn.GetBoolean();
+            if (root.TryGetProperty("skip_cfg_above_sigma", out var skipCfg) && skipCfg.ValueKind == JsonValueKind.Number)
+                meta.SkipCfgAboveSigma = skipCfg.GetDouble();
             if (root.TryGetProperty("quality_toggle", out var qt))
                 meta.QualityToggle = qt.GetBoolean();
+            // Local roundtrip field, not an asserted upstream protocol key.
+            if (root.TryGetProperty("nai_tool_quality_preset", out var qualityPreset) && qualityPreset.ValueKind == JsonValueKind.String)
+                meta.QualityPreset = qualityPreset.GetString();
+            if (root.TryGetProperty("tag_hint_uc_preset", out var ucHint) && ucHint.ValueKind == JsonValueKind.Number)
+                meta.UcPresetId = ucHint.GetInt32() switch { 2 => "heavy", 3 => "light", 4 => "humanFocus", 5 => "furryFocus", 0 => "none", _ => null };
+            if (root.TryGetProperty("tag_hint_qt", out var qtHint) && qtHint.ValueKind == JsonValueKind.Number)
+            {
+                meta.QualityPreset = qtHint.GetInt32() == 3 ? "light" : "standard";
+                meta.QualityToggle = qtHint.GetInt32() != 0;
+            }
+            if (root.TryGetProperty("nai_tool_high_character_negatives", out var highCharacters) && highCharacters.ValueKind == JsonValueKind.Array)
+                meta.HighCharacterNegativePrompts = highCharacters.EnumerateArray().Select(item => item.ValueKind == JsonValueKind.String ? item.GetString() ?? "" : "").ToList();
+            if (root.TryGetProperty("nai_tool_high_parameters", out var highDraft) && highDraft.ValueKind == JsonValueKind.Object)
+                meta.HighDraft = highDraft.Deserialize<NAIParameters>();
+            if (root.TryGetProperty("nai_tool_high_negative", out var highNegative) && highNegative.ValueKind == JsonValueKind.String)
+                meta.HighNegativePrompt = highNegative.GetString();
+            if (root.TryGetProperty("nai_tool_effort", out var effort) && effort.ValueKind == JsonValueKind.String)
+                meta.Effort = effort.GetString();
             if (root.TryGetProperty("ucPreset", out var ucPreset))
                 meta.UcPreset = ucPreset.GetInt32();
             if (root.TryGetProperty("tag_hint_transparent_background", out var transparent) &&

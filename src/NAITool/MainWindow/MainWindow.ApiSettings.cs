@@ -10,6 +10,7 @@ public sealed partial class MainWindow
     {
         var rows = new StackPanel { Spacing = 10 };
         var editors = new List<(Grid Row, PasswordBox Token, TextBlock Status, TextBlock Label, Button Remove, FontIcon RemoveIcon)>();
+        var protectedRows = new Dictionary<PasswordBox, ApiAccount>();
         var addButton = new Button { Content = L("settings.api.add") };
         var testButton = new Button { Content = L("settings.api.test_all") };
         var summary = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Opacity = 0.75 };
@@ -42,15 +43,25 @@ public sealed partial class MainWindow
 
         void ApplyTokens(bool save)
         {
-            _settings.SetApiTokens(editors.Select(e => e.Token.Password));
+            var existing = _settings.Accounts.Where(account => account.Token.Length > 0)
+                .GroupBy(account => account.Token, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+            var accounts = editors.Select(editor =>
+            {
+                string token = editor.Token.Password.Trim();
+                if (token.Length == 0 && protectedRows.TryGetValue(editor.Token, out var original))
+                    return original;
+                return existing.TryGetValue(token, out var account) ? account : new ApiAccount { Token = token };
+            }).ToArray();
+            _settings.SetApiAccounts(accounts);
             RefreshRowLabels();
             _anlasInitialFetchDone = false;
             summary.Text = "";
             UpdateAccountUi();
-            if (save) _settings.Save();
+            if (save && !_settings.Save()) summary.Text = L("settings.api.save_blocked_credentials");
         }
 
-        void AddRow(string token)
+        void AddRow(string token, ApiAccount? originalAccount = null)
         {
             var label = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
             var box = new PasswordBox
@@ -60,6 +71,8 @@ public sealed partial class MainWindow
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalAlignment = VerticalAlignment.Stretch,
             };
+            if (originalAccount is { Token.Length: 0, EncryptedApiToken.Length: > 0 })
+                protectedRows[box] = originalAccount;
             var removeIcon = new FontIcon { FontFamily = SymbolFontFamily, FontSize = 14 };
             var remove = new Button
             {
@@ -88,10 +101,21 @@ public sealed partial class MainWindow
             row.Children.Add(status);
             editors.Add((row, box, status, label, remove, removeIcon));
             rows.Children.Add(row);
-            box.PasswordChanged += (_, _) => ApplyTokens(save: false);
-            box.LostFocus += (_, _) => _settings.Save();
+            box.PasswordChanged += (_, _) =>
+            {
+                // Typing a replacement credential is an explicit edit. Once
+                // replaced, clearing it must not resurrect unreadable old data.
+                if (!string.IsNullOrWhiteSpace(box.Password)) protectedRows.Remove(box);
+                ApplyTokens(save: false);
+            };
+            box.LostFocus += (_, _) =>
+            {
+                if (!_settings.Save()) summary.Text = L("settings.api.save_blocked_credentials");
+            };
             remove.Click += (_, _) =>
             {
+                // Only an explicit clear/remove discards unreadable encrypted data.
+                protectedRows.Remove(box);
                 if (editors.Count == 1) box.Password = "";
                 else
                 {
@@ -102,7 +126,7 @@ public sealed partial class MainWindow
             };
         }
 
-        foreach (var account in _settings.Accounts) AddRow(account.Token);
+        foreach (var account in _settings.Accounts) AddRow(account.Token, account);
         if (editors.Count == 0) AddRow("");
         RefreshRowLabels();
         addButton.Click += (_, _) =>
@@ -118,9 +142,15 @@ public sealed partial class MainWindow
             PlaceholderText = L("settings.hub.network.base_url_placeholder"),
             Width = SettingsHubControlColumnWidth,
         };
-        void SaveEndpoint()
+        bool SaveEndpoint()
         {
             string url = AppSettings.NormalizeApiBaseUrl(baseUrlBox.Text);
+            try { _ = new ApiEndpointResolver(url); }
+            catch (ArgumentException)
+            {
+                summary.Text = L("settings.network.invalid_api_or_network");
+                return false;
+            }
             if (url != _settings.Settings.ApiBaseUrl)
             {
                 _settings.Settings.ApiBaseUrl = url;
@@ -132,14 +162,19 @@ public sealed partial class MainWindow
                 }
                 ApplyTokens(save: false);
             }
-            _settings.Save();
+            if (!_settings.Save())
+            {
+                summary.Text = L("settings.api.save_blocked_credentials");
+                return false;
+            }
+            return true;
         }
         baseUrlBox.LostFocus += (_, _) => SaveEndpoint();
 
         testButton.Click += async (_, _) =>
         {
             if (testing) return;
-            SaveEndpoint();
+            if (!SaveEndpoint()) return;
             ApplyTokens(save: true);
             if (!AppSettings.IsValidApiBaseUrl(baseUrlBox.Text))
             {
@@ -206,12 +241,35 @@ public sealed partial class MainWindow
             _settings.Save();
             UpdateGenerateButtonWarning();
         };
+        var timeoutPanel = new StackPanel { Spacing = 10 };
+        void AddTimeout(string key, int value, Action<int> apply)
+        {
+            var box = new NumberBox
+            {
+                Header = L(key), Value = value, Minimum = 1, Maximum = 3600,
+                SmallChange = 1, LargeChange = 30,
+                SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+            };
+            box.ValueChanged += (_, args) =>
+            {
+                if (!double.IsFinite(args.NewValue)) return;
+                apply(Math.Clamp((int)args.NewValue, 1, 3600));
+                _settings.Save();
+            };
+            timeoutPanel.Children.Add(box);
+        }
+        AddTimeout("settings.api.timeout.waiting", _settings.Settings.ApiWaitingTimeoutSeconds, value => _settings.Settings.ApiWaitingTimeoutSeconds = value);
+        AddTimeout("settings.api.timeout.generation", _settings.Settings.ApiGenerationTimeoutSeconds, value => _settings.Settings.ApiGenerationTimeoutSeconds = value);
+        AddTimeout("settings.api.timeout.upscale", _settings.Settings.ApiUpscaleTimeoutSeconds, value => _settings.Settings.ApiUpscaleTimeoutSeconds = value);
+        AddTimeout("settings.api.timeout.text", _settings.Settings.ApiTextTimeoutSeconds, value => _settings.Settings.ApiTextTimeoutSeconds = value);
+        AddTimeout("settings.api.timeout.readonly", _settings.Settings.ApiReadOnlyTimeoutSeconds, value => _settings.Settings.ApiReadOnlyTimeoutSeconds = value);
         var page = CreateSettingsHubPage(
             CreateSettingsHubLayer("\uE71B", L("settings.hub.network.base_url"),
                 L("settings.hub.network.base_url_hint"), baseUrlBox),
             CreateSettingsHubLayer("\uE8D7", L("settings.hub.network.api_token"),
                 L("settings.api.tokens_hint"), tokenPanel, expanded: true),
-            CreateSettingsHubLayer("\uE8AB", L("settings.api.mode"), L("settings.api.mode_hint"), modeBox));
+            CreateSettingsHubLayer("\uE8AB", L("settings.api.mode"), L("settings.api.mode_hint"), modeBox),
+            CreateSettingsHubLayer("\uE823", L("settings.api.timeout.title"), L("settings.api.timeout.hint"), timeoutPanel));
         ((FrameworkElement)page).Unloaded += (_, _) =>
         {
             testCts?.Cancel();

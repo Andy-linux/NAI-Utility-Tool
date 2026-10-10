@@ -68,8 +68,10 @@ public sealed partial class MainWindow
         _advChkVariety.IsChecked = ChkVariety.IsChecked;
         _advNbMaxWidth.Value = _customWidth;
         _advNbMaxHeight.Value = _customHeight;
-        _advCboQuality.SelectedIndex = p.QualityToggle ? 0 : 1;
-        _advCboUcPreset.SelectedIndex = Math.Clamp(p.UcPreset, 0, 2);
+        _advChkSmea.IsChecked = p.Sm;
+        _advChkSmeaDyn.IsChecked = p.SmDyn;
+        _advCboQuality.SelectedIndex = !p.QualityToggle ? 2 : p.QualityPreset == "light" && NovelAiPromptPresets.SupportsLightQuality(p.Model) ? 1 : 0;
+        RefreshUcPresetOptions(p);
         _isSyncingSidebarAdv = false;
     }
 
@@ -142,6 +144,7 @@ public sealed partial class MainWindow
             VerticalContentAlignment = VerticalAlignment.Center
         };
         _advChkVariety.Visibility = Visibility.Visible;
+        _advChkVariety.IsEnabled = ModelCapabilities.SupportsVariety(p.Model);
         _advChkSmea = new CheckBox
         {
             Content = "SMEA",
@@ -149,6 +152,11 @@ public sealed partial class MainWindow
             VerticalContentAlignment = VerticalAlignment.Center,
             Visibility = (_currentMode == AppMode.ImageGeneration && IsCurrentModelV3())
                 ? Visibility.Visible : Visibility.Collapsed,
+        };
+        _advChkSmeaDyn = new CheckBox
+        {
+            Content = "Dynamic SMEA", IsChecked = p.SmDyn,
+            Visibility = _advChkSmea.Visibility,
         };
         _advChkTransparentBackground = new CheckBox
         {
@@ -178,16 +186,15 @@ public sealed partial class MainWindow
         };
 
         _advCboQuality = new ComboBox { Header = L("dialog.advanced.quality"), HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 32, FontFamily = UiTextFontFamily };
-        _advCboQuality.Items.Add(CreateTextComboBoxItem(L("common.yes")));
+        _advCboQuality.Items.Add(CreateTextComboBoxItem(L("dialog.advanced.quality.standard")));
+        var lightQualityItem = CreateTextComboBoxItem(L("dialog.advanced.quality.light"));
+        lightQualityItem.IsEnabled = NovelAiPromptPresets.SupportsLightQuality(p.Model);
+        _advCboQuality.Items.Add(lightQualityItem);
         _advCboQuality.Items.Add(CreateTextComboBoxItem(L("common.no")));
-        _advCboQuality.SelectedIndex = p.QualityToggle ? 0 : 1;
+        _advCboQuality.SelectedIndex = !p.QualityToggle ? 2 : p.QualityPreset == "light" && NovelAiPromptPresets.SupportsLightQuality(p.Model) ? 1 : 0;
         if (_advCboQuality.SelectedIndex < 0) _advCboQuality.SelectedIndex = 0;
         _advCboUcPreset = new ComboBox { Header = L("dialog.advanced.negative_quality"), HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 32, FontFamily = UiTextFontFamily };
-        _advCboUcPreset.Items.Add(CreateTextComboBoxItem(L("dialog.advanced.uc_preset.full")));
-        _advCboUcPreset.Items.Add(CreateTextComboBoxItem(L("dialog.advanced.uc_preset.light")));
-        _advCboUcPreset.Items.Add(CreateTextComboBoxItem(L("dialog.advanced.uc_preset.none")));
-        _advCboUcPreset.SelectedIndex = p.UcPreset;
-        if (_advCboUcPreset.SelectedIndex < 0) _advCboUcPreset.SelectedIndex = 0;
+        RefreshUcPresetOptions(p);
 
         _advNbMaxWidth = new NumberBox
         {
@@ -330,6 +337,10 @@ public sealed partial class MainWindow
         paramsGrid.Children.Add(_advChkSmea);
         paramsGrid.Children.Add(_advChkTransparentBackground);
         paramsGrid.Children.Add(_advChkStraightAlpha);
+        paramsGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetRow(_advChkSmeaDyn, 7);
+        Grid.SetColumn(_advChkSmeaDyn, 1);
+        paramsGrid.Children.Add(_advChkSmeaDyn);
 
         var rootPanel = new StackPanel
         {
@@ -367,6 +378,7 @@ public sealed partial class MainWindow
         };
 
         flyout.ShowAt(BtnAdvancedParams);
+        UpdateEffortUI();
     }
 
     private static Style CreateUnconstrainedAdvancedFlyoutPresenterStyle()
@@ -403,16 +415,24 @@ public sealed partial class MainWindow
     {
         if (_advCboSampler == null) return;
         var p = CurrentParams;
-        p.Sampler = GetSelectedComboText(_advCboSampler) ?? p.Sampler;
+        bool medium = ModelCapabilities.IsMedium(p);
+        if (!medium) p.Sampler = GetSelectedComboText(_advCboSampler) ?? p.Sampler;
         p.Schedule = GetSelectedComboText(_advCboSchedule) ?? p.Schedule;
-        p.Steps = (int)_advNbSteps.Value;
+        if (!medium) p.Steps = (int)_advNbSteps.Value;
         p.Seed = _advNbSeed.Value;
         p.Scale = Math.Round(_advNbScale.Value, 1);
-        p.CfgRescale = Math.Round(_advSliderCfgRescale.Value, 2);
+        if (!medium) p.CfgRescale = Math.Round(_advSliderCfgRescale.Value, 2);
         p.Variety = _advChkVariety.IsChecked == true;
-        p.Sm = _currentMode == AppMode.ImageGeneration && _advChkSmea.IsChecked == true;
-        p.QualityToggle = _advCboQuality.SelectedIndex == 0;
-        p.UcPreset = _advCboUcPreset.SelectedIndex >= 0 ? _advCboUcPreset.SelectedIndex : 0;
+        p.Sm = _advChkSmea.IsChecked == true;
+        p.SmDyn = _advChkSmeaDyn.IsChecked == true;
+        p.QualityToggle = _advCboQuality.SelectedIndex != 2;
+        if (NovelAiPromptPresets.SupportsLightQuality(p.Model) || p.QualityPreset != "light")
+            p.QualityPreset = _advCboQuality.SelectedIndex == 1 ? "light" : "standard";
+        if (!medium && _advCboUcPreset.SelectedItem is ComboBoxItem ucItem && ucItem.Tag is string ucId)
+        {
+            p.UcPresetId = ucId;
+            p.UcPreset = ucId == "heavy" ? 0 : ucId == "light" ? 1 : 2;
+        }
         p.TagHintTransparentBackground = _advChkTransparentBackground.IsChecked == true;
         p.StraightAlpha = _advChkStraightAlpha.IsChecked == true;
 

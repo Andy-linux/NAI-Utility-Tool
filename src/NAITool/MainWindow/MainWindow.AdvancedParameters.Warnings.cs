@@ -207,7 +207,9 @@ public sealed partial class MainWindow
         if (CurrentRequestUsesAnlas()) return true;
         if (!IsAssetProtectionStepLimitEnabled())
         {
-            int steps = IsAdvancedWindowOpen ? (int)_advNbSteps.Value : CurrentParams.Steps;
+            int steps = ModelCapabilities.IsMedium(CurrentParams)
+                ? ModelCapabilities.CreateRequestSnapshot(CurrentParams).Steps
+                : IsAdvancedWindowOpen ? (int)_advNbSteps.Value : CurrentParams.Steps;
             if (steps > 28) return true;
         }
         return false;
@@ -464,14 +466,16 @@ public sealed partial class MainWindow
                 });
                 content.Children.Add(new TextBlock
                 {
-                    Text = estimatedAnlas.ToString(),
+                    Text = "≈ " + estimatedAnlas.ToString(),
                     Opacity = 0.9,
                 });
             }
             else
             {
                 content.Children.Add(new SymbolIcon(Symbol.Send));
+                content.Children.Add(new TextBlock { Text = L("quota.opus_free"), Opacity = 0.9 });
             }
+            ToolTipService.SetToolTip(BtnGenerate, L("quota.estimate_hint"));
             content.Children.Add(new TextBlock { Text = L("button.send") });
         }
         else

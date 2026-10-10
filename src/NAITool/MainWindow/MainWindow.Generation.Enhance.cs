@@ -149,21 +149,22 @@ public sealed partial class MainWindow
             var dims = EnhanceRules.GetOutputDimensions(sourceWidth, sourceHeight, amount, useMax);
             int cost = EstimateGenEnhanceAnlasCost(dims.Width, dims.Height, strength, noise);
             summary.Text = Lf("enhance.summary", dims.Width, dims.Height, strength, noise);
+            var effective = ModelCapabilities.CreateRequestSnapshot(settings.GenParameters);
             bool overCostLimit = !settings.UsesCustomApiBaseUrl &&
-                NovelAiAnlasCalculator.PaidBaseCost(model, dims.Width, dims.Height,
-                    settings.GenParameters.Steps, sm: false, strength: strength) > NovelAiAnlasCalculator.MaxBaseCost;
+                NovelAiAnlasCalculator.PaidBaseCost(effective.Model, dims.Width, dims.Height,
+                    effective.Steps, sm: false, strength: strength) > NovelAiAnlasCalculator.MaxBaseCost;
             if (overCostLimit)
                 summary.Text += "\n" + Lf("api.error.generation_cost_limit", NovelAiAnlasCalculator.MaxBaseCost);
             if (dialog != null)
             {
                 dialog.IsPrimaryButtonEnabled = !overCostLimit;
-                dialog.PrimaryButtonText = cost > 0 ? $"{cost} Anlas · {L("enhance.start")}" : L("enhance.start");
+                dialog.PrimaryButtonText = cost > 0 ? $"≈ {cost} Anlas · {L("enhance.start")}" : $"{L("quota.opus_free")} · {L("enhance.start")}";
             }
             if (confirmationButton != null)
             {
                 confirmationButton.Content = cost > 0
-                    ? CreateAnlasActionButtonContent(L("enhance.start"), cost)
-                    : L("enhance.start");
+                    ? CreateAnlasActionButtonContent("≈ " + L("enhance.start"), cost)
+                    : $"{L("quota.opus_free")} · {L("enhance.start")}";
                 if (cost > 0) ApplyGoldAccentButtonStyle(confirmationButton);
                 else ClearGoldAccentButtonStyle(confirmationButton);
             }
@@ -357,6 +358,11 @@ public sealed partial class MainWindow
         var enhanceParams = CreateGenEnhanceParameters(_settings.Settings.GenParameters, options.Strength, options.Noise);
         string requestedSeed = "0";
         string? pendingHistoryId = null;
+        bool previewsOpen = true;
+        bool finalAccepted = false;
+        var previousPreviewSource = GenPreviewImage.Source;
+        double previousPreviewWidth = GenPreviewImage.Width;
+        double previousPreviewHeight = GenPreviewImage.Height;
 
         try
         {
@@ -431,14 +437,15 @@ public sealed partial class MainWindow
             IProgress<byte[]>? progress = _settings.Settings.StreamGeneration
                 ? new Progress<byte[]>(bytes =>
                 {
-                    _currentGenImageBytes = bytes;
-                    _ = ShowGenPreviewAsync(bytes, width, height);
+                    if (!previewsOpen || ct.IsCancellationRequested) return;
+                    _ = ShowGenPreviewAsync(bytes, width, height, () => previewsOpen && !ct.IsCancellationRequested);
                 })
                 : null;
 
             if (!_settings.Settings.PrivacyMode)
                 pendingHistoryId = AddPendingHistoryItem();
             DebugLog($"[Enhance] Start | Request={requestWidth}x{requestHeight} | Expected={width}x{height} | Model={enhanceParams.Model} | Seed={actualSeed} | Strength={options.Strength:0.00} | Noise={options.Noise:0.00} | Max={options.UseMaxUpscale}");
+            var requestDraft = CaptureClientParameterDraft(enhanceParams);
             var (imageBytes, error) = await _naiService.ImageToImageAsync(
                 imageBase64,
                 requestWidth, requestHeight,
@@ -446,6 +453,7 @@ public sealed partial class MainWindow
                 parametersOverride: enhanceParams,
                 isEnhance: true,
                 upscaledEnhance: options.UseMaxUpscale);
+            previewsOpen = false;
             _lastUsedSeed = actualSeed;
 
             if (error != null)
@@ -465,7 +473,9 @@ public sealed partial class MainWindow
                 return false;
             }
 
+            imageBytes = AddClientParameterDraftMetadata(imageBytes, requestDraft);
             string? savedPath = await SaveToOutputAsync(imageBytes, "enhance");
+            finalAccepted = true;
             _currentGenImageBytes = imageBytes;
             _currentGenImagePath = savedPath;
             ArmNewImageDeleteProtection(savedPath);
@@ -510,12 +520,20 @@ public sealed partial class MainWindow
         {
             if (pendingHistoryId != null)
                 RemovePendingHistoryItem(pendingHistoryId);
-            DebugLog($"[Enhance] Failed: {ex}");
-            TxtStatus.Text = Lf("generate.status.failed", ex.Message);
+            DebugLog($"[Enhance] Failed: {ex.GetType().Name}");
+            TxtStatus.Text = L(NovelAIRequestPolicy.ExceptionKey(ex));
             return false;
         }
         finally
         {
+            previewsOpen = false;
+            if (!finalAccepted)
+            {
+                GenPreviewImage.Source = previousPreviewSource;
+                GenPreviewImage.Width = previousPreviewWidth;
+                GenPreviewImage.Height = previousPreviewHeight;
+                GenPlaceholder.Visibility = previousPreviewSource == null ? Visibility.Visible : Visibility.Collapsed;
+            }
             SetGenerationRequestRunning(false);
             UpdateBtnGenerateForApiKey();
             UpdateGenEnhanceButtonWarning();
@@ -532,11 +550,15 @@ public sealed partial class MainWindow
         TagHintTransparentBackground = source.TagHintTransparentBackground,
         StraightAlpha = source.StraightAlpha,
         Sm = source.Sm,
+        SmDyn = source.SmDyn,
+        Effort = source.Effort,
         Variety = source.Variety,
         QualityToggle = source.QualityToggle,
+        QualityPreset = source.QualityPreset,
         Steps = source.Steps,
         Seed = source.Seed,
         UcPreset = source.UcPreset,
+        UcPresetId = source.UcPresetId,
         DenoiseStrength = Math.Clamp(strength, 0.01, 0.99),
         DenoiseNoise = Math.Clamp(noise, 0, 0.99),
     };

@@ -8,6 +8,25 @@ public partial class NovelAIService
 {
     private readonly ApiAccountRouter _accountRouter = new();
 
+    private string AccountIdentity(ApiAccount account) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(
+            GetApiEndpoints().Identity + "\n" + account.Token)));
+
+    public void InvalidateMismatchedAccountCaches()
+    {
+        foreach (var account in _settings.Accounts) EnsureAccountIdentity(account);
+    }
+
+    private void EnsureAccountIdentity(ApiAccount account)
+    {
+        string identity = AccountIdentity(account);
+        if (account.CacheIdentity == identity) return;
+        account.CacheIdentity = identity;
+        account.Info = null;
+        account.IsTokenValid = null;
+        account.RefreshedAt = DateTimeOffset.MinValue;
+    }
+
     private static HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string url, string token)
     {
         var request = new HttpRequestMessage(method, url);
@@ -33,16 +52,15 @@ public partial class NovelAIService
         try
         {
             // A refresh that completed while this caller waited already satisfies it.
+            EnsureAccountIdentity(account);
+            string identity = AccountIdentity(account);
             if (account.RefreshedAt >= started) return account.Info;
             var info = await GetAccountInfoAsync(account.Token, ct);
             ct.ThrowIfCancellationRequested();
-            if (_settings.Accounts.Contains(account) && baseUrl == _settings.Settings.ApiBaseUrl)
+            if (_settings.Accounts.Contains(account) && baseUrl == _settings.Settings.ApiBaseUrl && identity == AccountIdentity(account))
             {
-                if (info != null)
-                {
-                    account.Info = info;
-                    account.IsTokenValid = info.IsAccountInfoAvailable ? true : null;
-                }
+                account.Info = account.IsTokenValid == false ? null : info ?? UnavailableAccountInfo();
+                if (info?.IsAccountInfoAvailable == true) account.IsTokenValid = true;
                 // Also throttle transient failures; a broken account must not delay every request.
                 account.RefreshedAt = DateTimeOffset.UtcNow;
             }
@@ -53,6 +71,7 @@ public partial class NovelAIService
 
     internal int EstimateAnlas(ApiRequestCost cost)
     {
+        foreach (var account in _settings.Accounts) EnsureAccountIdentity(account);
         var selected = _accountRouter.Select(_settings.Accounts, _settings.Settings.ApiCallMode, cost,
             UsesCustomApiBaseUrl, advance: false);
         int estimate = cost.AnlasFor(selected?.Info);
@@ -69,8 +88,8 @@ public partial class NovelAIService
     {
         string baseUrl = _settings.Settings.ApiBaseUrl;
         var configuredAccounts = _settings.Accounts;
-        if (!UsesCustomApiBaseUrl)
         {
+            foreach (var account in _settings.Accounts) EnsureAccountIdentity(account);
             var stale = ApiAccountRouter.UniqueAccounts(_settings.Accounts)
                 .Where(a => DateTimeOffset.UtcNow - a.RefreshedAt > TimeSpan.FromSeconds(30)).ToArray();
             await Parallel.ForEachAsync(stale, new ParallelOptions
@@ -89,6 +108,10 @@ public partial class NovelAIService
     private async Task<HttpResponseMessage> SendAccountRequestAsync(HttpRequestMessage request,
         ApiAccount account, HttpCompletionOption completion, CancellationToken ct)
     {
+        // Reject a request captured before an endpoint/account edit, rather than sending a key to the old host.
+        if (account.CacheIdentity != AccountIdentity(account) || request.RequestUri == null ||
+            !RequestBelongsToEndpoint(request.RequestUri))
+            throw new InvalidOperationException(L("settings.api.configuration_changed"));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", account.Token);
         try
         {
@@ -105,6 +128,13 @@ public partial class NovelAIService
             // Refresh before reusing this balance, including ambiguous timeout outcomes.
             account.RefreshedAt = DateTimeOffset.MinValue;
         }
+    }
+
+    private bool RequestBelongsToEndpoint(Uri uri)
+    {
+        var resolver = GetApiEndpoints();
+        string[] paths = ["/ai/generate-image", "/ai/generate-image-stream", "/ai/encode-vibe", "/ai/upscale", "/oa/v1/chat/completions"];
+        return paths.Any(path => new Uri(resolver.Resolve(path)) == uri);
     }
 
     private static int GenerationReferenceAnlas(string model,
