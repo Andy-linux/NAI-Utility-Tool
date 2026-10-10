@@ -980,7 +980,7 @@ public sealed partial class MainWindow
 
     private void SetResultBarEnabled(bool enabled)
     {
-        foreach (var child in ((StackPanel)((Border)ResultActionBar.Children[0]).Child).Children)
+        foreach (var child in ((StackPanel)((ScrollViewer)((Border)ResultActionBar.Children[0]).Child).Content).Children)
         {
             if (child is Button btn) btn.IsEnabled = enabled;
         }

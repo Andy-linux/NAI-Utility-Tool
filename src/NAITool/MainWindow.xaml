@@ -1673,6 +1673,8 @@
                             CornerRadius="8" Padding="4,6,8,6"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled"
+                                      VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <Border Background="Transparent" Padding="4,0"
                                     ManipulationMode="TranslateX,TranslateY"
@@ -1733,6 +1735,7 @@
                                 </StackPanel>
                             </Button>
                         </StackPanel>
+                        </ScrollViewer>
                     </Border>
                 </Grid>
 
@@ -1747,6 +1750,8 @@
                             CornerRadius="8" Padding="4,10,16,10"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled"
+                                      VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Border Background="Transparent" Padding="8,0"
                                     ManipulationMode="TranslateX,TranslateY"
@@ -1797,6 +1802,7 @@
                                 </StackPanel>
                             </Button>
                         </StackPanel>
+                        </ScrollViewer>
                     </Border>
                 </Grid>
             </Grid>
