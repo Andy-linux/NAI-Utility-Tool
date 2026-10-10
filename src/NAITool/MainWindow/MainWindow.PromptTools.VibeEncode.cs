@@ -229,6 +229,7 @@ public sealed partial class MainWindow
                 string imageBase64 = Convert.ToBase64String(selectedImageBytes);
                 DebugLog($"[VibeEncode] 开始编码 | 模型={model} | IE={ie:0.00} | 再编码模式={isReencodeMode}");
                 var (vibeData, error) = await _naiService.EncodeVibeAsync(imageBase64, model, ie);
+                _ = RefreshAnlasInfoAsync(forceRefresh: true);
 
                 if (vibeData != null && vibeData.Length > 0)
                 {
@@ -247,7 +248,6 @@ public sealed partial class MainWindow
                     DebugLog($"[VibeEncode] 完成 | 保存={savePath}");
                     statusBlock.Text = Lf("dialog.vibe_encode.success", savePath);
                     didEncode = true;
-                    _ = RefreshAnlasInfoAsync(forceRefresh: true);
                 }
                 else
                 {

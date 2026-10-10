@@ -17,6 +17,27 @@ public sealed partial class MainWindow
         bool testing = false;
         CancellationTokenSource? testCts = null;
 
+        string ApiIdentity() => System.Text.Json.JsonSerializer.Serialize(new
+        {
+            _settings.Settings.ApiBaseUrl,
+            _settings.Settings.ApiCallMode,
+            Accounts = _settings.Accounts.Select(a => a.Token.Length > 0 ? a.Token : a.EncryptedApiToken).ToArray(),
+        });
+        string savedIdentity = ApiIdentity();
+        bool SaveApiSettings(bool refresh = true)
+        {
+            if (!_settings.Save())
+            {
+                summary.Text = L("settings.api.save_blocked_credentials");
+                return false;
+            }
+            string identity = ApiIdentity();
+            bool changed = identity != savedIdentity;
+            savedIdentity = identity;
+            if (changed && refresh) _ = RefreshAnlasInfoAsync(forceRefresh: true);
+            return true;
+        }
+
         void SetRowsEnabled(bool enabled)
         {
             foreach (var editor in editors)
@@ -41,7 +62,7 @@ public sealed partial class MainWindow
             }
         }
 
-        void ApplyTokens(bool save)
+        void ApplyTokens(bool save, bool refresh = true)
         {
             var existing = _settings.Accounts.Where(account => account.Token.Length > 0)
                 .GroupBy(account => account.Token, StringComparer.Ordinal)
@@ -55,10 +76,10 @@ public sealed partial class MainWindow
             }).ToArray();
             _settings.SetApiAccounts(accounts);
             RefreshRowLabels();
-            _anlasInitialFetchDone = false;
+            if (ApiIdentity() != savedIdentity) _anlasInitialFetchDone = false;
             summary.Text = "";
             UpdateAccountUi();
-            if (save && !_settings.Save()) summary.Text = L("settings.api.save_blocked_credentials");
+            if (save) SaveApiSettings(refresh);
         }
 
         void AddRow(string token, ApiAccount? originalAccount = null)
@@ -110,7 +131,7 @@ public sealed partial class MainWindow
             };
             box.LostFocus += (_, _) =>
             {
-                if (!_settings.Save()) summary.Text = L("settings.api.save_blocked_credentials");
+                SaveApiSettings();
             };
             remove.Click += (_, _) =>
             {
@@ -142,7 +163,7 @@ public sealed partial class MainWindow
             PlaceholderText = L("settings.hub.network.base_url_placeholder"),
             Width = SettingsHubControlColumnWidth,
         };
-        bool SaveEndpoint()
+        bool SaveEndpoint(bool refresh = true)
         {
             string url = AppSettings.NormalizeApiBaseUrl(baseUrlBox.Text);
             try { _ = new ApiEndpointResolver(url); }
@@ -162,20 +183,15 @@ public sealed partial class MainWindow
                 }
                 ApplyTokens(save: false);
             }
-            if (!_settings.Save())
-            {
-                summary.Text = L("settings.api.save_blocked_credentials");
-                return false;
-            }
-            return true;
+            return SaveApiSettings(refresh);
         }
         baseUrlBox.LostFocus += (_, _) => SaveEndpoint();
 
         testButton.Click += async (_, _) =>
         {
             if (testing) return;
-            if (!SaveEndpoint()) return;
-            ApplyTokens(save: true);
+            if (!SaveEndpoint(refresh: false)) return;
+            ApplyTokens(save: true, refresh: false);
             if (!AppSettings.IsValidApiBaseUrl(baseUrlBox.Text))
             {
                 summary.Text = L("settings.network.invalid_api_or_network");
@@ -238,7 +254,7 @@ public sealed partial class MainWindow
         modeBox.SelectionChanged += (_, _) =>
         {
             _settings.Settings.ApiCallMode = (ApiCallMode)Math.Max(0, modeBox.SelectedIndex);
-            _settings.Save();
+            SaveApiSettings();
             UpdateGenerateButtonWarning();
         };
         var timeoutPanel = new StackPanel { Spacing = 10 };

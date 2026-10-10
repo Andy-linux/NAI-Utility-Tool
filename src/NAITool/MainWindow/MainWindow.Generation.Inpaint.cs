@@ -423,7 +423,6 @@ public sealed partial class MainWindow
                 ShowI2IResultBar(resetPosition: true);
                 if (!keepGenerateButtonInteractive)
                     BtnGenerate.IsEnabled = true;
-                _ = RefreshAnlasInfoAsync(forceRefresh: true);
                 DebugLog($"[Inpaint] Completed | Seed={actualSeed}");
                 TxtStatus.Text = L("generate.status.completed");
                 return true;
@@ -509,6 +508,7 @@ public sealed partial class MainWindow
             imageBase64, maskBase64,
             MaskCanvas.CanvasW, MaskCanvas.CanvasH,
             prompt, negPrompt, chars, vibes, preciseReferences, progress, ct);
+        _ = RefreshAnlasInfoAsync(forceRefresh: true);
 
         acceptStreamPreview = false;
         ++streamPreviewVer;
@@ -643,7 +643,6 @@ public sealed partial class MainWindow
                 ShowI2IResultBar(resetPosition: true);
                 if (!keepGenerateButtonInteractive)
                     BtnGenerate.IsEnabled = true;
-                _ = RefreshAnlasInfoAsync(forceRefresh: true);
                 DebugLog($"[Denoise] Completed | Seed={actualSeed}");
                 TxtStatus.Text = L("generate.status.completed");
                 return true;
@@ -729,6 +728,7 @@ public sealed partial class MainWindow
             imageBase64,
             MaskCanvas.CanvasW, MaskCanvas.CanvasH,
             prompt, negPrompt, chars, vibes, preciseReferences, progress, ct);
+        _ = RefreshAnlasInfoAsync(forceRefresh: true);
 
         acceptStreamPreview = false;
         ++streamPreviewVer;
@@ -901,7 +901,6 @@ public sealed partial class MainWindow
                 if (resultBitmap != null)
                 {
                     _i2iPreviewDirty = true;
-                    _ = RefreshAnlasInfoAsync(forceRefresh: true);
                     TxtStatus.Text = L("generate.status.regenerated");
                     return true;
                 }

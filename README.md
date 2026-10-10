@@ -6,7 +6,7 @@ Language: English | [简体中文](README-CN.md)
 
 NAI Utility Tool is a Windows desktop client for NovelAI image workflows. It is built with .NET 9, WinUI 3, Windows App SDK, Win2D, SkiaSharp, and ONNX Runtime. It is not intended to replace the official NovelAI website; instead, it brings day-to-day local workflows into one tool: generation, image-to-image editing, mask editing, prompt management, reference-image workflows, batch automation, post-processing, upscaling, metadata inspection, and local reverse tagging.
 
-The current project version is `1.3.0`. The project is still evolving quickly, and this document follows the current `main` branch source layout.
+The current development version is `1.4.0` (Release140). This document follows the `dev` branch source layout.
 
 <img width="1455" height="940" alt="Preview" src="https://github.com/user-attachments/assets/88c9a0d3-5fcb-464f-80bf-98075fc9f3f6" />
 
@@ -14,7 +14,10 @@ The current project version is `1.3.0`. The project is still evolving quickly, a
 
 ### Image Generation
 
-- Supports NovelAI Diffusion 4.5, 4, and 3 model families.
+- Supports NovelAI Diffusion 5, 4.5, 4, and 3 model families.
+- V5 Full offers compact High/Medium controls; Medium uses 14 steps and Euler Ancestral while preserving your High settings.
+- Anlas and V5 usage quota are separate. Eligible V5 subscription requests consume usage quota, not necessarily Anlas; no unsupported per-request quota estimate is shown. Quota refreshes on startup, saved API/account changes, business results, and manual refresh—not polling or opening the quota flyout.
+- A custom gateway displays one verified credential snapshot rather than summing credentials that may share a wallet; it does not predict which account the next request will use.
 - Supports common samplers and schedulers, with incompatible options filtered according to the selected model.
 - Supports separate positive, negative, and style prompt inputs.
 - Supports NAI v4+ character prompts, character negative prompts, and character positions: up to 22 characters for V5 and 6 for V4/V4.5.

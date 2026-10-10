@@ -69,7 +69,11 @@ internal static class ApiTransportChecks
             "Free generation rotates even in random mode, without duplicate weighting.");
         Check(handler.PostCount == 9, "Each operation has exactly one POST, no automatic retries.");
 
+        int getsBeforeKnownRequest = handler.GetCount;
         foreach (var account in settings.Accounts) account.RefreshedAt = DateTimeOffset.MinValue;
+        await service.GenerateAsync(1024, 1024, "test", "");
+        Check(handler.GetCount == getsBeforeKnownRequest, "Known account selection does not refresh by elapsed time or request invalidation.");
+        foreach (var account in settings.Accounts) { account.Info = null; account.IsTokenValid = null; }
         int postsBeforeEdit = handler.PostCount;
         var pendingGeneration = service.GenerateAsync(1024, 1024, "test", "");
         settings.Settings.ApiBaseUrl = "https://changed.invalid";
@@ -161,8 +165,9 @@ internal static class ApiTransportChecks
                     $"Only the account with sufficient Anlas and available V5 receives the generation POST: {mode}.");
             }
 
-            // The last POST invalidates its balance; the next selection must refresh and exclude it.
+            // The business-result event explicitly refreshes the changed balance.
             handler.Balances["test-exact"] = (44, 90);
+            await service.RefreshAccountsAsync();
             int postsBeforeBlockedRequest = handler.PostCount;
             var blocked = await service.GenerateAsync(1024, 1536, "test", "");
             Check(blocked.Error != null && handler.PostCount == postsBeforeBlockedRequest,

@@ -329,6 +329,7 @@ public sealed partial class MainWindow
             string rawBase64 = entry.OriginalImageBase64 ?? entry.ImageBase64;
             var (vibeData, error) = await _naiService.EncodeVibeAsync(
                 rawBase64, model, entry.InformationExtracted, ct);
+            _ = RefreshAnlasInfoAsync(forceRefresh: true);
 
             if (vibeData == null)
                 return Lf("references.error.vibe_encode_failed", entry.FileName, error ?? "");

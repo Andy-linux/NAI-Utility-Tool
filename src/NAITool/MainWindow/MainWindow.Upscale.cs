@@ -379,6 +379,7 @@ public sealed partial class MainWindow
             {
                 DebugLog($"[Upscale] Start | Provider=NovelAI | Input={_upscaleSourceWidth}x{_upscaleSourceHeight}");
                 var result = await _naiService.UpscaleImageAsync(inputBytes);
+                _ = RefreshAnlasInfoAsync(forceRefresh: true);
                 if (result.ImageBytes == null)
                 { TxtStatus.Text = Lf("upscale.failed", result.Error ?? L("api.error.empty_zip")); return; }
                 resultBytes = result.ImageBytes;
@@ -429,7 +430,6 @@ public sealed partial class MainWindow
             UpscaleProgressBar.Visibility = Visibility.Collapsed;
             UpscaleProgressBar.IsIndeterminate = true;
             UpscaleProgressBar.Value = 0;
-            if (official) _ = RefreshAnlasInfoAsync(forceRefresh: true);
             UpdateDynamicMenuStates();
         }
     }

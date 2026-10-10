@@ -155,7 +155,6 @@ public sealed partial class MainWindow
         UpdateSizeWarningVisuals();
         UpdateAnlasBalanceText();
         UpdateFloatingResultBarsVisibility();
-        _ = RefreshAnlasInfoAsync();
     }
 
     private static bool IsPromptMode(AppMode mode) =>

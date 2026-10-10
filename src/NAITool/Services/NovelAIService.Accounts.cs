@@ -59,8 +59,8 @@ public partial class NovelAIService
             ct.ThrowIfCancellationRequested();
             if (_settings.Accounts.Contains(account) && baseUrl == _settings.Settings.ApiBaseUrl && identity == AccountIdentity(account))
             {
-                account.Info = account.IsTokenValid == false ? null : info ?? UnavailableAccountInfo();
                 if (info?.IsAccountInfoAvailable == true) account.IsTokenValid = true;
+                account.Info = account.IsTokenValid == false ? null : info ?? UnavailableAccountInfo();
                 // Also throttle transient failures; a broken account must not delay every request.
                 account.RefreshedAt = DateTimeOffset.UtcNow;
             }
@@ -90,8 +90,10 @@ public partial class NovelAIService
         var configuredAccounts = _settings.Accounts;
         {
             foreach (var account in _settings.Accounts) EnsureAccountIdentity(account);
+            // Only an uninitialized identity needs preflight data. Known balances
+            // refresh through startup/settings/result/manual events, not elapsed time.
             var stale = ApiAccountRouter.UniqueAccounts(_settings.Accounts)
-                .Where(a => DateTimeOffset.UtcNow - a.RefreshedAt > TimeSpan.FromSeconds(30)).ToArray();
+                .Where(a => a.Info == null && a.IsTokenValid == null).ToArray();
             await Parallel.ForEachAsync(stale, new ParallelOptions
             {
                 MaxDegreeOfParallelism = 4, CancellationToken = ct,

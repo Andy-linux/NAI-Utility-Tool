@@ -453,6 +453,7 @@ public sealed partial class MainWindow
                 parametersOverride: enhanceParams,
                 isEnhance: true,
                 upscaledEnhance: options.UseMaxUpscale);
+            _ = RefreshAnlasInfoAsync(forceRefresh: true);
             previewsOpen = false;
             _lastUsedSeed = actualSeed;
 
@@ -500,7 +501,6 @@ public sealed partial class MainWindow
 
             SetGenResultBarRequested(true, resetPosition: true);
 
-            _ = RefreshAnlasInfoAsync(forceRefresh: true);
             UpdateDynamicMenuStates();
             DebugLog($"[Enhance] Completed | Seed={actualSeed} | Saved={savedPath}");
             TxtStatus.Text = _settings.Settings.PrivacyMode

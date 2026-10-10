@@ -190,6 +190,7 @@ public sealed partial class MainWindow
             var (imageBytes, error) = await _naiService.GenerateAsync(
                 w, h, prompt, negPrompt,
                 chars, vibes, preciseReferences, progress, ct);
+            _ = RefreshAnlasInfoAsync(forceRefresh: true);
             previewsOpen = false;
             _lastUsedSeed = actualSeed;
 
@@ -246,7 +247,6 @@ public sealed partial class MainWindow
 
             if (!_autoGenRunning)
                 SetGenResultBarRequested(true, resetPosition: true);
-            _ = RefreshAnlasInfoAsync(forceRefresh: true);
             UpdateDynamicMenuStates();
             DebugLog($"[Generate] Completed | Seed={actualSeed} | Saved={finalSavedPath}");
             TxtStatus.Text = _settings.Settings.PrivacyMode

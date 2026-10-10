@@ -249,6 +249,7 @@ public sealed partial class MainWindow
                 foreach (string model in modelCandidates)
                 {
                     var (text, error) = await _naiService.GeneratePromptTextAsync(instruction, model);
+                    _ = RefreshAnlasInfoAsync(forceRefresh: true);
                     if (!string.IsNullOrWhiteSpace(text))
                     {
                         outputBox.Text = ExtractGeneratedPromptText(text);

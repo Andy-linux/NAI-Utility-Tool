@@ -466,14 +466,13 @@ public sealed partial class MainWindow
                 });
                 content.Children.Add(new TextBlock
                 {
-                    Text = "≈ " + estimatedAnlas.ToString(),
+                    Text = "≈ " + estimatedAnlas.ToString() + " Anlas",
                     Opacity = 0.9,
                 });
             }
             else
             {
                 content.Children.Add(new SymbolIcon(Symbol.Send));
-                content.Children.Add(new TextBlock { Text = L("quota.opus_free"), Opacity = 0.9 });
             }
             ToolTipService.SetToolTip(BtnGenerate, L("quota.estimate_hint"));
             content.Children.Add(new TextBlock { Text = L("button.send") });

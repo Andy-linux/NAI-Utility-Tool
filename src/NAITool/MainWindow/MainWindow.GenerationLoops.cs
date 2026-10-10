@@ -383,7 +383,28 @@ public sealed partial class MainWindow
             _quotaSummaryFlyout?.Hide();
             OnQuotaSettings(AnlasBalanceButton, args);
         };
-        content.Children.Add(manageButton);
+        var actions = new Grid();
+        actions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        actions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        actions.Children.Add(manageButton);
+        var refreshButton = new Button
+        {
+            Content = new SymbolIcon(Symbol.Refresh),
+            Margin = new Thickness(8, 2, 0, 0),
+            Padding = new Thickness(8),
+        };
+        ToolTipService.SetToolTip(refreshButton, L("settings.quota.refresh"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(refreshButton, L("settings.quota.refresh"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(refreshButton, "QuotaRefreshButton");
+        refreshButton.Click += async (_, _) =>
+        {
+            refreshButton.IsEnabled = false;
+            try { await RefreshAnlasInfoAsync(forceRefresh: true); }
+            finally { refreshButton.IsEnabled = true; }
+        };
+        Grid.SetColumn(refreshButton, 1);
+        actions.Children.Add(refreshButton);
+        content.Children.Add(actions);
 
         _quotaSummaryFlyout = new Flyout
         {
@@ -399,7 +420,6 @@ public sealed partial class MainWindow
         _quotaSummaryFlyout.Opened += (_, _) =>
         {
             UpdateQuotaSummaryFlyoutContent();
-            _ = RefreshAnlasInfoAsync(forceRefresh: true);
         };
     }
 
@@ -424,7 +444,7 @@ public sealed partial class MainWindow
             ? Windows.UI.Color.FromArgb(255, 245, 245, 245)
             : Windows.UI.Color.FromArgb(255, 32, 32, 32));
 
-        _quotaSummaryAnlasLabel.Text = L(_settings.Settings.UsesCustomApiBaseUrl ? "quota.gateway_shared" : "settings.api.total_anlas");
+        _quotaSummaryAnlasLabel.Text = "Anlas";
         _quotaSummaryAnlasText.Text = anlas?.ToString("N0") ?? L("quota.unavailable");
         _quotaSummaryAnlasProgress.Maximum = Math.Max(10_000L * Math.Max(1, totals.AccountCount), anlas ?? 0);
         _quotaSummaryAnlasProgress.Value = anlas.HasValue
@@ -435,12 +455,12 @@ public sealed partial class MainWindow
         string anlasImageCount = currentAnlasCost > 0 && anlas.HasValue
             ? Math.Max(0, anlas.Value / currentAnlasCost).ToString("N0")
             : "--";
-        _quotaSummaryAnlasEstimateText.Text = !anlas.HasValue
-            ? L("quota.unavailable")
-            : currentAnlasCost == 0 ? L("quota.opus_free")
-            : Lf("settings.quota.summary.anlas_estimate", anlasImageCount);
+        _quotaSummaryAnlasEstimateText.Text = currentAnlasCost > 0 && anlas.HasValue
+            ? Lf("settings.quota.summary.anlas_estimate", anlasImageCount) : "";
+        _quotaSummaryAnlasEstimateText.Visibility = string.IsNullOrEmpty(_quotaSummaryAnlasEstimateText.Text)
+            ? Visibility.Collapsed : Visibility.Visible;
 
-        _quotaSummaryV5UsageLabel.Text = L("settings.api.total_v5");
+        _quotaSummaryV5UsageLabel.Text = L("settings.quota.account.v5_usage");
         _quotaSummaryV5UsageText.Text = v5Usage.HasValue
             ? $"{Math.Max(v5Usage.Value, 0)}%"
             : "--%";
@@ -451,10 +471,8 @@ public sealed partial class MainWindow
             ? Math.Max(v5Usage.Value, 0)
             : 0;
         _quotaSummaryV5UsageProgress.Opacity = v5Usage.HasValue ? 1 : 0.45;
-        _quotaSummaryV5UsageEstimateText.Text = v5Usage.HasValue
-            ? L("quota.v5_separate") : L("quota.unavailable");
-        _quotaSummaryV5UsageRecoveryText.Text = _settings.Settings.UsesCustomApiBaseUrl
-            ? L("quota.gateway_shared_hint") : Lf("settings.api.total_hint", totals.KnownCount, totals.AccountCount);
+        _quotaSummaryV5UsageEstimateText.Visibility = Visibility.Collapsed;
+        _quotaSummaryV5UsageRecoveryText.Visibility = Visibility.Collapsed;
 
         _quotaSummaryAnlasLabel.Foreground = summaryTextBrush;
         _quotaSummaryAnlasText.Foreground = summaryTextBrush;
