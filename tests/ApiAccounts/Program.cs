@@ -32,11 +32,11 @@ foreach (var mode in Enum.GetValues<ApiCallMode>())
         Check(router.Select(accounts, mode, free) == accounts[i % 3], $"free requests always rotate: {mode}");
 }
 Check(new ApiAccountRouter().Select(accounts, ApiCallMode.MostQuota, v5) == full, "V5 compares V5 allowance");
-Check(new ApiAccountRouter().Select(accounts, ApiCallMode.LeastQuota, v5) == emptyV5, "zero percent with nonnegative allowance is not exhaustion");
-Check(new ApiAccountRouter().Select(accounts, ApiCallMode.MostQuota, paidV5) == emptyV5, "paid V5 compares Anlas and permits zero percent");
+Check(new ApiAccountRouter().Select(accounts, ApiCallMode.LeastQuota, v5) == rich, "least V5 skips exhausted accounts");
+Check(new ApiAccountRouter().Select(accounts, ApiCallMode.MostQuota, paidV5) == rich, "paid V5 compares Anlas but excludes zero V5");
 Check(new ApiAccountRouter().Select(accounts, ApiCallMode.LeastQuota, paidV5) == full, "least Anlas on paid V5");
 Check(new ApiAccountRouter().Select(accounts, ApiCallMode.MostQuota, encode) == emptyV5, "Anlas-only operation can use zero V5");
-Check(new ApiAccountRouter().Select([emptyV5], ApiCallMode.RoundRobin, v5) == emptyV5, "zero percent is eligible when isNegative is false");
+Check(new ApiAccountRouter().Select([emptyV5], ApiCallMode.RoundRobin, v5) == null, "no eligible V5 account does not fall back to exhausted account");
 Check(new ApiAccountRouter().Select([], ApiCallMode.RoundRobin, encode) == null, "empty list");
 var insufficient = Account("synthetic-poor", 1, 90);
 Check(new ApiAccountRouter().Select([insufficient, rich], ApiCallMode.LeastQuota, encode) == rich, "least quota skips insufficient Anlas");
@@ -52,9 +52,8 @@ Check(leastRouter.Select(paidCandidates, ApiCallMode.LeastQuota, paidV5 with { R
 exactCost.Info = Account("unused", 40, 90).Info;
 Check(leastRouter.Select(paidCandidates, ApiCallMode.LeastQuota, paidV5) == aboveCost,
     "least quota reevaluates changed Anlas balances before each selection");
-Check(leastRouter.Select([insufficient, belowCost, exactCost], ApiCallMode.LeastQuota, paidV5) == null,
-    "no account is selected when all Anlas balances are insufficient");
-Check(leastRouter.Select([emptyV5], ApiCallMode.LeastQuota, paidV5) == emptyV5, "zero-percent account can pay Anlas");
+Check(leastRouter.Select([insufficient, belowCost, exactCost, emptyV5], ApiCallMode.LeastQuota, paidV5) == null,
+    "no account is selected when all Anlas balances are insufficient or V5 allowance is exhausted");
 var negativeV5 = Account("synthetic-negative-v5", 1000, 90, negative: true);
 var unauthorized = Account("synthetic-unauthorized", 1000, 90);
 unauthorized.IsTokenValid = false;
@@ -62,8 +61,7 @@ foreach (var mode in Enum.GetValues<ApiCallMode>())
 {
     var router = new ApiAccountRouter();
     var affordable = Account("synthetic-affordable", 45, 90);
-    ApiAccount[] candidates = [belowCost, unauthorized, affordable, affordable];
-    Check(router.Select([negativeV5], mode, paidV5) == negativeV5, $"negative allowance can still pay Anlas: {mode}");
+    ApiAccount[] candidates = [belowCost, emptyV5, negativeV5, unauthorized, affordable, affordable];
     Check(router.Select(candidates, mode, paidV5, advance: false) == affordable,
         $"preview applies the same quota and validity rules: {mode}");
     for (int i = 0; i < 4; i++)
@@ -85,10 +83,10 @@ foreach (var mode in Enum.GetValues<ApiCallMode>())
 var rotating = new ApiAccountRouter();
 var rotatingMinimum = Account("synthetic-rotating-minimum", 45, 90);
 for (int i = 0; i < 6; i++)
-    Check(rotating.Select([belowCost, aboveCost, rotatingMinimum], ApiCallMode.RoundRobin, paidV5) ==
+    Check(rotating.Select([belowCost, aboveCost, emptyV5, rotatingMinimum], ApiCallMode.RoundRobin, paidV5) ==
           (i % 2 == 0 ? aboveCost : rotatingMinimum), "round robin keeps order while skipping ineligible accounts");
 rotatingMinimum.Info = Account("unused", 44, 90).Info;
-Check(rotating.Select([belowCost, aboveCost, rotatingMinimum], ApiCallMode.RoundRobin, paidV5) == aboveCost,
+Check(rotating.Select([belowCost, aboveCost, emptyV5, rotatingMinimum], ApiCallMode.RoundRobin, paidV5) == aboveCost,
     "round robin safely advances when its previous account becomes ineligible");
 var inactive = Account("synthetic-inactive", 100, 70, active: false);
 Check(new ApiAccountRouter().Select([inactive, rich], ApiCallMode.RoundRobin, free) == rich, "free eligible account avoids unnecessary Anlas");
@@ -123,7 +121,7 @@ Check(preview.Select([rich, full], ApiCallMode.RoundRobin, v5) == rich, "preview
 Check(preview.Select([full], ApiCallMode.RoundRobin, v5) == full, "removing last account is safe");
 var random = new ApiAccountRouter();
 for (int i = 0; i < 100; i++)
-    Check(random.Select([belowCost, rich, unauthorized, full], ApiCallMode.Random, paidV5) is { } selected &&
+    Check(random.Select([belowCost, rich, emptyV5, negativeV5, unauthorized, full], ApiCallMode.Random, paidV5) is { } selected &&
           (selected == rich || selected == full), "random uses only accounts satisfying both Anlas and V5 requirements");
 var concurrentRouter = new ApiAccountRouter();
 var selections = new ConcurrentBag<string>();

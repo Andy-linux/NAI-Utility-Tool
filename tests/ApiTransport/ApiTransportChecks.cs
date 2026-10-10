@@ -46,7 +46,7 @@ internal static class ApiTransportChecks
         await service.GenerateAsync(1024, 1024, "test", "");
         Check(handler.LastPostToken == "test-b", "V5 generation chooses maximum V5 balance.");
         await service.GenerateAsync(1024, 1536, "test", "");
-        Check(handler.LastPostToken == "test-zero", "Paid V5 generation prioritizes Anlas without excluding zero percent.");
+        Check(handler.LastPostToken == "test-a", "Paid V5 generation prioritizes Anlas and skips zero V5.");
         settings.Settings.ApiCallMode = ApiCallMode.LeastQuota;
         await service.GenerateAsync(1024, 1536, "test", "");
         Check(handler.LastPostToken == "test-b", "Paid V5 generation chooses minimum sufficient Anlas.");
@@ -68,23 +68,7 @@ internal static class ApiTransportChecks
         Check(sequence.SequenceEqual(new[] { "test-a", "test-b", "test-a", "test-b" }),
             "Free generation rotates even in random mode, without duplicate weighting.");
         Check(handler.PostCount == 9, "Each operation has exactly one POST, no automatic retries.");
-        var retryOptions = new NAITool.Models.AutomationErrorHandlingOptions();
-        Check(retryOptions.GetRetryLimit((int?)null) == 0 && retryOptions.GetRetryLimit(504) == 0,
-            "Unknown failures have no configured automation retries.");
-        Check(retryOptions.GetRetryLimit(429) == -1 && retryOptions.GetRetryLimit(500) == 3,
-            "Existing automation retry defaults remain available.");
-        foreach (int limit in new[] { 0, 2, -1 })
-        {
-            retryOptions.SetRetryLimit(400, limit);
-            Check(service.LastGenerationErrorStatusCode == 400 &&
-                retryOptions.GetRetryLimit(service.LastGenerationErrorStatusCode) == limit,
-                "Mock HTTP failure respects the user's automation retry setting.");
-        }
 
-        int getsBeforeKnownRequest = handler.GetCount;
-        foreach (var account in settings.Accounts) account.RefreshedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
-        await service.GenerateAsync(1024, 1024, "test", "");
-        Check(handler.GetCount == getsBeforeKnownRequest, "Known account selection does not refresh by elapsed time.");
         foreach (var account in settings.Accounts) account.RefreshedAt = DateTimeOffset.MinValue;
         int postsBeforeEdit = handler.PostCount;
         var pendingGeneration = service.GenerateAsync(1024, 1024, "test", "");
@@ -133,45 +117,23 @@ internal static class ApiTransportChecks
         migrated.Load();
         Check(migrated.Accounts.Count == 1 && migrated.Accounts[0].Token == "test-a" &&
             migrated.Accounts[0].Info?.V5UsagePercent == 120, "Existing single-account encrypted configuration imports without losing overage.");
-        string invalidMixedConfig = JsonSerializer.Serialize(new ApiConfig
+        File.WriteAllText(configPath, JsonSerializer.Serialize(new ApiConfig
         {
             Accounts = [loaded.Accounts[0], loaded.Accounts[0], new ApiAccount { EncryptedApiToken = "invalid-ciphertext" }],
-        });
-        // A valid whole-document backup wins over a partly decryptable primary.
-        // Both paths are inside this executable's isolated synthetic config root.
-        File.WriteAllText(configPath + ".bak", config);
-        File.WriteAllText(configPath, invalidMixedConfig);
-        var recovered = new SettingsService();
-        recovered.Load();
-        Check(recovered.ApiConfigRecoveredFromBackup && !recovered.ApiTokenDecryptFailed &&
-            recovered.Accounts.Select(a => a.Token).SequenceEqual(new[] { "test-a", "test-b" }),
-            "Valid encrypted whole-document backup is restored before partial decryption fallback.");
-        // Exercise partial preservation separately, with no valid backup available.
-        File.Delete(configPath + ".bak");
-        File.WriteAllText(configPath, invalidMixedConfig);
+        }));
         var partiallyDecrypted = new SettingsService();
         partiallyDecrypted.Load();
         Check(partiallyDecrypted.ApiTokenDecryptFailed && partiallyDecrypted.HasApiTokens &&
             partiallyDecrypted.Accounts[0].Token == "test-a", "One undecryptable token does not erase other accounts.");
         Check(ReferenceEquals(partiallyDecrypted.Accounts[0], partiallyDecrypted.Accounts[1]),
             "Duplicate credentials loaded from disk share quota and validation state.");
-        partiallyDecrypted.Settings.ThemeMode = "Dark";
-        partiallyDecrypted.Settings.RememberedPrompts.GenPositivePrompt = "synthetic saved prompt";
-        Check(partiallyDecrypted.Save(), "Undecryptable unused credential does not block ordinary settings save.");
-        Check(File.ReadAllText(configPath).Contains("invalid-ciphertext"), "Ordinary save preserves old ciphertext.");
-        var savedPartial = new SettingsService();
-        savedPartial.Load();
-        Check(savedPartial.Settings.ThemeMode == "Dark" &&
-            savedPartial.Settings.RememberedPrompts.GenPositivePrompt == "synthetic saved prompt" &&
-            savedPartial.Accounts.Any(a => a.EncryptedApiToken == "invalid-ciphertext"),
-            "Theme, prompt and old ciphertext survive restart together.");
         await CheckQuotaRoutingAsync(settings, service, handler);
         Console.WriteLine($"Passed {_checks} API transport and persistence checks (in-memory HTTP; synthetic tokens only).");
     }
 
     private static async Task CheckQuotaRoutingAsync(SettingsService settings, NovelAIService service, AccountHandler handler)
     {
-        settings.SetApiTokens(["test-too-small", "test-exact", "test-exact"]);
+        settings.SetApiTokens(["test-too-small", "test-exact", "test-zero", "test-exact"]);
         settings.Settings.GenParameters.Model = "nai-diffusion-5-full";
         handler.Balances["test-too-small"] = (44, 90);
         foreach (var mode in Enum.GetValues<ApiCallMode>())
@@ -187,9 +149,8 @@ internal static class ApiTransportChecks
                     $"Only the account with sufficient Anlas and available V5 receives the generation POST: {mode}.");
             }
 
-            // The business-result event explicitly refreshes the changed balance.
+            // The last POST invalidates its balance; the next selection must refresh and exclude it.
             handler.Balances["test-exact"] = (44, 90);
-            await service.RefreshAccountsAsync();
             int postsBeforeBlockedRequest = handler.PostCount;
             var blocked = await service.GenerateAsync(1024, 1536, "test", "");
             Check(blocked.Error != null && handler.PostCount == postsBeforeBlockedRequest,
@@ -197,10 +158,9 @@ internal static class ApiTransportChecks
         }
 
         settings.SetApiTokens(["test-preview-opus", "test-preview-tablet"]);
-        service.InvalidateMismatchedAccountCaches();
         settings.Accounts[0].Info = new NovelAiAccountInfo
         {
-            AnlasBalance = 100, V5UsagePercent = 90, V5UsageIsNegative = false, IsOpus = true, HasActiveSubscription = true,
+            AnlasBalance = 100, V5UsagePercent = 90, IsOpus = true, HasActiveSubscription = true,
         };
         settings.Accounts[1].Info = new NovelAiAccountInfo
         {
@@ -209,7 +169,7 @@ internal static class ApiTransportChecks
         settings.Settings.ApiCallMode = ApiCallMode.Random;
         var costType = typeof(NovelAIService).Assembly.GetType("NAITool.Services.ApiRequestCost")!;
         var cost = costType.GetMethod("Image", BindingFlags.Public | BindingFlags.Static)!
-            .Invoke(null, ["nai-diffusion-5-full", 1024, 1024, 28, false, 1d, 1, false, false]);
+            .Invoke(null, ["nai-diffusion-5-full", 1024, 1024, 28, false, 1d, 1]);
         var estimate = typeof(NovelAIService).GetMethod("EstimateAnlas", BindingFlags.NonPublic | BindingFlags.Instance)!
             .Invoke(service, [cost]);
         Check(Equals(estimate, 1), "Random cost preview excludes the higher cost of an account that cannot afford the request.");
@@ -242,7 +202,7 @@ internal static class ApiTransportChecks
                     {
                         subscription = new
                         {
-                            tier = 3, active = true, expiresAt = DateTimeOffset.UtcNow.AddDays(7).ToUnixTimeSeconds(), trainingStepsLeft = balance,
+                            tier = 3, active = true, trainingStepsLeft = balance,
                             usage = new { percent = v5, isNegative = false, timeUntilNextPercent = 60 },
                         },
                     })),

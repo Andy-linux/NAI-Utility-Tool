@@ -9,9 +9,5 @@
     <Compile Include="../../src/NAITool/Services/ApiAccount.cs" Link="ApiAccount.cs" />
     <Compile Include="../../src/NAITool/Services/ApiAccountRouter.cs" Link="ApiAccountRouter.cs" />
     <Compile Include="../../src/NAITool/Services/NovelAiAnlasCalculator.cs" Link="NovelAiAnlasCalculator.cs" />
-    <Compile Include="../../src/NAITool/Services/ModelCapabilities.cs" Link="ModelCapabilities.cs" />
-    <Compile Include="../../src/NAITool/Services/NAIParameters.cs" Link="NAIParameters.cs" />
-    <Compile Include="../../src/NAITool/Services/SeedValue.cs" Link="SeedValue.cs" />
-    <Compile Include="../../src/NAITool/Services/NovelAiPromptPresets.cs" Link="NovelAiPromptPresets.cs" />
   </ItemGroup>
 </Project>

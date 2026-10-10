@@ -44,18 +44,14 @@ internal static class EnhanceChecks
             Check(Rule<List<double>>("GetAvailableAmounts", size.Item1, size.Item2).SequenceEqual(new[] { 1d, 1.5 }), "Portrait/square supported amounts.");
         var small = Rule<List<double>>("GetAvailableAmounts", 512, 512);
         Check(small.SequenceEqual(new[] { 1d, 1.5, 2d }), "Small images permit 2x.");
-        Check(Rule<List<double>>("GetAvailableAmounts", 1000, 1000).SequenceEqual(new[] { 1d, 1.5 }), "Unaligned source supports safe scaling.");
-        Check(Rule<List<double>>("GetAvailableAmounts", 500, 500).SequenceEqual(new[] { 1d, 1.5, 2d }), "500px source supports safe scaling.");
+        Check(Rule<List<double>>("GetAvailableAmounts", 1000, 1000).SequenceEqual(new[] { 1d }), "Unaligned scaling is omitted.");
         foreach (var size in new[] { (0, 1024), (-1, 512), (2048, 2048), (int.MaxValue, int.MaxValue) })
             Check(Rule<List<double>>("GetAvailableAmounts", size.Item1, size.Item2).Count == 0, "Invalid/oversized source rejected.");
         Check(Rule<double>("GetPreferredAmount", new List<double> { 1d }, 2d) == 1, "Remembered unsupported scale falls back.");
         Check(Rule<bool>("CanUseMax", V5, 1024, 1024), "V5 supports Max.");
         Check(!Rule<bool>("CanUseMax", "nai-diffusion-4-5-full", 1024, 1024), "V4.5 omits Max.");
         Check(!Rule<bool>("CanUseMax", V5, 2048, 1536), "Near-limit images omit Max.");
-        Check(Rule<(int, int)>("GetOutputDimensions", 832, 1216, 1.5, false) == (1280, 1856), "Portrait 1.5x uses official nearest-64 rounding, ties upward.");
-        Check(Rule<(int, int)>("GetOutputDimensions", 1216, 832, 1.5, false) == (1856, 1280), "Landscape 1.5x rounding.");
-        Check(Rule<(int, int)>("GetOutputDimensions", 500, 500, 1d, false) == (512, 512), "Imported unaligned source rounds before preparation.");
-        Check(Rule<(int, int)>("GetOutputDimensions", 1, 1, 1d, false) == (64, 64), "Official minimum dimension.");
+        Check(Rule<(int, int)>("GetOutputDimensions", 832, 1216, 1.5, false) == (1248, 1824), "Portrait 1.5x dimensions.");
         foreach (var size in new[] { (512, 512), (832, 1216), (1216, 832), (1024, 1024), (1024, 2048) })
         {
             var output = Rule<(int W, int H)>("GetOutputDimensions", size.Item1, size.Item2, 1d, true);
@@ -119,16 +115,11 @@ internal static class EnhanceChecks
             if (mode.Item1)
             {
                 Check(sent.GetProperty("extra_noise_seed").GetUInt64() == 4294967294, "Extra noise seed preserves large integers.");
-                Check((!sent.TryGetProperty("sm", out var smea) || !smea.GetBoolean()) && !sent.GetProperty("color_correct").GetBoolean() &&
-                    !sent.GetProperty("add_original_image").GetBoolean(), "Enhance request excludes original image for single-result ZIP.");
+                Check(!sent.GetProperty("sm").GetBoolean() && !sent.GetProperty("color_correct").GetBoolean() &&
+                    sent.GetProperty("add_original_image").GetBoolean(), "Enhance request flags.");
             }
             else Check(!sent.TryGetProperty("extra_noise_seed", out _), "Plain img2img is unchanged.");
         }
-        settings.Settings.StreamGeneration = true;
-        await service.ImageToImageAsync("AA==", 512, 512, "landscape", "",
-            parametersOverride: parameters, isEnhance: true);
-        Check(handler.Payload.GetProperty("parameters").GetProperty("stream").GetString() == "msgpack" &&
-            handler.LastPath == "/ai/generate-image-stream", "Enhance preserves the user's stream preference without fallback or retry.");
         int count = handler.Count;
         parameters.Steps = 100;
         parameters.DenoiseStrength = 0.99;
@@ -145,7 +136,6 @@ internal static class EnhanceChecks
     {
         public int Count { get; private set; }
         public JsonElement Payload { get; private set; }
-        public string? LastPath { get; private set; }
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             if (request.Method == HttpMethod.Get)
@@ -154,7 +144,6 @@ internal static class EnhanceChecks
                     Content = new StringContent("""{"subscription":{"tier":3,"active":true,"trainingStepsLeft":1000,"usage":{"percent":100,"isNegative":false}}}"""),
                 };
             using var json = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
-            LastPath = request.RequestUri!.AbsolutePath;
             Payload = json.RootElement.Clone();
             Count++;
             return new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent("test response") };

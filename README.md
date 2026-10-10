@@ -6,7 +6,7 @@ Language: English | [简体中文](README-CN.md)
 
 NAI Utility Tool is a Windows desktop client for NovelAI image workflows. It is built with .NET 9, WinUI 3, Windows App SDK, Win2D, SkiaSharp, and ONNX Runtime. It is not intended to replace the official NovelAI website; instead, it brings day-to-day local workflows into one tool: generation, image-to-image editing, mask editing, prompt management, reference-image workflows, batch automation, post-processing, upscaling, metadata inspection, and local reverse tagging.
 
-This fork's version is `1.3.0_fork.1` (based on upstream Release 1.3.0). This document follows the `dev` branch source layout.
+The current project version is `1.3.0`. The project is still evolving quickly, and this document follows the current `main` branch source layout.
 
 <img width="1455" height="940" alt="Preview" src="https://github.com/user-attachments/assets/88c9a0d3-5fcb-464f-80bf-98075fc9f3f6" />
 
@@ -14,10 +14,7 @@ This fork's version is `1.3.0_fork.1` (based on upstream Release 1.3.0). This do
 
 ### Image Generation
 
-- Supports NovelAI Diffusion 5, 4.5, 4, and 3 model families.
-- V5 Full offers compact High/Medium controls; Medium uses 14 steps and Euler Ancestral while preserving your High settings.
-- Anlas and V5 usage quota are separate. Eligible V5 subscription requests consume usage quota, not necessarily Anlas; no unsupported per-request quota estimate is shown. Quota refreshes on startup, saved API/account changes, business results, and manual refresh—not polling or opening the quota flyout.
-- A custom gateway displays one verified credential snapshot rather than summing credentials that may share a wallet; it does not predict which account the next request will use.
+- Supports NovelAI Diffusion 4.5, 4, and 3 model families.
 - Supports common samplers and schedulers, with incompatible options filtered according to the selected model.
 - Supports separate positive, negative, and style prompt inputs.
 - Supports NAI v4+ character prompts, character negative prompts, and character positions: up to 22 characters for V5 and 6 for V4/V4.5.
@@ -319,4 +316,15 @@ See `CONTRIBUTING.md` and `SECURITY.md` for more details.
 
 This project is licensed under GPL-3.0. See `LICENSE` for the full license text. If you use this project's source code or design as a reference, please provide attribution and link back to this repository.
 
-Fork notice: derived from [Aeka0/NAI-Utility-Tool](https://github.com/Aeka0/NAI-Utility-Tool), upstream Release130 (1.3.0). Modified in October 2026; this fork remains under GPL-3.0. Corresponding modified source is available in this repository at the matching release tag.
+---
+
+## Fork: 1.3.0_fork.1
+
+This is a modified fork of [Aeka0/NAI-Utility-Tool](https://github.com/Aeka0/NAI-Utility-Tool), based on the original **Release 1.3.0** (Release130). The upstream README above is preserved for reference; the following changes are specific to this fork:
+
+- NovelAI V5 Full High/Medium: Medium uses 14 steps, Euler Ancestral and fixed Heavy UC, with CFG Scale editable; switching back restores High parameters.
+- Custom NovelAI gateway URLs and native image/account endpoints, including stream final-result handling and image-to-image, Vibe, upscale and text routes.
+- Concise Anlas request-cost and remaining-image estimates, a labeled V5 High reference image count, and account refresh on startup, saved account changes, results and manual action.
+- Targeted fixes for settings persistence, metadata, model-download completeness and existing workspace behavior.
+
+This fork is **not an official upstream release**. Changes were made in October 2026 and remain licensed under **GPL-3.0**; the [full license](LICENSE) and corresponding modified [source code](https://github.com/Andy-linux/NAI-Utility-Tool/tree/dev) are available here. Optional third-party models and data may have separate licenses.

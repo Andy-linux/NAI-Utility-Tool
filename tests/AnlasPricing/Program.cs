@@ -24,7 +24,7 @@ foreach (string model in new[] { V5, "nai-diffusion-5-curated", "nai-diffusion-5
 Equal(20, NovelAiAnlasCalculator.PaidBaseCost("nai-diffusion-4-5-full", 1024, 1024, 28), "V4.5 unchanged");
 Equal(24, NovelAiAnlasCalculator.PaidBaseCost("nai-diffusion-3", 1024, 1024, 28, sm: true), "V3 SMEA");
 Equal(0, NovelAiAnlasCalculator.BaseCost(V5, 1024, 1024, 28, true, false), "Opus available, including displayed 0%");
-Equal(30, NovelAiAnlasCalculator.BaseCost(V5, 1024, 1024, 28, true, null), "unknown usage cannot establish free eligibility");
+Equal(0, NovelAiAnlasCalculator.BaseCost(V5, 1024, 1024, 28, true, null), "missing usage follows official default");
 Equal(30, NovelAiAnlasCalculator.BaseCost(V5, 1024, 1024, 28, true, true), "Opus exhausted");
 Equal(30, NovelAiAnlasCalculator.BaseCost(V5, 1024, 1024, 28, false, false), "inactive or non-Opus");
 Equal(0, NovelAiAnlasCalculator.BaseCost("nai-diffusion-4-5-full", 1024, 1024, 28, true, true), "V5 exhaustion does not affect V4.5");

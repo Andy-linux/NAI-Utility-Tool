@@ -6,7 +6,7 @@
 
 NAI Utility Tool 是一个面向 NovelAI 图像工作流的 Windows 桌面客户端。它基于 .NET 9、WinUI 3、Windows App SDK、Win2D、SkiaSharp 和 ONNX Runtime 构建，目标不是替代 NovelAI 官方站点，而是把日常高频操作整合到一个本地工具里：生成、重绘、遮罩编辑、提示词管理、参考图工作流、批量自动化、后期处理、超分、元数据检视和本地反推。
 
-当前开发版本为 `1.3.0_fork.1`（基于原版 1.3.0）。本文档以 `dev` 分支源码结构为准。
+项目当前版本为 `1.3.0`，仍在快速迭代。本文档以当前 `main` 分支源码结构为准。
 
 <img width="1455" height="940" alt="Preview" src="https://github.com/user-attachments/assets/88c9a0d3-5fcb-464f-80bf-98075fc9f3f6" />
 
@@ -15,9 +15,6 @@ NAI Utility Tool 是一个面向 NovelAI 图像工作流的 Windows 桌面客户
 ### 图像生成
 
 - 支持 NovelAI Diffusion 5、4.5、4、3 系列模型。
-- V5 Full 提供紧凑的 High/Medium 开关；Medium 固定 14 步和 Euler Ancestral，保留原 High 设置。
-- Anlas 与 V5 使用额度独立；符合订阅条件的 V5 请求仍消耗使用额度，不显示缺乏依据的单次额度估价。额度在启动、保存 API/账号变更、业务结果返回和手动刷新时更新，不轮询，也不因打开浮窗而请求。
-- 自定义网关显示一个已核实凭证的额度快照，不累加可能共享钱包的 Key，也不代表下次请求一定选用该账号。
 - 支持常用采样器与调度器，并会根据当前模型过滤不适用选项。
 - 支持正面、负面、风格提示词拆分输入。
 - 支持 NAI v4+ 角色提示词、角色负面提示词和角色位置；V5 最多支持 22 个角色，V4/V4.5 最多支持 6 个。
@@ -99,8 +96,6 @@ NAI Utility Tool 是一个面向 NovelAI 图像工作流的 Windows 桌面客户
 
 生成模型：
 
-- `nai-diffusion-5-full`
-- `nai-diffusion-5-curated`
 - `nai-diffusion-4-5-full`
 - `nai-diffusion-4-5-curated`
 - `nai-diffusion-4-full`
@@ -110,7 +105,6 @@ NAI Utility Tool 是一个面向 NovelAI 图像工作流的 Windows 桌面客户
 
 重绘模型：
 
-- `nai-diffusion-5-full-inpainting`
 - `nai-diffusion-4-5-full-inpainting`
 - `nai-diffusion-4-5-curated-inpainting`
 - `nai-diffusion-4-full-inpainting`
@@ -316,4 +310,15 @@ publish/NAI Utility Tool/
 
 本项目使用 GPL-3.0 协议开源。完整文本见 `LICENSE`，如果使用该项目源码或设计参考请署名并指向该项目仓库。
 
-派生版本说明：本仓库基于 [Aeka0/NAI-Utility-Tool](https://github.com/Aeka0/NAI-Utility-Tool) 的 Release130（1.3.0）修改，修改时间为 2026 年 10 月。继续遵循 GPL-3.0；完整修改后源码可从本仓库对应版本标签获取。
+---
+
+## 派生版本：1.3.0_fork.1
+
+本项目基于 [Aeka0/NAI-Utility-Tool](https://github.com/Aeka0/NAI-Utility-Tool) 的原版 **Release 1.3.0**（Release130）修改。上方保留原项目 README，以下仅说明本 fork 的新增与修复：
+
+- NovelAI V5 Full High/Medium：Medium 固定 14 步、Euler Ancestral、Heavy UC，CFG Scale 可调整；切回 High 恢复用户参数。
+- 支持自定义 NovelAI 网关 URL、生图及账户接口，兼容流式最终结果、图生图、Vibe、超分及文本请求。
+- 保留简洁的 Anlas 单次费用和余额可生成张数预估；V5 单独显示标明 High 参考条件的剩余张数，并提供事件触发与手动额度刷新。
+- 修正配置保存、元数据、模型下载完整性及原有工作区的部分问题。
+
+本 fork **并非原作者发布的官方新版本**。修改时间为 2026 年 10 月，继续遵循 **GPL-3.0**；[完整协议](LICENSE)与[修改后源码](https://github.com/Andy-linux/NAI-Utility-Tool/tree/dev)均可从本仓库获取。第三方数据和可选模型可能有单独的许可条件。
