@@ -257,12 +257,29 @@ public sealed partial class MainWindow
             SaveApiSettings();
             UpdateGenerateButtonWarning();
         };
+        var waitingBox = new NumberBox
+        {
+            Value = _settings.Settings.ApiWaitingTimeoutSeconds,
+            Minimum = 1,
+            Maximum = 300,
+            SmallChange = 1,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+            Width = 160,
+        };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(waitingBox, "ApiWaitingTimeoutSeconds");
+        waitingBox.ValueChanged += (_, _) =>
+        {
+            if (double.IsNaN(waitingBox.Value)) return;
+            _settings.Settings.ApiWaitingTimeoutSeconds = (int)waitingBox.Value;
+            _settings.Save();
+        };
         var page = CreateSettingsHubPage(
             CreateSettingsHubLayer("\uE71B", L("settings.hub.network.base_url"),
                 L("settings.hub.network.base_url_hint"), baseUrlBox),
             CreateSettingsHubLayer("\uE8D7", L("settings.hub.network.api_token"),
                 L("settings.api.tokens_hint"), tokenPanel, expanded: true),
-            CreateSettingsHubLayer("\uE8AB", L("settings.api.mode"), L("settings.api.mode_hint"), modeBox));
+            CreateSettingsHubLayer("\uE8AB", L("settings.api.mode"), L("settings.api.mode_hint"), modeBox),
+            CreateSettingsHubLayer("\uE916", L("settings.api.timeout.waiting"), "", waitingBox));
         ((FrameworkElement)page).Unloaded += (_, _) =>
         {
             testCts?.Cancel();

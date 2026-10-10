@@ -333,7 +333,7 @@ public class AppSettings
     public ApiCallMode ApiCallMode { get; set; } = ApiCallMode.RoundRobin;
     public string ApiBaseUrl { get; set; } = "";
     // Waiting plus execution is the end-to-end budget where no queue-start signal exists.
-    public int ApiWaitingTimeoutSeconds { get; set; } = 120;
+    public int ApiWaitingTimeoutSeconds { get; set; } = 60;
     public int ApiGenerationTimeoutSeconds { get; set; } = 300;
     public int ApiUpscaleTimeoutSeconds { get; set; } = 300;
     public int ApiTextTimeoutSeconds { get; set; } = 120;
@@ -399,7 +399,7 @@ public class AppSettings
             ? Math.Clamp(GalleryThumbnailHeight, MinGalleryThumbnailHeight, MaxGalleryThumbnailHeight)
             : DefaultGalleryThumbnailHeight;
         ApiBaseUrl = NormalizeApiBaseUrl(ApiBaseUrl);
-        ApiWaitingTimeoutSeconds = Math.Clamp(ApiWaitingTimeoutSeconds, 1, 3600);
+        ApiWaitingTimeoutSeconds = Math.Clamp(ApiWaitingTimeoutSeconds, 1, 300);
         ApiGenerationTimeoutSeconds = Math.Clamp(ApiGenerationTimeoutSeconds, 1, 3600);
         ApiUpscaleTimeoutSeconds = Math.Clamp(ApiUpscaleTimeoutSeconds, 1, 3600);
         ApiTextTimeoutSeconds = Math.Clamp(ApiTextTimeoutSeconds, 1, 3600);
