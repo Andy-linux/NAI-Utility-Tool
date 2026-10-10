@@ -7,7 +7,8 @@
 - Issue6/7：`ModelCapabilities` 为UI/请求共用能力表，V5禁用Variety；sigma按官方实际尺寸floor/8与104×152比例开方，V3/V4基础19、V4.5基础58。SMEA、dynamicSMEA、Variety元数据独立解析，不互相推断。
 - Issue11：`NovelAiPromptPresets` 使用公开官方bundle的quality/UC字符串ID、精确标签与全局numeric hint；UI使用模型对应选项，旧UcPreset0/1/2迁移到heavy/light/none。V5标准/轻度质量标签、人物/兽人UC支持保存与导入；未知UCID安全回退。
 - Issue12：新V5 Full High默认23步；其他模型新建默认28；显式保存步数原样保留。
-- Issue13：已知满足资格0Anlas显示Opus免费，未知V5额度不当免费；V5百分比余额单独显示，不伪造每次百分比成本。自定义网关展示首个已核实凭证的明确标注快照，不累加可能共享的上游钱包。
+- Issue13（Release140 修订）：发送按钮不再显示“0 Anlas / Opus 免费”；符合 V5 订阅额度资格时保持短“发送”，可靠付费预测显示“≈ N Anlas”。额度浮窗仅保留 Anlas/V5 余额、进度和功能标签，管理右侧提供刷新图标；共享钱包边界只在文档说明，不累加潜在重复钱包。不伪造 V5 单次百分比公式。
+- 额度在启动、保存实际 API/账号变更、业务返回和手动点击时更新；打开浮窗、工作区导航及单纯时间流逝不请求。业务结果失效标志与原 RefreshLock 保证连续请求等待在飞刷新，身份归属校验保留。
 - Effort：模型框下紧凑High/Medium双选，仅Full及对应infill；Medium有效请求ID与14步/Euler/fixedheavyUC遵循官方证据；steps/sampler/UC/rescale灰化，CFG Scale仍可调。Stored High参数及主/角色负面词不清空，切换及设置保存不覆盖。生成、Enhance、inpaint/img2img结果加入client-only草稿元数据，历史导入可恢复High草稿；外部Medium无草稿时保留当前High草稿。client-only字段不进入上游请求，隐私模式不加入。
 - Enhance500：非64倍数导入图像可选安全1/1.5/2倍率，仅按实际输出pixel cap过滤，保留源宽高比。
 - API设置新增排队、生成、超分、文本、只读查询5类超时NumberBox，1..3600秒；坏URL提交前验证，保留此前有效配置。恢复备份时本地化通知；安全API错误中文/英文文案说明未知扣费和不自动重试。
@@ -29,10 +30,15 @@
 
 主会话真实 paired HTTP mock 最终93 assertions通过（包括WebP解码、当前Medium fixed-heavy有效请求、原生final/error/EOF/截断、旧完整URL/root、凭证隔离）；不等于官方收费请求通过。Release dirty候选已真实启动，初步真实UIA High→Medium→High与切模型证据留在工作区；高级popup位置/截图、最新全矩阵及最终clean-SHA包留下一轮非Fast终验，当前不是正式发布。
 
+### Release140 本轮补充（2026-10-11）
+- 已授权的隔离 WinUI 客户端真实 V5 High/Medium 流式生成成功；29 步付费生成 UI 预估约 30 Anlas，前后余额差 30。手动刷新控件已真实点击。
+- 真实 C# service 的图生图、V4.5 Vibe 编码/使用、官方 Upscale、文本以及非流式 Enhance 成功；这些 service 验证不冒充对应 WinUI 全流程验收。
+- WinUI 流式 Enhance 首次返回无效/不完整最终结果且未自动重试；真实非流式 Enhance 成功后，客户端改为在发送前选择已验证的单结果端点，保留其他生成的流式设置。57 项 Enhance 回归覆盖此选择，不对未知结果重放。
+- 本轮未修改/重启生产服务。完整交付状态与 clean-SHA 包见工作区 integration/FINAL_QUOTA_RELEASE_RESULTS.md。
+
 ### 明确未验证
-- 未进行收费生成/生产部署/生产重启。
 - 未完成六个WinUI人工点击场景、实际用户工作区关闭dialog、backup恢复dialog；编译成功不代表这些人工行为验证完成。
-- V5精确每次percent扣減算法没有可验证依据，显示余额与未知单次用量，绝不固定High30/Medium18全局价格。
+- V5精确每次percent扣減算法没有可验证依据，仅显示余额、不显示单次用量估价，绝不固定High30/Medium18全局价格。
 
 ## NETWORK / 持久化 / 下载一致性
 

@@ -121,6 +121,11 @@ internal static class EnhanceChecks
             }
             else Check(!sent.TryGetProperty("extra_noise_seed", out _), "Plain img2img is unchanged.");
         }
+        settings.Settings.StreamGeneration = true;
+        await service.ImageToImageAsync("AA==", 512, 512, "landscape", "",
+            parametersOverride: parameters, isEnhance: true);
+        Check(!handler.Payload.GetProperty("parameters").TryGetProperty("stream", out _) &&
+            handler.LastPath == "/ai/generate-image", "Enhance selects the verified single-result route before dispatch, without retrying a stream.");
         int count = handler.Count;
         parameters.Steps = 100;
         parameters.DenoiseStrength = 0.99;
@@ -137,6 +142,7 @@ internal static class EnhanceChecks
     {
         public int Count { get; private set; }
         public JsonElement Payload { get; private set; }
+        public string? LastPath { get; private set; }
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             if (request.Method == HttpMethod.Get)
@@ -145,6 +151,7 @@ internal static class EnhanceChecks
                     Content = new StringContent("""{"subscription":{"tier":3,"active":true,"trainingStepsLeft":1000,"usage":{"percent":100,"isNegative":false}}}"""),
                 };
             using var json = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
+            LastPath = request.RequestUri!.AbsolutePath;
             Payload = json.RootElement.Clone();
             Count++;
             return new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent("test response") };
