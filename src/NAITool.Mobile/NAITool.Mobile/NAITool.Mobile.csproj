@@ -1,0 +1,25 @@
+<Project Sdk="Uno.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-android;net10.0-desktop</TargetFrameworks>
+    <!-- On Windows, Android-only restore should not evaluate the desktop Mono runtime pack. -->
+    <TargetFrameworks Condition="'$(MobileOnlyBuild)' == 'true'">net10.0-android</TargetFrameworks>
+    <!-- iOS/iPadOS is built with a Mac + Xcode; do not require the iOS workload to restore on Windows. -->
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('OSX'))">net10.0-android;net10.0-ios;net10.0-desktop</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <UnoSingleProject>true</UnoSingleProject>
+    <ApplicationTitle>NAI Utility Mobile Dev</ApplicationTitle>
+    <ApplicationId>com.andy.naiutility.mobiledev</ApplicationId>
+    <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationPublisher>Andy-linux</ApplicationPublisher>
+    <Description>Experimental portable NovelAI client, derived from NAI Utility Tool (GPL-3.0).</Description>
+    <UnoFeatures>SkiaRenderer;Toolkit;</UnoFeatures>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
+    <!-- Official Uno guidance: .NET 10 Mono win-x64 desktop packs are not published for every servicing release. -->
+    <UseMonoRuntime>false</UseMonoRuntime>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../NAITool.Mobile.Core/NAITool.Mobile.Core.csproj" />
+  </ItemGroup>
+</Project>

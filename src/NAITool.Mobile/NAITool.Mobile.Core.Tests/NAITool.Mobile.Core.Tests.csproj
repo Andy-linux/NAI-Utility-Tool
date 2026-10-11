@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" />
+    <ProjectReference Include="../NAITool.Mobile.Core/NAITool.Mobile.Core.csproj" />
+  </ItemGroup>
+</Project>

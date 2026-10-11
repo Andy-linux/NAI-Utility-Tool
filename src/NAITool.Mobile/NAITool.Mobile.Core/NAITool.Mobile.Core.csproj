@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" />
+    <!-- These are the original dev-branch rules, compiled verbatim in a portable assembly. -->
+    <Compile Include="../../NAITool/Services/NAIParameters.cs" Link="Shared/NAIParameters.cs" />
+    <Compile Include="../../NAITool/Services/SeedValue.cs" Link="Shared/SeedValue.cs" />
+    <Compile Include="../../NAITool/Services/ModelCapabilities.cs" Link="Shared/ModelCapabilities.cs" />
+    <Compile Include="../../NAITool/Services/NovelAiAnlasCalculator.cs" Link="Shared/NovelAiAnlasCalculator.cs" />
+    <Compile Include="../../NAITool/Services/NovelAiPromptPresets.cs" Link="Shared/NovelAiPromptPresets.cs" />
+    <Compile Include="../../NAITool/Services/CharacterPromptRules.cs" Link="Shared/CharacterPromptRules.cs" />
+    <Compile Include="../../NAITool/Services/GenerationSizePresets.cs" Link="Shared/GenerationSizePresets.cs" />
+    <Compile Include="../../NAITool/Services/ApiEndpointResolver.cs" Link="Shared/ApiEndpointResolver.cs" />
+    <Compile Include="../../NAITool/Services/NovelAIImageResponse.cs" Link="Shared/NovelAIImageResponse.cs" />
+    <Compile Include="../../NAITool/Services/NovelAIBoundedLineReader.cs" Link="Shared/NovelAIBoundedLineReader.cs" />
+    <Compile Include="../../NAITool/Services/NovelAIMessagePack.cs" Link="Shared/NovelAIMessagePack.cs" />
+    <Compile Include="../../NAITool/Services/NovelAIStreamFrames.cs" Link="Shared/NovelAIStreamFrames.cs" />
+    <Compile Include="../../NAITool/Services/NovelAIImageStream.cs" Link="Shared/NovelAIImageStream.cs" />
+    <Compile Include="../../NAITool/Models/ViewTransform.cs" Link="Shared/ViewTransform.cs" />
+    <Compile Include="../../NAITool/Commands/UndoManager.cs" Link="Shared/UndoManager.cs" />
+  </ItemGroup>
+</Project>
