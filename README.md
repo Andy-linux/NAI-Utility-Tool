@@ -320,11 +320,18 @@ This project is licensed under GPL-3.0. See `LICENSE` for the full license text.
 
 ## Fork: 1.3.0_fork.1
 
-This is a modified fork of [Aeka0/NAI-Utility-Tool](https://github.com/Aeka0/NAI-Utility-Tool), based on the original **Release 1.3.0** (Release130). The upstream README above is preserved for reference; the following changes are specific to this fork:
+Modified from [Aeka0/NAI-Utility-Tool](https://github.com/Aeka0/NAI-Utility-Tool) **Release 1.3.0**. The upstream README above is preserved.
 
-- NovelAI V5 Full High/Medium: Medium uses 14 steps, Euler Ancestral and fixed Heavy UC, with CFG Scale editable; switching back restores High parameters.
-- Custom NovelAI gateway URLs and native image/account endpoints, including stream final-result handling and image-to-image, Vibe, upscale and text routes.
-- Concise Anlas request-cost and remaining-image estimates, a labeled V5 High reference image count, and account refresh on startup, saved account changes, results and manual action.
-- Targeted fixes for settings persistence, metadata, model-download completeness and existing workspace behavior.
+### Updates
+- V5 High/Medium support, with Medium's fixed sampling parameters and restoration of High settings.
+- Custom gateway API endpoints, including prompt generation; configurable generation wait time (60–300 s).
+- Anlas cost and estimated image counts, V5 quota display and refresh.
+- History-thumbnail blur toggle and a compact, initially collapsed result toolbar.
 
-This fork is **not an official upstream release**. Changes were made in October 2026 and remain licensed under **GPL-3.0**; the [full license](LICENSE) and corresponding modified [source code](https://github.com/Andy-linux/NAI-Utility-Tool/tree/dev) are available here. Optional third-party models and data may have separate licenses.
+### Fixes in [Issue #1](https://github.com/Andy-linux/NAI-Utility-Tool/issues/1)
+- **Account and billing (1, 8, 13):** V5 quota/Anlas fallback, feature-specific API routing, consistent costs and balances.
+- **Responses and timeouts (3, 9, 10):** streaming final/error handling, ZIP result selection, premature request cancellation.
+- **Saving and metadata (2, 4, 7):** unsaved workspace alerts, atomic settings writes, separate SMEA/Variety+ metadata.
+- **Models and parameters (5, 6, 11, 12):** partial-download detection, Variety+ capability, Quality/UC presets, V5 High defaults.
+
+This is not an official upstream release. Modified source and the [GPL-3.0 license](LICENSE) remain available in this repository. Third-party models and data retain their own terms.
