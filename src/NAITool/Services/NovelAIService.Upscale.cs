@@ -8,8 +8,7 @@ namespace NAITool.Services;
 
 public partial class NovelAIService
 {
-    private const string OfficialUpscaleUrl = "https://image.novelai.net/ai/upscale";
-    private static readonly TimeSpan OfficialUpscaleRequestTimeout = TimeSpan.FromSeconds(120);
+    private TimeSpan OfficialUpscaleRequestTimeout => NovelAIRequestPolicy.Budget(_settings.Settings.ApiWaitingTimeoutSeconds, _settings.Settings.ApiUpscaleTimeoutSeconds);
 
     public async Task<(byte[]? ImageBytes, string? Error)> UpscaleImageAsync(
         byte[] imageBytes, CancellationToken ct = default)
@@ -30,20 +29,20 @@ public partial class NovelAIService
             payload["model"] = NovelAiUpscaleRules.Model;
             payload["declared_blur_sigma"] = 0;
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, OfficialUpscaleUrl)
+            using var request = new HttpRequestMessage(HttpMethod.Post, GetApiEndpoints().UpscaleUrl)
             {
                 Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json"),
             };
-            // Explicitly target the official service, independently of a custom generation URL.
+            // Use the same credential boundary as generation and account queries.
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/zip"));
-            var account = await SelectAccountAsync(
-                new ApiRequestCost(false, NovelAiUpscaleRules.EstimateAnlas(prepared.Width, prepared.Height)!.Value), ct);
             using var timeout = CreateRequestTimeoutTokenSource(OfficialUpscaleRequestTimeout, ct);
+            var account = await SelectAccountAsync(
+                new ApiRequestCost(false, NovelAiUpscaleRules.EstimateAnlas(prepared.Width, prepared.Height)!.Value), timeout.Token);
             using var response = await SendAccountRequestAsync(request, account,
-                System.Net.Http.HttpCompletionOption.ResponseContentRead, timeout.Token);
+                System.Net.Http.HttpCompletionOption.ResponseHeadersRead, timeout.Token);
             if (!response.IsSuccessStatusCode)
             {
-                string error = await response.Content.ReadAsStringAsync(timeout.Token);
+                string error = SafeStatus((int)response.StatusCode);
                 WriteRequestLog("NovelAI upscale", payload, stopwatch.ElapsedMilliseconds, response, error);
                 return (null, Lf("api.error.status", (int)response.StatusCode, error));
             }
@@ -62,12 +61,12 @@ public partial class NovelAIService
         catch (OperationCanceledException ex)
         {
             WriteRequestLog("NovelAI upscale", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            return (null, ct.IsCancellationRequested ? L("api.error.request_cancelled") : L("upscale.official.timeout"));
+            return (null, SafeException(ex));
         }
         catch (Exception ex)
         {
             WriteRequestLog("NovelAI upscale", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            return (null, Lf("api.error.request_failed", ex.Message));
+            return (null, Lf("api.error.request_failed", SafeException(ex)));
         }
     }
 

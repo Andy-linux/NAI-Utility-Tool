@@ -36,8 +36,12 @@ namespace NAITool;
 
 public sealed partial class MainWindow
 {
+    private bool _populatingModelList;
     private void PopulateModelList()
     {
+        _populatingModelList = true;
+        try
+        {
         CboModel.Items.Clear();
         var models = _currentMode == AppMode.ImageGeneration || _i2iEditMode == I2IEditMode.Denoise
             ? GenerationModels
@@ -47,6 +51,9 @@ public sealed partial class MainWindow
         CboModel.SelectedIndex = Array.IndexOf(models, CurrentParams.Model);
         if (CboModel.SelectedIndex < 0) CboModel.SelectedIndex = 0;
         ApplyMenuTypography(CboModel);
+        }
+        finally { _populatingModelList = false; }
+        UpdateModelDependentUI();
     }
 
     // ═══════════════════════════════════════════════════════════

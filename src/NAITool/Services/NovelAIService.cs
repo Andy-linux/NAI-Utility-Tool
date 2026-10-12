@@ -33,15 +33,9 @@ public class CharacterPromptInfo
 /// </summary>
 public partial class NovelAIService : IDisposable
 {
-    private const string OfficialGenerateUrl = "https://image.novelai.net/ai/generate-image";
-    private const string OfficialGenerateStreamUrl = "https://image.novelai.net/ai/generate-image-stream";
-    private const string OfficialEncodeVibeUrl = "https://image.novelai.net/ai/encode-vibe";
-    private const string OfficialUserInfoUrl = "https://image.novelai.net/user/information";
-    private const string OfficialUserDataUrl = "https://image.novelai.net/user/data";
-    private const string OfficialTextChatCompletionUrl = "https://text.novelai.net/oa/v1/chat/completions";
-    private static readonly TimeSpan DefaultHttpClientTimeout = TimeSpan.FromSeconds(300);
-    private static readonly TimeSpan AccountInfoRequestTimeout = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan ImageGenerationRequestTimeout = TimeSpan.FromSeconds(30);
+    private TimeSpan AccountInfoRequestTimeout => NovelAIRequestPolicy.Budget(0, _settings.Settings.ApiReadOnlyTimeoutSeconds, readOnly: true);
+    private TimeSpan ImageGenerationRequestTimeout => NovelAIRequestPolicy.Budget(_settings.Settings.ApiWaitingTimeoutSeconds, _settings.Settings.ApiGenerationTimeoutSeconds);
+    private TimeSpan TextRequestTimeout => NovelAIRequestPolicy.Budget(_settings.Settings.ApiWaitingTimeoutSeconds, _settings.Settings.ApiTextTimeoutSeconds);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -65,6 +59,13 @@ public partial class NovelAIService : IDisposable
 
     private static string L(string key) => LocalizationService.Instance.GetString(key);
     private static string Lf(string key, params object?[] args) => LocalizationService.Instance.Format(key, args);
+    private static string LocalizedSafeMessage(string key, string fallback)
+    {
+        string translated = L(key);
+        return string.IsNullOrWhiteSpace(translated) || translated == key ? fallback : translated;
+    }
+    private static string SafeStatus(int status) => LocalizedSafeMessage(NovelAIRequestPolicy.StatusKey(status), NovelAIRequestPolicy.Status(status));
+    private static string SafeException(Exception error) => LocalizedSafeMessage(NovelAIRequestPolicy.ExceptionKey(error), NovelAIRequestPolicy.Exception(error));
 
     private bool UsesCustomApiBaseUrl => _settings.Settings.UsesCustomApiBaseUrl;
 
@@ -80,28 +81,7 @@ public partial class NovelAIService : IDisposable
         IsAccountInfoAvailable = false,
     };
 
-    private NovelAiApiEndpoints GetApiEndpoints()
-    {
-        string baseUrl = AppSettings.NormalizeApiBaseUrl(_settings.Settings.ApiBaseUrl);
-        if (string.IsNullOrWhiteSpace(baseUrl))
-        {
-            return new NovelAiApiEndpoints(
-                OfficialGenerateUrl,
-                OfficialGenerateStreamUrl,
-                OfficialEncodeVibeUrl,
-                OfficialUserInfoUrl,
-                OfficialUserDataUrl,
-                OfficialTextChatCompletionUrl);
-        }
-
-        return new NovelAiApiEndpoints(
-            baseUrl,
-            baseUrl,
-            baseUrl,
-            OfficialUserInfoUrl,
-            OfficialUserDataUrl,
-            OfficialTextChatCompletionUrl);
-    }
+    private ApiEndpointResolver GetApiEndpoints() => new(_settings.Settings.ApiBaseUrl);
 
     private HttpClient GetOrCreateClient()
     {
@@ -116,14 +96,14 @@ public partial class NovelAIService : IDisposable
                 if (_httpClient != null)
                     _retiredHttpClients.Add(_httpClient);
 
-                var handler = new HttpClientHandler();
+                var handler = new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false };
                 if (!string.IsNullOrEmpty(proxyKey))
                 {
                     handler.Proxy = new WebProxy($"http://127.0.0.1:{proxyKey}");
                     handler.UseProxy = true;
                 }
 
-                _httpClient = new HttpClient(handler) { Timeout = DefaultHttpClientTimeout };
+                _httpClient = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
                 _httpClientProxyKey = proxyKey;
             }
 
@@ -134,15 +114,14 @@ public partial class NovelAIService : IDisposable
     public async Task<(bool Success, string Message)> TestConnectionAsync(
         string token, CancellationToken ct = default)
     {
-        if (UsesCustomApiBaseUrl)
-            return (false, L("settings.network.custom_endpoint_token_unverified"));
-
         try
         {
             var client = GetOrCreateClient();
             using var timeout = CreateRequestTimeoutTokenSource(AccountInfoRequestTimeout, ct);
-            using var request = CreateAuthorizedRequest(HttpMethod.Get, OfficialUserInfoUrl, token);
-            using var response = await client.SendAsync(request, timeout.Token);
+            string endpointIdentity = GetApiEndpoints().Identity;
+            using var request = CreateAuthorizedRequest(HttpMethod.Get, GetApiEndpoints().UserInfoUrl, token);
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            if (endpointIdentity != GetApiEndpoints().Identity) return (false, L("settings.api.configuration_changed"));
             if (response.StatusCode is HttpStatusCode.OK or HttpStatusCode.Unauthorized)
                 foreach (var account in _settings.Accounts.Where(a => a.Token == token))
                 {
@@ -153,16 +132,16 @@ public partial class NovelAIService : IDisposable
             {
                 HttpStatusCode.OK => (true, L("settings.network.test.success")),
                 HttpStatusCode.Unauthorized => (false, L("settings.network.test.unauthorized")),
-                _ => (false, Lf("settings.network.test.api_error", (int)response.StatusCode, await response.Content.ReadAsStringAsync(ct)))
+                _ => (false, Lf("settings.network.test.api_error", (int)response.StatusCode, SafeStatus((int)response.StatusCode)))
             };
         }
-        catch (HttpRequestException ex) when (ex.Message.Contains("proxy", StringComparison.OrdinalIgnoreCase))
+        catch (HttpRequestException ex) when (SafeException(ex).Contains("proxy", StringComparison.OrdinalIgnoreCase))
         {
-            return (false, Lf("settings.network.test.proxy_error", ex.Message));
+            return (false, Lf("settings.network.test.proxy_error", SafeException(ex)));
         }
         catch (Exception ex)
         {
-            return (false, Lf("settings.network.test.connection_failed", ex.Message));
+            return (false, Lf("settings.network.test.connection_failed", SafeException(ex)));
         }
     }
 
@@ -205,7 +184,8 @@ public partial class NovelAIService : IDisposable
             return element.ValueKind switch
             {
                 JsonValueKind.Number when element.TryGetInt32(out int intValue) => intValue,
-                JsonValueKind.Number when element.TryGetDouble(out double doubleValue) => (int)Math.Round(doubleValue),
+                JsonValueKind.Number when element.TryGetDouble(out double doubleValue) &&
+                    double.IsFinite(doubleValue) && doubleValue >= int.MinValue && doubleValue <= int.MaxValue => (int)Math.Round(doubleValue),
                 JsonValueKind.String when int.TryParse(element.GetString(), out int stringValue) => stringValue,
                 _ => null,
             };
@@ -228,16 +208,15 @@ public partial class NovelAIService : IDisposable
         if (string.IsNullOrWhiteSpace(token))
             return null;
 
-        if (UsesCustomApiBaseUrl)
-            return UnavailableAccountInfo();
-
         try
         {
             using var requestTimeoutCts = CreateRequestTimeoutTokenSource(AccountInfoRequestTimeout, ct);
             var requestCt = requestTimeoutCts.Token;
             var client = GetOrCreateClient();
-            using var request = CreateAuthorizedRequest(HttpMethod.Get, OfficialUserDataUrl, token);
-            using var response = await client.SendAsync(request, requestCt);
+            string endpointIdentity = GetApiEndpoints().Identity;
+            using var request = CreateAuthorizedRequest(HttpMethod.Get, GetApiEndpoints().UserDataUrl, token);
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, requestCt);
+            if (endpointIdentity != GetApiEndpoints().Identity) return UnavailableAccountInfo();
             if (!response.IsSuccessStatusCode)
             {
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
@@ -252,8 +231,10 @@ public partial class NovelAIService : IDisposable
                     : null;
             }
 
-            string json = await response.Content.ReadAsStringAsync(requestCt);
-            Debug.WriteLine($"[NAI] /user/data response: {json[..Math.Min(json.Length, 2000)]}");
+            using var accountStream = await response.Content.ReadAsStreamAsync(requestCt);
+            string json = Encoding.UTF8.GetString(await NovelAIImageResponse.ReadBoundedAsync(accountStream, requestCt, 64 * 1024));
+            if (endpointIdentity != GetApiEndpoints().Identity) return UnavailableAccountInfo();
+            // Omit account response bodies from logs.
 
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
@@ -270,17 +251,17 @@ public partial class NovelAIService : IDisposable
             if (TryGetPropertyIgnoreCase(sub, "tier", out var tierEl))
                 tier = ReadNullableInt(tierEl);
 
-            Debug.WriteLine($"[NAI] subscription.tier = {tier}");
+
 
             bool isOpus = tier.HasValue && tier.Value >= 3;
             bool hasActiveField = TryGetPropertyIgnoreCase(sub, "active", out var activeEl);
-            bool active = !hasActiveField || activeEl.ValueKind switch
+            bool active = hasActiveField && (activeEl.ValueKind switch
             {
                 JsonValueKind.True => true,
                 JsonValueKind.False => false,
                 JsonValueKind.String => bool.TryParse(activeEl.GetString(), out bool value) && value,
                 _ => false,
-            };
+            });
             string tierName = tier switch
             {
                 0 => "Paper",
@@ -299,17 +280,18 @@ public partial class NovelAIService : IDisposable
                 if (stepsEl.ValueKind == JsonValueKind.Number)
                 {
                     anlas = ReadNullableInt(stepsEl);
-                    Debug.WriteLine($"[NAI] trainingStepsLeft (number) = {anlas}");
+
                 }
                 else if (stepsEl.ValueKind == JsonValueKind.Object)
                 {
-                    int fixedSteps = 0, purchasedSteps = 0;
+                    int? fixedSteps = null, purchasedSteps = null;
                     if (TryGetPropertyIgnoreCase(stepsEl, "fixedTrainingStepsLeft", out var fixedEl))
-                        fixedSteps = ReadNullableInt(fixedEl) ?? 0;
+                        fixedSteps = ReadNullableInt(fixedEl);
                     if (TryGetPropertyIgnoreCase(stepsEl, "purchasedTrainingSteps", out var purchasedEl))
-                        purchasedSteps = ReadNullableInt(purchasedEl) ?? 0;
-                    anlas = fixedSteps + purchasedSteps;
-                    Debug.WriteLine($"[NAI] trainingStepsLeft (object): fixed={fixedSteps}, purchased={purchasedSteps}, total={anlas}");
+                        purchasedSteps = ReadNullableInt(purchasedEl);
+                    anlas = fixedSteps.HasValue && purchasedSteps.HasValue
+                        ? (int)Math.Clamp((long)fixedSteps.Value + purchasedSteps.Value, 0, int.MaxValue) : null;
+
                 }
                 else
                 {
@@ -322,7 +304,7 @@ public partial class NovelAIService : IDisposable
             }
 
             // NovelAI Diffusion V5 uses a separate, continuously refilling Opus allowance.
-            // The official client treats an unavailable/negative allowance as 0%.
+            // Unknown allowance remains unknown; percent alone does not establish exhaustion.
             int? v5UsagePercent = null;
             bool? v5UsageIsNegative = null;
             int? v5UsageTimeUntilNextPercentSeconds = null;
@@ -340,7 +322,7 @@ public partial class NovelAIService : IDisposable
                     negativeEl.ValueKind is JsonValueKind.True or JsonValueKind.False)
                 {
                     v5UsageIsNegative = negativeEl.GetBoolean();
-                    if (v5UsageIsNegative == true) v5UsagePercent = 0;
+                    // Preserve percent independently of the exhaustion flag.
                 }
 
                 if (TryGetPropertyIgnoreCase(usageEl, "timeUntilNextPercent", out var nextPercentTimeEl))
@@ -352,7 +334,7 @@ public partial class NovelAIService : IDisposable
             }
 
             string? expiresAt = null;
-            bool expired = false;
+            bool expired = true; // Missing expiry does not establish an active, free-eligible subscription.
             if (TryGetPropertyIgnoreCase(sub, "expiresAt", out var expiresEl) && expiresEl.ValueKind == JsonValueKind.Number)
             {
                 long ts = expiresEl.GetInt64();
@@ -366,7 +348,7 @@ public partial class NovelAIService : IDisposable
 
             bool hasActiveSubscription = tier.HasValue && tier.Value > 0 && active && !expired;
 
-            Debug.WriteLine($"[NAI] Parsed account info: tier={tier}, tierName={tierName}, active={active}, expired={expired}, isOpus={isOpus}, anlas={anlas}, v5Usage={v5UsagePercent}, v5NextPercentSeconds={v5UsageTimeUntilNextPercentSeconds}, expires={expiresAt}");
+
 
             return new NovelAiAccountInfo
             {
@@ -384,7 +366,7 @@ public partial class NovelAIService : IDisposable
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[NAI] GetAccountInfoAsync exception: {ex}");
+            Debug.WriteLine($"[NAI] Account query failed: {ex.GetType().Name}");
             return UsesCustomApiBaseUrl ? UnavailableAccountInfo() : null;
         }
     }
@@ -398,8 +380,10 @@ public partial class NovelAIService : IDisposable
 
     internal static bool IsV5Model(string model) => NovelAiAnlasCalculator.IsV5Model(model);
 
-    private static bool SupportsVibeTransferModel(string model) =>
-        !IsV5Model(model);
+    private static bool SupportsVibeTransferModel(string model) => ModelCapabilities.BaseModel(model) is
+        "nai-diffusion-3" or "nai-diffusion-furry-3" or "nai-diffusion-4-full" or
+        "nai-diffusion-4-curated" or "nai-diffusion-4-curated-preview" or
+        "nai-diffusion-4-5-full" or "nai-diffusion-4-5-curated";
 
     private static bool SupportsPreciseReferenceModel(string model) =>
         IsV45Model(model);
@@ -457,6 +441,31 @@ public partial class NovelAIService : IDisposable
         }
 
         return string.Join(", ", merged);
+    }
+
+    private static string ApplyQualityTags(string prompt, NAIParameters parameters)
+    {
+        if (!parameters.QualityToggle || parameters.QualityPresetId == "none") return prompt;
+        return MergePromptSegments(prompt, NovelAiPromptPresets.QualityTags(parameters.Model, parameters.QualityPresetId ?? "standard"));
+    }
+
+    private static void ApplyVerifiedModelParameters(Dictionary<string, object?> parameters, NAIParameters p, int width, int height)
+    {
+        parameters["image_format"] = "webp";
+        parameters["tag_hint_qt"] = NovelAiPromptPresets.HintId(p.QualityToggle ? p.QualityPresetId ?? "standard" : "none");
+        parameters["tag_hint_uc_preset"] = NovelAiPromptPresets.HintId(NovelAiPromptPresets.ResolveUcId(p));
+        parameters.Remove("ucPreset"); parameters.Remove("uc_preset");
+        parameters.Remove("qualityToggle"); parameters.Remove("quality_toggle");
+        parameters.Remove("uc");
+        var sigma = ModelCapabilities.GetSkipCfgAboveSigma(p.Model, width, height, p.Variety);
+        if (sigma.HasValue) parameters["skip_cfg_above_sigma"] = sigma.Value;
+        else parameters.Remove("skip_cfg_above_sigma");
+        if (ModelCapabilities.IsMedium(p)) parameters.Remove("cfg_rescale");
+        if (IsV5Model(p.Model))
+        {
+            parameters.Remove("sm"); parameters.Remove("sm_dyn");
+            parameters["noise_schedule"] = "karras";
+        }
     }
 
     private static string ApplyQualityTags(string prompt, string model, bool enabled)
@@ -638,7 +647,6 @@ public partial class NovelAIService : IDisposable
             Directory.CreateDirectory(dir);
             string path = Path.Combine(dir, $"api_{DateTime.Now:yyyy-MM-dd}.txt");
 
-            var sanitizedPayload = SanitizeLogValue(payload);
             var builder = new StringBuilder();
             builder.AppendLine(new string('=', 72));
             builder.AppendLine($"Time: {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}");
@@ -647,7 +655,7 @@ public partial class NovelAIService : IDisposable
 
             if (response != null)
             {
-                builder.AppendLine($"Response status: {(int)response.StatusCode} {response.ReasonPhrase}");
+                builder.AppendLine($"Response status: {(int)response.StatusCode}");
                 builder.AppendLine($"Response type: {response.Content.Headers.ContentType}");
                 if (response.Content.Headers.ContentLength.HasValue)
                     builder.AppendLine($"Response length: {response.Content.Headers.ContentLength.Value} bytes");
@@ -655,27 +663,22 @@ public partial class NovelAIService : IDisposable
 
             if (exception != null)
             {
-                builder.AppendLine($"Exception: {exception.Message}");
+                builder.AppendLine($"Exception: {SafeException(exception)}");
             }
 
             builder.AppendLine("Request payload:");
-            builder.AppendLine(JsonSerializer.Serialize(sanitizedPayload, LogJsonOptions));
+            builder.AppendLine("<request payload withheld>");
 
             if (!string.IsNullOrWhiteSpace(responseText))
             {
                 builder.AppendLine("Response body:");
-                builder.AppendLine(responseText);
+                builder.AppendLine("<response body withheld>");
             }
 
             if (imageBytes != null)
             {
                 builder.AppendLine($"Response image: {imageBytes.Length} bytes");
-                var meta = ImageMetadataService.ReadFromBytes(imageBytes);
-                if (meta != null && !string.IsNullOrWhiteSpace(meta.RawJson))
-                {
-                    builder.AppendLine("Response image metadata:");
-                    builder.AppendLine(ImageMetadataService.PrettyPrintJson(meta.RawJson));
-                }
+                // Omit image metadata from logs.
             }
 
             builder.AppendLine();
@@ -697,51 +700,24 @@ public partial class NovelAIService : IDisposable
         return isPng || isWebp;
     }
 
-    private static void TryWriteErrorBytes(byte[] bytes)
+    private static bool IsDecodableImage(byte[] bytes)
     {
         try
         {
-            var logDir = Path.Combine(AppPathResolver.AppRootDir, "logs");
-            Directory.CreateDirectory(logDir);
-            File.WriteAllBytes(Path.Combine(logDir, "error_bytes.bin"), bytes);
+            using var codec = SKCodec.Create(new MemoryStream(bytes));
+            if (codec == null || codec.Info.Width <= 0 || codec.Info.Height <= 0 ||
+                (long)codec.Info.Width * codec.Info.Height > 16_777_216) return false;
+            using var bitmap = SKBitmap.Decode(bytes);
+            return bitmap != null && bitmap.Width > 0 && bitmap.Height > 0;
         }
-        catch
-        {
-        }
+        catch { return false; }
     }
 
     private static async Task<byte[]?> ReadGeneratedImageBytesAsync(HttpContent content, CancellationToken ct, bool findImageEntry = false)
     {
-        var responseBytes = await content.ReadAsByteArrayAsync(ct);
-        if (IsPngOrWebp(responseBytes))
-            return responseBytes;
-
-        try
-        {
-            using var zipStream = new MemoryStream(responseBytes);
-            using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
-
-            if (archive.Entries.Count == 0)
-            {
-                TryWriteErrorBytes(responseBytes);
-                return null;
-            }
-
-            var entry = findImageEntry
-                ? archive.Entries.FirstOrDefault(e => e.Name.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
-                    e.Name.EndsWith(".webp", StringComparison.OrdinalIgnoreCase))
-                : archive.Entries[0];
-            if (entry == null) return null;
-            using var entryStream = entry.Open();
-            using var imageStream = new MemoryStream();
-            await entryStream.CopyToAsync(imageStream, ct);
-            return imageStream.ToArray();
-        }
-        catch
-        {
-            TryWriteErrorBytes(responseBytes);
-            throw;
-        }
+        using var stream = await content.ReadAsStreamAsync(ct);
+        return await NovelAIImageResponse.ReadSingleAsync(await NovelAIImageResponse.ReadBoundedAsync(stream, ct), IsDecodableImage, ct,
+            findImageEntry ? name => name.StartsWith("image", StringComparison.Ordinal) && name.EndsWith(".png", StringComparison.Ordinal) : null);
     }
 
     private async Task<byte[]?> ReadGeneratedImageStreamAsync(
@@ -749,41 +725,9 @@ public partial class NovelAIService : IDisposable
         IProgress<byte[]>? progress,
         CancellationToken ct)
     {
-        byte[]? latestImageBytes = null;
         using var stream = await content.ReadAsStreamAsync(ct);
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-
-        string? line;
-        while ((line = await reader.ReadLineAsync(ct)) != null)
-        {
-            if (!line.StartsWith("data:", StringComparison.Ordinal))
-                continue;
-
-            var data = line.AsSpan(5).Trim().ToString();
-            if (data.Length == 0 || data == "[DONE]")
-                continue;
-
-            try
-            {
-                using var doc = JsonDocument.Parse(data);
-                var root = doc.RootElement;
-                if (!TryGetPropertyIgnoreCase(root, "image", out var imageEl) ||
-                    imageEl.ValueKind != JsonValueKind.String)
-                    continue;
-
-                var imageBase64 = imageEl.GetString();
-                if (string.IsNullOrWhiteSpace(imageBase64))
-                    continue;
-
-                latestImageBytes = Convert.FromBase64String(imageBase64);
-                progress?.Report(latestImageBytes);
-            }
-            catch
-            {
-            }
-        }
-
-        return latestImageBytes;
+        return await NovelAIImageStream.ReadAsync(stream, content.Headers.ContentType?.MediaType,
+            IsDecodableImage, progress, ct);
     }
 
     public async Task<(byte[]? ImageBytes, string? Error)> InpaintAsync(
@@ -800,7 +744,7 @@ public partial class NovelAIService : IDisposable
             return (null, L("api.error.token_missing_network"));
 
         bool streamGeneration = _settings.Settings.StreamGeneration;
-        var naiParams = _settings.Settings.InpaintParameters;
+        var naiParams = ModelCapabilities.CreateRequestSnapshot(_settings.Settings.InpaintParameters);
         if (!_settings.Settings.UsesCustomApiBaseUrl &&
             NovelAiAnlasCalculator.PaidBaseCost(naiParams.Model, width, height, naiParams.Steps,
                 sm: false, strength: IsV4PlusModel(naiParams.Model) ? naiParams.InpaintStrength : 1) > NovelAiAnlasCalculator.MaxBaseCost)
@@ -809,8 +753,8 @@ public partial class NovelAIService : IDisposable
         object seed = SeedValue.ToRequestValue(SeedValue.Resolve(naiParams.Seed));
         bool isV4Plus = IsV4PlusModel(naiParams.Model);
         bool isV45 = IsV45Model(naiParams.Model);
-        string effectivePrompt = ApplyQualityTags(prompt, naiParams.Model, naiParams.QualityToggle);
-        string effectiveNegativePrompt = ApplyUcPreset(negativePrompt, naiParams.Model, naiParams.UcPreset);
+        string effectivePrompt = ApplyQualityTags(prompt, naiParams);
+        string effectiveNegativePrompt = NovelAiPromptPresets.ResolveUc(naiParams.Model, NovelAiPromptPresets.ResolveUcId(naiParams), prompt, ModelCapabilities.IsMedium(naiParams) ? "" : negativePrompt);
 
         var parameters = new Dictionary<string, object?>
         {
@@ -829,7 +773,7 @@ public partial class NovelAIService : IDisposable
             ["negative_prompt"] = effectiveNegativePrompt,
             ["ucPreset"] = naiParams.UcPreset,
             ["uc_preset"] = naiParams.UcPreset,
-            ["add_original_image"] = true,
+            ["add_original_image"] = false,
             ["cfg_rescale"] = naiParams.CfgRescale,
             ["legacy"] = false,
             ["legacy_v3_extend"] = false,
@@ -844,11 +788,10 @@ public partial class NovelAIService : IDisposable
         {
             parameters["tag_hint_transparent_background"] = naiParams.TagHintTransparentBackground;
             parameters["straight_alpha"] = naiParams.StraightAlpha;
-            parameters["image_format"] = "png";
         }
 
-        if (naiParams.Variety) parameters["variety"] = true;
-        if (streamGeneration) parameters["stream"] = "sse";
+        ApplyVerifiedModelParameters(parameters, naiParams, width, height);
+        if (streamGeneration) parameters["stream"] = "msgpack";
 
         if (naiParams.Sampler == "k_euler_ancestral" && naiParams.Schedule != "native")
         {
@@ -874,7 +817,7 @@ public partial class NovelAIService : IDisposable
                     });
                     negCharCaptions.Add(new Dictionary<string, object>
                     {
-                        ["char_caption"] = ch.NegativePrompt,
+                        ["char_caption"] = ModelCapabilities.IsMedium(naiParams) ? "" : ch.NegativePrompt,
                         ["centers"] = new[] { center },
                     });
                     if (ch.UseCustomPosition)
@@ -936,22 +879,23 @@ public partial class NovelAIService : IDisposable
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             var endpoints = GetApiEndpoints();
             var url = streamGeneration ? endpoints.GenerateStreamUrl : endpoints.GenerateUrl;
-            var account = await SelectAccountAsync(ApiRequestCost.Image(naiParams.Model, width, height, naiParams.Steps,
-                    strength: IsV4PlusModel(naiParams.Model) ? naiParams.InpaintStrength : 1,
-                    referenceAnlas: GenerationReferenceAnlas(naiParams.Model, vibeTransfers, preciseReferences)), ct);
             using var requestTimeoutCts = CreateRequestTimeoutTokenSource(ImageGenerationRequestTimeout, ct);
             var requestCt = requestTimeoutCts.Token;
+            var account = await SelectAccountAsync(ApiRequestCost.Image(naiParams.Model, width, height, naiParams.Steps,
+                    strength: IsV4PlusModel(naiParams.Model) ? naiParams.InpaintStrength : 1,
+                    referenceAnlas: GenerationReferenceAnlas(naiParams.Model, vibeTransfers, preciseReferences),
+                    characterReference: SupportsPreciseReferenceModel(naiParams.Model) && preciseReferences is { Count: > 0 }, smDyn: false), requestCt);
             using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
             if (streamGeneration)
-                request.Headers.Accept.ParseAdd("text/event-stream");
+                request.Headers.Accept.ParseAdd("application/octet-stream");
             using var response = await SendAccountRequestAsync(request,
                 account,
-                streamGeneration ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead,
+                HttpCompletionOption.ResponseHeadersRead,
                 requestCt);
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorText = await response.Content.ReadAsStringAsync(requestCt);
+                var errorText = SafeStatus((int)response.StatusCode);
                 stopwatch.Stop();
                 WriteRequestLog("Inpaint generation", payload, stopwatch.ElapsedMilliseconds, response, errorText);
                 return (null, Lf("api.error.status", (int)response.StatusCode, errorText));
@@ -976,14 +920,14 @@ public partial class NovelAIService : IDisposable
         {
             stopwatch.Stop();
             WriteRequestLog("Inpaint generation", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            return (null, L("api.error.request_cancelled"));
+            return (null, SafeException(ex));
         }
         catch (HttpRequestException ex)
         {
             stopwatch.Stop();
             WriteRequestLog("Inpaint generation", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            var msg = Lf("api.error.network_failed", ex.Message);
-            if (ex.Message.Contains("proxy", StringComparison.OrdinalIgnoreCase))
+            var msg = Lf("api.error.network_failed", SafeException(ex));
+            if (SafeException(ex).Contains("proxy", StringComparison.OrdinalIgnoreCase))
                 msg += L("api.error.proxy_hint");
             return (null, msg);
         }
@@ -991,7 +935,7 @@ public partial class NovelAIService : IDisposable
         {
             stopwatch.Stop();
             WriteRequestLog("Inpaint generation", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            return (null, Lf("api.error.request_failed", ex.Message));
+            return (null, Lf("api.error.request_failed", SafeException(ex)));
         }
     }
 
@@ -1041,7 +985,7 @@ public partial class NovelAIService : IDisposable
             return (null, L("api.error.token_missing_network"));
 
         bool streamGeneration = _settings.Settings.StreamGeneration;
-        var naiParams = parametersOverride ?? _settings.Settings.I2IDenoiseParameters;
+        var naiParams = ModelCapabilities.CreateRequestSnapshot(parametersOverride ?? _settings.Settings.I2IDenoiseParameters);
         if ((isEnhance && (width <= 0 || height <= 0 || (long)width * height > EnhanceRules.MaxPixels)) ||
             (upscaledEnhance && (!isEnhance || !EnhanceRules.CanUseMax(naiParams.Model, width, height))))
             return (null, L("enhance.size_limit"));
@@ -1058,10 +1002,10 @@ public partial class NovelAIService : IDisposable
         object seed = SeedValue.ToRequestValue(resolvedSeed);
         bool isV4Plus = IsV4PlusModel(naiParams.Model);
         bool isV45 = IsV45Model(naiParams.Model);
-        string effectivePrompt = ApplyQualityTags(prompt, naiParams.Model, naiParams.QualityToggle);
+        string effectivePrompt = ApplyQualityTags(prompt, naiParams);
         if (isEnhance && !upscaledEnhance && (isV45 || IsV5Model(naiParams.Model)))
             effectivePrompt = AddEnhancePromptHint(effectivePrompt);
-        string effectiveNegativePrompt = ApplyUcPreset(negativePrompt, naiParams.Model, naiParams.UcPreset);
+        string effectiveNegativePrompt = NovelAiPromptPresets.ResolveUc(naiParams.Model, NovelAiPromptPresets.ResolveUcId(naiParams), prompt, ModelCapabilities.IsMedium(naiParams) ? "" : negativePrompt);
 
         var parameters = new Dictionary<string, object?>
         {
@@ -1092,7 +1036,7 @@ public partial class NovelAIService : IDisposable
         if (isEnhance)
         {
             parameters["params_version"] = 4;
-            parameters["add_original_image"] = true;
+            parameters["add_original_image"] = false;
             parameters["color_correct"] = false;
             parameters["sm"] = false;
             parameters["sm_dyn"] = false;
@@ -1106,11 +1050,10 @@ public partial class NovelAIService : IDisposable
         {
             parameters["tag_hint_transparent_background"] = naiParams.TagHintTransparentBackground;
             parameters["straight_alpha"] = naiParams.StraightAlpha;
-            parameters["image_format"] = "png";
         }
 
-        if (naiParams.Variety) parameters["variety"] = true;
-        if (streamGeneration) parameters["stream"] = "sse";
+        ApplyVerifiedModelParameters(parameters, naiParams, width, height);
+        if (streamGeneration) parameters["stream"] = "msgpack";
 
         if (naiParams.Sampler == "k_euler_ancestral" && naiParams.Schedule != "native")
         {
@@ -1136,7 +1079,7 @@ public partial class NovelAIService : IDisposable
                     });
                     negCharCaptions.Add(new Dictionary<string, object>
                     {
-                        ["char_caption"] = ch.NegativePrompt,
+                        ["char_caption"] = ModelCapabilities.IsMedium(naiParams) ? "" : ch.NegativePrompt,
                         ["centers"] = new[] { center },
                     });
                     if (ch.UseCustomPosition)
@@ -1198,22 +1141,23 @@ public partial class NovelAIService : IDisposable
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             var endpoints = GetApiEndpoints();
             var url = streamGeneration ? endpoints.GenerateStreamUrl : endpoints.GenerateUrl;
-            var account = await SelectAccountAsync(ApiRequestCost.Image(naiParams.Model, pricedSize.Width, pricedSize.Height, naiParams.Steps,
-                    strength: naiParams.DenoiseStrength,
-                    referenceAnlas: GenerationReferenceAnlas(naiParams.Model, vibeTransfers, preciseReferences)), ct);
             using var requestTimeoutCts = CreateRequestTimeoutTokenSource(ImageGenerationRequestTimeout, ct);
             var requestCt = requestTimeoutCts.Token;
+            var account = await SelectAccountAsync(ApiRequestCost.Image(naiParams.Model, pricedSize.Width, pricedSize.Height, naiParams.Steps,
+                    strength: naiParams.DenoiseStrength,
+                    referenceAnlas: GenerationReferenceAnlas(naiParams.Model, vibeTransfers, preciseReferences),
+                    characterReference: SupportsPreciseReferenceModel(naiParams.Model) && preciseReferences is { Count: > 0 }, smDyn: false), requestCt);
             using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
             if (streamGeneration)
-                request.Headers.Accept.ParseAdd("text/event-stream");
+                request.Headers.Accept.ParseAdd("application/octet-stream");
             using var response = await SendAccountRequestAsync(request,
                 account,
-                streamGeneration ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead,
+                HttpCompletionOption.ResponseHeadersRead,
                 requestCt);
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorText = await response.Content.ReadAsStringAsync(requestCt);
+                var errorText = SafeStatus((int)response.StatusCode);
                 stopwatch.Stop();
                 WriteRequestLog("Image-to-image generation", payload, stopwatch.ElapsedMilliseconds, response, errorText);
                 return (null, Lf("api.error.status", (int)response.StatusCode, errorText));
@@ -1238,21 +1182,21 @@ public partial class NovelAIService : IDisposable
         {
             stopwatch.Stop();
             WriteRequestLog("Image-to-image generation", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            return (null, L("api.error.request_cancelled"));
+            return (null, SafeException(ex));
         }
         catch (HttpRequestException ex)
         {
             stopwatch.Stop();
             WriteRequestLog("Image-to-image generation", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            var msg = Lf("api.error.network_failed", ex.Message);
-            if (ex.InnerException != null) msg += "\n" + Lf("api.error.inner", ex.InnerException.Message);
+            var msg = Lf("api.error.network_failed", SafeException(ex));
+            if (ex.InnerException != null) msg += "\n" + Lf("api.error.inner", SafeException(ex.InnerException));
             return (null, msg);
         }
         catch (Exception ex)
         {
             stopwatch.Stop();
             WriteRequestLog("Image-to-image generation", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            return (null, Lf("api.error.request_failed", ex.Message));
+            return (null, Lf("api.error.request_failed", SafeException(ex)));
         }
     }
 
@@ -1271,18 +1215,18 @@ public partial class NovelAIService : IDisposable
             return (null, L("api.error.token_missing_network_api"));
 
         bool streamGeneration = _settings.Settings.StreamGeneration;
-        var naiParams = _settings.Settings.GenParameters;
+        var naiParams = ModelCapabilities.CreateRequestSnapshot(_settings.Settings.GenParameters);
         string model = naiParams.Model;
         if (!_settings.Settings.UsesCustomApiBaseUrl &&
             NovelAiAnlasCalculator.PaidBaseCost(naiParams.Model, width, height, naiParams.Steps,
-                sm: naiParams.Sm, strength: 1) > NovelAiAnlasCalculator.MaxBaseCost)
+                sm: naiParams.Sm, strength: 1, smDyn: naiParams.Sm && naiParams.SmDyn) > NovelAiAnlasCalculator.MaxBaseCost)
             return (null, Lf("api.error.generation_cost_limit", NovelAiAnlasCalculator.MaxBaseCost));
 
         object seed = SeedValue.ToRequestValue(SeedValue.Resolve(naiParams.Seed));
         bool isV4Plus = IsV4PlusModel(model);
         bool isV45 = IsV45Model(model);
-        string effectivePrompt = ApplyQualityTags(prompt, model, naiParams.QualityToggle);
-        string effectiveNegativePrompt = ApplyUcPreset(negativePrompt, model, naiParams.UcPreset);
+        string effectivePrompt = ApplyQualityTags(prompt, naiParams);
+        string effectiveNegativePrompt = NovelAiPromptPresets.ResolveUc(model, NovelAiPromptPresets.ResolveUcId(naiParams), prompt, ModelCapabilities.IsMedium(naiParams) ? "" : negativePrompt);
 
         var parameters = new Dictionary<string, object?>
         {
@@ -1311,11 +1255,10 @@ public partial class NovelAIService : IDisposable
         {
             parameters["tag_hint_transparent_background"] = naiParams.TagHintTransparentBackground;
             parameters["straight_alpha"] = naiParams.StraightAlpha;
-            parameters["image_format"] = "png";
         }
 
-        if (naiParams.Variety) parameters["variety"] = true;
-        if (streamGeneration) parameters["stream"] = "sse";
+        ApplyVerifiedModelParameters(parameters, naiParams, width, height);
+        if (streamGeneration) parameters["stream"] = "msgpack";
 
         if (naiParams.Sampler == "k_euler_ancestral" && naiParams.Schedule != "native")
         {
@@ -1341,7 +1284,7 @@ public partial class NovelAIService : IDisposable
                     });
                     negCharCaptions.Add(new Dictionary<string, object>
                     {
-                        ["char_caption"] = ch.NegativePrompt,
+                        ["char_caption"] = ModelCapabilities.IsMedium(naiParams) ? "" : ch.NegativePrompt,
                         ["centers"] = new[] { center },
                     });
                     if (ch.UseCustomPosition)
@@ -1375,7 +1318,7 @@ public partial class NovelAIService : IDisposable
         else
         {
             parameters["sm"] = naiParams.Sm;
-            parameters["sm_dyn"] = false;
+            parameters["sm_dyn"] = naiParams.Sm && naiParams.SmDyn;
         }
 
         if (preciseReferences is { Count: > 0 } && SupportsPreciseReferenceModel(model))
@@ -1402,21 +1345,22 @@ public partial class NovelAIService : IDisposable
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             var endpoints = GetApiEndpoints();
             var url = streamGeneration ? endpoints.GenerateStreamUrl : endpoints.GenerateUrl;
-            var account = await SelectAccountAsync(ApiRequestCost.Image(model, width, height, naiParams.Steps, sm: naiParams.Sm,
-                    referenceAnlas: GenerationReferenceAnlas(model, vibeTransfers, preciseReferences)), ct);
             using var requestTimeoutCts = CreateRequestTimeoutTokenSource(ImageGenerationRequestTimeout, ct);
             var requestCt = requestTimeoutCts.Token;
+            var account = await SelectAccountAsync(ApiRequestCost.Image(model, width, height, naiParams.Steps, sm: naiParams.Sm,
+                    referenceAnlas: GenerationReferenceAnlas(model, vibeTransfers, preciseReferences),
+                    characterReference: SupportsPreciseReferenceModel(model) && preciseReferences is { Count: > 0 }, smDyn: naiParams.Sm && naiParams.SmDyn), requestCt);
             using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
             if (streamGeneration)
-                request.Headers.Accept.ParseAdd("text/event-stream");
+                request.Headers.Accept.ParseAdd("application/octet-stream");
             using var response = await SendAccountRequestAsync(request,
                 account,
-                streamGeneration ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead,
+                HttpCompletionOption.ResponseHeadersRead,
                 requestCt);
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorText = await response.Content.ReadAsStringAsync(requestCt);
+                var errorText = SafeStatus((int)response.StatusCode);
                 stopwatch.Stop();
                 LastGenerationErrorStatusCode = (int)response.StatusCode;
                 WriteRequestLog("Image generation", payload, stopwatch.ElapsedMilliseconds, response, errorText);
@@ -1443,14 +1387,14 @@ public partial class NovelAIService : IDisposable
         {
             stopwatch.Stop();
             WriteRequestLog("Image generation", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            return (null, L("api.error.request_cancelled"));
+            return (null, SafeException(ex));
         }
         catch (HttpRequestException ex)
         {
             stopwatch.Stop();
             WriteRequestLog("Image generation", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            var msg = Lf("api.error.network_failed", ex.Message);
-            if (ex.Message.Contains("proxy", StringComparison.OrdinalIgnoreCase))
+            var msg = Lf("api.error.network_failed", SafeException(ex));
+            if (SafeException(ex).Contains("proxy", StringComparison.OrdinalIgnoreCase))
                 msg += L("api.error.proxy_hint");
             return (null, msg);
         }
@@ -1458,7 +1402,7 @@ public partial class NovelAIService : IDisposable
         {
             stopwatch.Stop();
             WriteRequestLog("Image generation", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            return (null, Lf("api.error.request_failed", ex.Message));
+            return (null, Lf("api.error.request_failed", SafeException(ex)));
         }
     }
 
@@ -1516,14 +1460,12 @@ public partial class NovelAIService : IDisposable
         if (!_settings.HasApiTokens)
             return (null, L("api.error.token_missing_network_api"));
 
+        if (!SupportsVibeTransferModel(model)) return (null, "This model does not support Vibe encoding.");
         var payload = new Dictionary<string, object>
         {
             ["image"] = imageBase64,
             ["model"] = model,
-            ["parameters"] = new Dictionary<string, object>
-            {
-                ["information_extracted"] = informationExtracted,
-            },
+            ["information_extracted"] = informationExtracted,
         };
         var stopwatch = Stopwatch.StartNew();
 
@@ -1533,19 +1475,21 @@ public partial class NovelAIService : IDisposable
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             var endpoints = GetApiEndpoints();
             using var request = new HttpRequestMessage(HttpMethod.Post, endpoints.EncodeVibeUrl) { Content = content };
-            var account = await SelectAccountAsync(new ApiRequestCost(false, 2), ct);
+            using var timeout = CreateRequestTimeoutTokenSource(ImageGenerationRequestTimeout, ct);
+            var account = await SelectAccountAsync(new ApiRequestCost(false, 2), timeout.Token);
             using var response = await SendAccountRequestAsync(request, account,
-                HttpCompletionOption.ResponseContentRead, ct);
+                HttpCompletionOption.ResponseHeadersRead, timeout.Token);
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorText = await response.Content.ReadAsStringAsync(ct);
+                var errorText = SafeStatus((int)response.StatusCode);
                 stopwatch.Stop();
                 WriteRequestLog("Vibe encoding", payload, stopwatch.ElapsedMilliseconds, response, errorText);
                 return (null, Lf("api.error.status", (int)response.StatusCode, errorText));
             }
 
-            byte[] vibeData = await response.Content.ReadAsByteArrayAsync(ct);
+            using var vibeStream = await response.Content.ReadAsStreamAsync(timeout.Token);
+            byte[] vibeData = await NovelAIImageResponse.ReadBoundedAsync(vibeStream, timeout.Token);
             stopwatch.Stop();
             WriteRequestLog("Vibe encoding", payload, stopwatch.ElapsedMilliseconds, response);
             return (vibeData, null);
@@ -1554,14 +1498,14 @@ public partial class NovelAIService : IDisposable
         {
             stopwatch.Stop();
             WriteRequestLog("Vibe encoding", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            return (null, L("api.error.request_cancelled"));
+            return (null, SafeException(ex));
         }
         catch (HttpRequestException ex)
         {
             stopwatch.Stop();
             WriteRequestLog("Vibe encoding", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            var msg = Lf("api.error.network_failed", ex.Message);
-            if (ex.Message.Contains("proxy", StringComparison.OrdinalIgnoreCase))
+            var msg = Lf("api.error.network_failed", SafeException(ex));
+            if (SafeException(ex).Contains("proxy", StringComparison.OrdinalIgnoreCase))
                 msg += L("api.error.proxy_hint");
             return (null, msg);
         }
@@ -1569,7 +1513,7 @@ public partial class NovelAIService : IDisposable
         {
             stopwatch.Stop();
             WriteRequestLog("Vibe encoding", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            return (null, Lf("api.error.request_failed", ex.Message));
+            return (null, Lf("api.error.request_failed", SafeException(ex)));
         }
     }
 
@@ -1640,43 +1584,47 @@ public partial class NovelAIService : IDisposable
             var endpoints = GetApiEndpoints();
             using var request = new HttpRequestMessage(HttpMethod.Post, endpoints.TextChatCompletionUrl) { Content = content };
             request.Headers.Accept.ParseAdd("text/event-stream");
+            using var timeout = CreateRequestTimeoutTokenSource(TextRequestTimeout, ct);
             var account = await SelectAccountAsync(
-                new ApiRequestCost(false, 0, RequiresSubscription: true, RequiresOpus: model == "xialong-v1"), ct);
+                new ApiRequestCost(false, 0, RequiresSubscription: true, RequiresOpus: model == "xialong-v1"), timeout.Token);
             using var response = await SendAccountRequestAsync(request, account,
-                HttpCompletionOption.ResponseHeadersRead, ct);
+                HttpCompletionOption.ResponseHeadersRead, timeout.Token);
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorText = await response.Content.ReadAsStringAsync(ct);
+                var errorText = SafeStatus((int)response.StatusCode);
                 stopwatch.Stop();
                 WriteRequestLog("Prompt text generation", payload, stopwatch.ElapsedMilliseconds, response, errorText);
                 return (null, Lf("api.error.status", (int)response.StatusCode, errorText));
             }
 
             var textBuilder = new StringBuilder();
-            using var stream = await response.Content.ReadAsStreamAsync(ct);
-            using var reader = new StreamReader(stream, Encoding.UTF8);
-
-            string? line;
-            while ((line = await reader.ReadLineAsync(ct)) != null)
+            bool textFinished = false;
+            using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
+            await foreach (var streamEvent in NovelAIStreamFrames.ReadSseAsync(stream, timeout.Token))
             {
-                if (!line.StartsWith("data:", StringComparison.Ordinal))
-                    continue;
-
-                var data = line.AsSpan(5).Trim().ToString();
-                if (data.Length == 0 || data == "[DONE]")
-                    continue;
+                if (streamEvent.Event == "error") throw new InvalidDataException("Text stream returned an error.");
+                var data = streamEvent.Data;
+                if (data == "[DONE]") { textFinished = true; continue; }
+                if (data.Length == 0) continue;
 
                 try
                 {
                     using var doc = JsonDocument.Parse(data);
                     var root = doc.RootElement;
+                    if (TryGetPropertyIgnoreCase(root, "error", out _))
+                        throw new InvalidDataException("Text stream returned an error.");
 
                     if (!TryGetPropertyIgnoreCase(root, "choices", out var choices) ||
                         choices.ValueKind != JsonValueKind.Array || choices.GetArrayLength() == 0)
                         continue;
 
                     var first = choices[0];
+                    if (TryGetPropertyIgnoreCase(first, "finish_reason", out var reason) && reason.ValueKind == JsonValueKind.String)
+                    {
+                        if (reason.GetString() == "error") throw new InvalidDataException("Text stream returned an error.");
+                        textFinished = true;
+                    }
 
                     if (TryGetPropertyIgnoreCase(first, "text", out var textEl) &&
                         textEl.ValueKind == JsonValueKind.String)
@@ -1694,7 +1642,8 @@ public partial class NovelAIService : IDisposable
                             textBuilder.Append(chunk);
                     }
                 }
-                catch { /* 跳过格式异常的 chunk */ }
+                catch (JsonException) { throw new InvalidDataException("Malformed text stream event."); }
+                if (textBuilder.Length > 1024 * 1024) throw new InvalidDataException("Text response exceeds the size limit.");
             }
 
             stopwatch.Stop();
@@ -1703,6 +1652,7 @@ public partial class NovelAIService : IDisposable
             var logPayloadCopy = new Dictionary<string, object>(payload) { ["_streaming_result_length"] = result.Length };
             WriteRequestLog("Prompt text generation (streaming)", logPayloadCopy, stopwatch.ElapsedMilliseconds, response, result);
 
+            if (!textFinished) throw new InvalidDataException("Text stream ended without completion.");
             if (!string.IsNullOrWhiteSpace(result))
                 return (result, null);
 
@@ -1713,14 +1663,14 @@ public partial class NovelAIService : IDisposable
         {
             stopwatch.Stop();
             WriteRequestLog("Prompt text generation", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            return (null, L("api.error.request_cancelled"));
+            return (null, SafeException(ex));
         }
         catch (HttpRequestException ex)
         {
             stopwatch.Stop();
             WriteRequestLog("Prompt text generation", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            var msg = Lf("api.error.network_failed", ex.Message);
-            if (ex.Message.Contains("proxy", StringComparison.OrdinalIgnoreCase))
+            var msg = Lf("api.error.network_failed", SafeException(ex));
+            if (SafeException(ex).Contains("proxy", StringComparison.OrdinalIgnoreCase))
                 msg += L("api.error.proxy_hint");
             return (null, msg);
         }
@@ -1728,17 +1678,9 @@ public partial class NovelAIService : IDisposable
         {
             stopwatch.Stop();
             WriteRequestLog("Prompt text generation", payload, stopwatch.ElapsedMilliseconds, exception: ex);
-            return (null, Lf("api.error.request_failed", ex.Message));
+            return (null, Lf("api.error.request_failed", SafeException(ex)));
         }
     }
-
-    private sealed record NovelAiApiEndpoints(
-        string GenerateUrl,
-        string GenerateStreamUrl,
-        string EncodeVibeUrl,
-        string UserInfoUrl,
-        string UserDataUrl,
-        string TextChatCompletionUrl);
 
     public void Dispose()
     {

@@ -967,6 +967,11 @@
                                 </Grid>
                                 <ComboBox x:Name="CboModel"
                                           HorizontalAlignment="Stretch"/>
+                                <StackPanel x:Name="EffortPanel" Orientation="Horizontal" Spacing="0" Visibility="Collapsed">
+                                    <TextBlock x:Name="EffortLabel" Text="Effort" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <ToggleButton x:Name="EffortHigh" Content="High" IsChecked="True" Click="OnEffortChanged" Height="28" MinWidth="70" Padding="10,0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" CornerRadius="4,0,0,4"/>
+                                    <ToggleButton x:Name="EffortMedium" Content="Medium" Click="OnEffortChanged" Height="28" MinWidth="70" Padding="10,0" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" CornerRadius="0,4,4,0"/>
+                                </StackPanel>
                             </StackPanel>
 
                             <Grid x:Name="PromptTabRow" Grid.Row="1" ColumnSpacing="8"
@@ -1658,18 +1663,20 @@
                 <controls:MaskCanvasControl x:Name="MaskCanvas" Visibility="Collapsed"/>
 
                 <!-- 生图浮动操作窗（可拖动） -->
-                <Grid x:Name="GenResultBar"
+                <Grid x:Name="GenResultBar" Canvas.ZIndex="10"
                       VerticalAlignment="Bottom" HorizontalAlignment="Center"
                       Margin="0,0,0,20" Visibility="Collapsed">
                     <Grid.RenderTransform>
                         <TranslateTransform x:Name="GenResultBarTranslate"/>
                     </Grid.RenderTransform>
                     <Border Background="{ThemeResource AcrylicBackgroundFillColorDefaultBrush}"
-                            CornerRadius="8" Padding="4,10,12,10"
+                            CornerRadius="8" Padding="4,6,8,6"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Border Background="Transparent" Padding="8,0"
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled"
+                                      VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Border Background="Transparent" Padding="4,0"
                                     ManipulationMode="TranslateX,TranslateY"
                                     ManipulationDelta="OnGenResultBarDrag">
                                 <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
@@ -1681,7 +1688,7 @@
                                     Click="OnEnhanceGenResult"
                                     Style="{StaticResource AccentButtonStyle}"
                                     Height="32"/>
-                            <Button x:Name="BtnSendGenResult" Height="32">
+                            <Button x:Name="BtnSendGenResult" Height="32" Style="{StaticResource SubtleButtonStyle}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xEA53;" FontSize="16"/>
                                     <TextBlock x:Name="TxtSendGenResult" Text=""/>
@@ -1711,24 +1718,29 @@
                                     </MenuFlyout>
                                 </Button.Flyout>
                             </Button>
-                            <Button Click="OnDeleteGenResult" Foreground="#E74856" Height="32">
+                            <Button x:Name="BtnDeleteGenResult" Click="OnDeleteGenResult" Foreground="#E74856"
+                                    Width="32" Height="32" MinWidth="0" MinHeight="0" Padding="0"
+                                    Style="{StaticResource SubtleButtonStyle}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xE74D;" FontSize="16"/>
-                                    <TextBlock x:Name="TxtDeleteGenResult" Text=""/>
+                                    <TextBlock x:Name="TxtDeleteGenResult" Text="" Visibility="Collapsed"/>
                                 </StackPanel>
                             </Button>
-                            <Button Click="OnCloseGenResultBar" Height="32">
+                            <Button x:Name="BtnCloseGenResultBar" Click="OnCloseGenResultBar"
+                                    Width="32" Height="32" MinWidth="0" MinHeight="0" Padding="0"
+                                    Style="{StaticResource SubtleButtonStyle}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xE711;" FontSize="16"/>
-                                    <TextBlock x:Name="TxtCloseGenResult" Text=""/>
+                                    <TextBlock x:Name="TxtCloseGenResult" Text="" Visibility="Collapsed"/>
                                 </StackPanel>
                             </Button>
                         </StackPanel>
+                        </ScrollViewer>
                     </Border>
                 </Grid>
 
                 <!-- 重绘浮动操作窗（可拖动） -->
-                <Grid x:Name="ResultActionBar"
+                <Grid x:Name="ResultActionBar" Canvas.ZIndex="10"
                       VerticalAlignment="Bottom" HorizontalAlignment="Center"
                       Margin="0,0,0,20" Visibility="Collapsed">
                     <Grid.RenderTransform>
@@ -1738,6 +1750,8 @@
                             CornerRadius="8" Padding="4,10,16,10"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled"
+                                      VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Border Background="Transparent" Padding="8,0"
                                     ManipulationMode="TranslateX,TranslateY"
@@ -1763,7 +1777,7 @@
                                     Style="{StaticResource SubtleButtonStyle}">
                                 <SymbolIcon Symbol="Forward"/>
                             </Button>
-                            <Button Click="OnApplyResult" Style="{StaticResource AccentButtonStyle}">
+                            <Button Click="OnApplyResult" Style="{StaticResource SubtleButtonStyle}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <SymbolIcon Symbol="Accept"/>
                                     <TextBlock x:Name="TxtApplyResult" Text=""/>
@@ -1775,19 +1789,20 @@
                                     <TextBlock x:Name="TxtRedoGenerate" Text=""/>
                                 </StackPanel>
                             </Button>
-                            <Button x:Name="BtnCompare">
+                            <Button x:Name="BtnCompare" Style="{StaticResource SubtleButtonStyle}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xE81D;" FontSize="16"/>
                                     <TextBlock x:Name="TxtCompareResult" Text=""/>
                                 </StackPanel>
                             </Button>
-                            <Button Click="OnDiscardResult" Foreground="#E74856">
+                            <Button Click="OnDiscardResult" Foreground="#E74856" Style="{StaticResource SubtleButtonStyle}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <SymbolIcon Symbol="Cancel"/>
                                     <TextBlock x:Name="TxtDiscardResult" Text=""/>
                                 </StackPanel>
                             </Button>
                         </StackPanel>
+                        </ScrollViewer>
                     </Border>
                 </Grid>
             </Grid>
@@ -1871,9 +1886,17 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <TextBlock x:Name="TxtHistoryTitle" Grid.Row="0" Text="" Margin="12,10,12,6"
-                               Style="{StaticResource CaptionTextBlockStyle}"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <Grid Grid.Row="0" Margin="12,6,8,6">
+                        <TextBlock x:Name="TxtHistoryTitle" Text="" VerticalAlignment="Center"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                        <ToggleButton x:Name="BtnHistoryBlur" AutomationProperties.AutomationId="HistoryBlur"
+                                      HorizontalAlignment="Right" Width="32" Height="28" Padding="0"
+                                      Click="OnHistoryBlurClick">
+                            <FontIcon x:Name="HistoryBlurIcon" FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                      Glyph="&#xE890;" FontSize="16"/>
+                        </ToggleButton>
+                    </Grid>
                     <Grid Grid.Row="1" Margin="8,0,8,6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition x:Name="HistoryDateColumn" Width="*"/>
@@ -1940,6 +1963,8 @@
                             </Style>
                         </ListView.ItemContainerStyle>
                     </ListView>
+                    <Border x:Name="HistoryBlurOverlay" Grid.Row="2" Canvas.ZIndex="1"
+                            IsHitTestVisible="False" Visibility="Collapsed" SizeChanged="OnHistoryBlurSizeChanged"/>
                 </Grid>
             </Border>
 

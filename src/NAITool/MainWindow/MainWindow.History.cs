@@ -9,6 +9,38 @@ namespace NAITool;
 
 public sealed partial class MainWindow
 {
+    private Microsoft.UI.Composition.SpriteVisual? _historyBlurVisual;
+
+    private void OnHistoryBlurClick(object sender, RoutedEventArgs e)
+    {
+        bool blur = BtnHistoryBlur.IsChecked == true;
+        HistoryBlurIcon.Glyph = blur ? "\uE8C5" : "\uE890";
+        HistoryBlurOverlay.Visibility = blur ? Visibility.Visible : Visibility.Collapsed;
+        if (blur && _historyBlurVisual == null)
+        {
+            var compositor = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(HistoryBlurOverlay).Compositor;
+            using var effect = new Microsoft.Graphics.Canvas.Effects.GaussianBlurEffect
+            {
+                BlurAmount = 18,
+                BorderMode = Microsoft.Graphics.Canvas.Effects.EffectBorderMode.Hard,
+                Source = new Microsoft.UI.Composition.CompositionEffectSourceParameter("backdrop"),
+            };
+            var brush = compositor.CreateEffectFactory(effect).CreateBrush();
+            brush.SetSourceParameter("backdrop", compositor.CreateBackdropBrush());
+            _historyBlurVisual = compositor.CreateSpriteVisual();
+            _historyBlurVisual.Brush = brush;
+            Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.SetElementChildVisual(HistoryBlurOverlay, _historyBlurVisual);
+        }
+        if (_historyBlurVisual != null)
+            _historyBlurVisual.Size = new System.Numerics.Vector2((float)HistoryBlurOverlay.ActualWidth, (float)HistoryBlurOverlay.ActualHeight);
+    }
+
+    private void OnHistoryBlurSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_historyBlurVisual != null)
+            _historyBlurVisual.Size = new System.Numerics.Vector2((float)e.NewSize.Width, (float)e.NewSize.Height);
+    }
+
     private async void OnHistorySendToInspect(object sender, RoutedEventArgs e)
     {
         if (sender is MenuFlyoutItem item && item.Tag is string filePath)
@@ -425,6 +457,7 @@ public sealed partial class MainWindow
             else
                 UpdateFloatingResultBarsVisibility();
             await ShowGenPreviewAsync(bytes);
+            UpdateGenEnhanceButtonWarning();
             UpdateDynamicMenuStates();
         }
         catch (Exception ex) { TxtStatus.Text = Lf("common.load_failed", ex.Message); }

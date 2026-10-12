@@ -8,23 +8,24 @@ internal readonly record struct ApiRequestCost(
     public int AnlasFor(NovelAiAccountInfo? info)
     {
         bool free = OpusFreeEligible && info is { IsOpus: true, HasActiveSubscription: true } &&
-                    !(UsesV5 && info.V5UsageIsNegative == true);
+                    (!UsesV5 || info.V5UsageIsNegative == false);
         return (int)Math.Min(int.MaxValue, (long)(free ? 0 : PaidBaseAnlas) + ReferenceAnlas);
     }
 
     public static ApiRequestCost Image(string model, int width, int height, int steps,
-        bool sm = false, double strength = 1, int referenceAnlas = 0) => new(
+        bool sm = false, double strength = 1, int referenceAnlas = 0, bool characterReference = false, bool smDyn = false) => new(
         NovelAiAnlasCalculator.IsV5Model(model),
-        NovelAiAnlasCalculator.PaidBaseCost(model, width, height, steps, sm, strength),
+        NovelAiAnlasCalculator.PaidBaseCost(model, width, height, steps, sm, strength, smDyn),
         referenceAnlas,
-        width > 0 && height > 0 && steps > 0 && steps <= 28 && (long)width * height <= 1048576);
+        !characterReference && width > 0 && height > 0 && steps > 0 && steps <= 28 && (long)width * height <= 1048576);
 }
 
-/// <summary>One cursor shared by every operation. Selection never changes global credentials.</summary>
+/// <summary>One cursor shared by every operation.</summary>
 internal sealed class ApiAccountRouter
 {
     private readonly object _gate = new();
-    private string? _lastToken;
+    private string? _lastIdentity;
+    private static string Identity(ApiAccount account) => account.CacheIdentity ?? account.Token;
 
     internal static ApiAccount[] UniqueAccounts(IEnumerable<ApiAccount> accounts) => accounts
         .Where(a => !string.IsNullOrWhiteSpace(a.Token))
@@ -35,10 +36,9 @@ internal sealed class ApiAccountRouter
         bool customEndpoint = false)
     {
         var candidates = UniqueAccounts(accounts)
-            .Where(a => customEndpoint || (a.IsTokenValid != false && Eligible(a.Info, cost))).ToArray();
+            .Where(a => a.IsTokenValid != false && Eligible(a.Info, cost)).ToArray();
 
-        // A request that can be free should not accidentally spend another account's Anlas.
-        if (!customEndpoint)
+        // Prefer zero-Anlas accounts.
         {
             var free = candidates.Where(a => cost.AnlasFor(a.Info) == 0).ToArray();
             if (free.Length > 0) return free;
@@ -52,8 +52,8 @@ internal sealed class ApiAccountRouter
         lock (_gate)
         {
             var all = UniqueAccounts(accounts);
-            int start = Array.FindIndex(all, a => a.Token == _lastToken) + 1;
-            // Modes only choose among eligible accounts; none may bypass the shared rules.
+            int start = Array.FindIndex(all, a => Identity(a) == _lastIdentity) + 1;
+            // Filter eligible accounts before selecting.
             var candidates = GetCandidates(all.Skip(start).Concat(all.Take(start)), cost, customEndpoint);
             if (candidates.Length == 0) return null;
 
@@ -61,7 +61,7 @@ internal sealed class ApiAccountRouter
             ApiAccount selected = candidates[0];
             if (!consumesNothing && mode == ApiCallMode.Random)
                 selected = advance ? candidates[Random.Shared.Next(candidates.Length)] : candidates[0];
-            else if (!consumesNothing && !customEndpoint && mode is ApiCallMode.MostQuota or ApiCallMode.LeastQuota)
+            else if (!consumesNothing && mode is ApiCallMode.MostQuota or ApiCallMode.LeastQuota)
             {
                 // Null means unknown, not zero: prefer known balances in either ordering.
                 int? Quota(ApiAccount a) => cost.AnlasFor(a.Info) > 0
@@ -70,7 +70,7 @@ internal sealed class ApiAccountRouter
                 selected = (mode == ApiCallMode.MostQuota
                     ? known.OrderByDescending(Quota) : known.OrderBy(Quota)).FirstOrDefault() ?? selected;
             }
-            if (advance) _lastToken = selected.Token;
+            if (advance) _lastIdentity = Identity(selected);
             return selected;
         }
     }
@@ -80,7 +80,6 @@ internal sealed class ApiAccountRouter
         if (info == null || !info.IsAccountInfoAvailable) return true;
         if (cost.RequiresSubscription && !info.HasActiveSubscription) return false;
         if (cost.RequiresOpus && !info.IsOpus) return false;
-        if (cost.UsesV5 && (info.V5UsagePercent <= 0 || info.V5UsageIsNegative == true)) return false;
         int anlas = cost.AnlasFor(info);
         return anlas == 0 || !info.AnlasBalance.HasValue || info.AnlasBalance >= anlas;
     }

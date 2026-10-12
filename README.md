@@ -315,3 +315,23 @@ See `CONTRIBUTING.md` and `SECURITY.md` for more details.
 ## License
 
 This project is licensed under GPL-3.0. See `LICENSE` for the full license text. If you use this project's source code or design as a reference, please provide attribution and link back to this repository.
+
+---
+
+## Fork: 1.3.0_fork.1
+
+Modified from [Aeka0/NAI-Utility-Tool](https://github.com/Aeka0/NAI-Utility-Tool) **Release 1.3.0**. The upstream README above is preserved.
+
+### Updates
+- V5 High/Medium support, with Medium's fixed sampling parameters and restoration of High settings.
+- Custom gateway API endpoints, including prompt generation; configurable generation wait time (60–300 s).
+- Anlas cost and estimated image counts, V5 quota display and refresh.
+- History-thumbnail blur toggle and a compact, initially collapsed result toolbar.
+
+### Fixes in [Issue #1](https://github.com/Andy-linux/NAI-Utility-Tool/issues/1)
+- **Account and billing (1, 8, 13):** V5 quota/Anlas fallback, feature-specific API routing, consistent costs and balances.
+- **Responses and timeouts (3, 9, 10):** streaming final/error handling, ZIP result selection, premature request cancellation.
+- **Saving and metadata (2, 4, 7):** unsaved workspace alerts, atomic settings writes, separate SMEA/Variety+ metadata.
+- **Models and parameters (5, 6, 11, 12):** partial-download detection, Variety+ capability, Quality/UC presets, V5 High defaults.
+
+This is not an official upstream release. Modified source and the [GPL-3.0 license](LICENSE) remain available in this repository. Third-party models and data retain their own terms.

@@ -309,3 +309,23 @@ publish/NAI Utility Tool/
 ## 许可证
 
 本项目使用 GPL-3.0 协议开源。完整文本见 `LICENSE`，如果使用该项目源码或设计参考请署名并指向该项目仓库。
+
+---
+
+## 派生版本：1.3.0_fork.1
+
+基于 [Aeka0/NAI-Utility-Tool](https://github.com/Aeka0/NAI-Utility-Tool) 原版 **Release 1.3.0** 修改，上方原版 README 内容保持不变。
+
+### 新增与调整
+- V5 High/Medium：Medium 固定采样参数，切回 High 恢复原设置。
+- 自定义网关接口及提示词生成；生图等待超时可调（60–300 秒）。
+- Anlas 消耗和预计生图张数、V5 额度及刷新。
+- 历史缩略图模糊切换；结果工具栏紧凑化、默认收起。
+
+### [Issue #1](https://github.com/Andy-linux/NAI-Utility-Tool/issues/1) 修复
+- **额度与计费（1、8、13）**：V5 额度耗尽后可使用 Anlas；按功能正确路由 API，统一费用与余额。
+- **响应与超时（3、9、10）**：修复流式最终结果/错误处理、ZIP 结果图选取及请求提前取消。
+- **保存与元数据（2、4、7）**：隐藏工作区未保存提醒、配置原子保存、SMEA 与 Variety+ 分别恢复。
+- **模型与参数（5、6、11、12）**：识别残缺下载、修正 Variety+ 参数与兼容范围、Quality/UC 预设及 V5 High 默认步数。
+
+本版本不是上游官方更新；修改源码及 [GPL-3.0 协议](LICENSE)保留在本仓库。第三方模型与数据遵循各自许可。

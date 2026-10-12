@@ -140,15 +140,18 @@ public sealed partial class MainWindow
         public string PositivePrompt { get; init; } = "";
         public string NegativePrompt { get; init; } = "";
         public bool QualityMatched { get; init; }
+        public string QualityPreset { get; init; } = "standard";
         public int? UcPresetMatched { get; init; }
+        public string? UcPresetId { get; init; }
     }
 
     private void ApplyImportedImageModel(ImageMetadata meta, NAIParameters parameters, string[] availableModels)
     {
         if (meta.IsModelInference) return;
-        string? model = ImportedImageModel.ResolveForTarget(meta.ModelDisplayName, availableModels);
+        string? model = ImportedImageModel.ResolveForTarget(ModelCapabilities.HighModel(meta.ModelDisplayName), availableModels);
         if (model == null) return;
         parameters.Model = model;
+        parameters.Effort = meta.Effort ?? (meta.ModelDisplayName.Contains("-medium", StringComparison.Ordinal) ? "medium" : "high");
         if (ReferenceEquals(parameters, CurrentParams))
         {
             CboModel.SelectedIndex = Array.IndexOf(availableModels, model);
@@ -162,6 +165,8 @@ public sealed partial class MainWindow
         public string StrippedPrompt { get; init; } = "";
         public int PresetIndex { get; init; } = -1;
         public int TagCount { get; init; }
+        public string QualityPreset { get; init; } = "standard";
+        public string? UcPresetId { get; init; }
     }
 
     private ImportedPromptPresetMatch ExtractImportedPromptPresetMatch(string positivePrompt, string negativePrompt, string model)
@@ -174,7 +179,9 @@ public sealed partial class MainWindow
             PositivePrompt = qualityMatch?.StrippedPrompt ?? positivePrompt,
             NegativePrompt = ucMatch?.StrippedPrompt ?? negativePrompt,
             QualityMatched = qualityMatch != null,
+            QualityPreset = qualityMatch?.QualityPreset ?? "standard",
             UcPresetMatched = ucMatch?.PresetIndex,
+            UcPresetId = ucMatch?.UcPresetId,
         };
     }
 
@@ -182,18 +189,27 @@ public sealed partial class MainWindow
     {
         PromptPresetCandidateMatch? bestMatch = null;
         foreach (string candidateModel in GetPromptPresetRecognitionModelCandidates(currentModel))
+        foreach (string qualityPreset in NovelAiPromptPresets.SupportsLightQuality(candidateModel) ? new[] { "standard", "light" } : new[] { "standard" })
         {
-            string presetText = NovelAIService.GetQualityTagSuffix(candidateModel);
+            string presetText = NovelAiPromptPresets.QualityTags(candidateModel, qualityPreset);
             int tagCount = SplitPromptPresetTags(presetText).Count;
             if (tagCount == 0)
                 continue;
             if (!TryStripPromptPreset(prompt, presetText, out string strippedPrompt))
-                continue;
+            {
+                // Historical V4.5 metadata predates the documented location tag.
+                // Recognize it without rewriting existing user prompt text.
+                if (!presetText.StartsWith("location, ", StringComparison.Ordinal) ||
+                    !TryStripPromptPreset(prompt, presetText["location, ".Length..], out strippedPrompt))
+                    continue;
+                tagCount--;
+            }
 
             var match = new PromptPresetCandidateMatch
             {
                 Model = candidateModel,
                 StrippedPrompt = strippedPrompt,
+                QualityPreset = qualityPreset,
                 TagCount = tagCount,
             };
             if (IsBetterPromptPresetMatch(match, bestMatch))
@@ -208,9 +224,10 @@ public sealed partial class MainWindow
         PromptPresetCandidateMatch? bestMatch = null;
         foreach (string candidateModel in GetPromptPresetRecognitionModelCandidates(currentModel))
         {
-            foreach (int presetIndex in new[] { 0, 1 })
+            foreach (string ucId in NovelAiPromptPresets.UcIds(candidateModel).Where(id => id != "none"))
             {
-                string presetText = NovelAIService.GetUcPresetText(candidateModel, presetIndex);
+                int presetIndex = ucId == "heavy" ? 0 : ucId == "light" ? 1 : 2;
+                string presetText = NovelAiPromptPresets.UcTags(candidateModel, ucId);
                 int tagCount = SplitPromptPresetTags(presetText).Count;
                 if (tagCount == 0)
                     continue;
@@ -221,6 +238,7 @@ public sealed partial class MainWindow
                 {
                     Model = candidateModel,
                     PresetIndex = presetIndex,
+                    UcPresetId = ucId,
                     StrippedPrompt = strippedPrompt,
                     TagCount = tagCount,
                 };
@@ -352,13 +370,19 @@ public sealed partial class MainWindow
         RecheckVibeTransferCacheState();
         UpdateReferenceButtonAndPanelState();
         ChkVariety.Visibility = Visibility.Visible;
+        ChkVariety.IsEnabled = ModelCapabilities.SupportsVariety(GetCurrentModelKey());
         if (IsAdvancedWindowOpen)
         {
             if (_advChkVariety != null)
+            {
                 _advChkVariety.Visibility = Visibility.Visible;
+                _advChkVariety.IsEnabled = ChkVariety.IsEnabled;
+            }
             if (_advChkSmea != null)
                 _advChkSmea.Visibility = (_currentMode == AppMode.ImageGeneration && isV3)
                     ? Visibility.Visible : Visibility.Collapsed;
+            if (_advChkSmeaDyn != null && _advChkSmea != null)
+                _advChkSmeaDyn.Visibility = _advChkSmea.Visibility;
             if (_advChkTransparentBackground != null)
                 _advChkTransparentBackground.Visibility = IsV5ModelKey(GetCurrentModelKey()) ? Visibility.Visible : Visibility.Collapsed;
             if (_advChkStraightAlpha != null)
@@ -366,6 +390,7 @@ public sealed partial class MainWindow
             RefreshAdvancedSamplerOptions();
         }
 
+        UpdateEffortUI();
         UpdateAnlasBalanceText();
         UpdateBtnGenerateForApiKey();
         UpdateGenerateButtonWarning();
@@ -395,11 +420,13 @@ public sealed partial class MainWindow
     private static NAIParameters CreateDefaultInpaintParameters() => new()
     {
         Model = NAIParameters.DefaultInpaintModel,
+        Steps = 28,
     };
 
     private static NAIParameters CreateDefaultI2IDenoiseParameters() => new()
     {
         Model = NAIParameters.DefaultI2IDenoiseModel,
+        Steps = 28,
         DenoiseStrength = 0.7,
         DenoiseNoise = 0,
     };

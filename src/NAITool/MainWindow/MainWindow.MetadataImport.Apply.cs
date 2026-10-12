@@ -27,6 +27,8 @@ public sealed partial class MainWindow
 
         var p = _settings.Settings.GenParameters;
         if (options.Model) ApplyImportedImageModel(meta, p, GenerationModels);
+        if (options.Settings && ModelCapabilities.SupportsEffort(p.Model))
+            p.Effort = meta.Effort ?? (meta.ModelDisplayName.Contains("-medium", System.StringComparison.Ordinal) ? "medium" : "high");
         var presetMatch = ExtractImportedPromptPresetMatch(positivePrompt, negativePrompt, p.Model);
         if (options.Settings)
         {
@@ -39,14 +41,21 @@ public sealed partial class MainWindow
             _genPositivePrompt = positivePrompt;
             _genStylePrompt = "";
         }
-        if (options.NegativePrompt) _genNegativePrompt = negativePrompt;
+        if (options.NegativePrompt && (meta.HighNegativePrompt != null || !ModelCapabilities.IsMedium(p)))
+            _genNegativePrompt = meta.HighNegativePrompt ?? negativePrompt;
 
         if (options.Settings)
         {
-            p.QualityToggle = presetMatch.QualityMatched;
-            p.UcPreset = presetMatch.UcPresetMatched ?? 2;
+            RestoreImportedHighDraft(meta, p);
+            p.QualityToggle = meta.QualityToggle ?? presetMatch.QualityMatched;
+            p.QualityPreset = meta.QualityPreset ?? presetMatch.QualityPreset;
+            if (!ModelCapabilities.IsMedium(p))
+            {
+                p.UcPreset = meta.UcPreset ?? presetMatch.UcPresetMatched ?? 2;
+                p.UcPresetId = meta.UcPresetId ?? presetMatch.UcPresetId ?? (p.UcPreset == 0 ? "heavy" : p.UcPreset == 1 ? "light" : "none");
+            }
 
-            if (meta.Steps > 0)
+            if (meta.Steps > 0 && !ModelCapabilities.IsMedium(p))
             {
                 if (blockOversizedSteps && meta.Steps > 28)
                     skipped.Add(Lf("metadata.skipped.steps", meta.Steps));
@@ -56,13 +65,18 @@ public sealed partial class MainWindow
             if (meta.Scale > 0) p.Scale = meta.Scale;
             if (!meta.IsSdFormat)
             {
-                p.CfgRescale = meta.CfgRescale;
+                if (!ModelCapabilities.IsMedium(p)) p.CfgRescale = meta.CfgRescale;
                 if (meta.TagHintTransparentBackground.HasValue) p.TagHintTransparentBackground = meta.TagHintTransparentBackground.Value;
                 if (meta.StraightAlpha.HasValue) p.StraightAlpha = meta.StraightAlpha.Value;
             }
-            if (!string.IsNullOrEmpty(meta.Sampler)) p.Sampler = NormalizeSamplerForModel(meta.Sampler, p.Model);
+            if (!ModelCapabilities.IsMedium(p) && !string.IsNullOrEmpty(meta.Sampler)) p.Sampler = NormalizeSamplerForModel(meta.Sampler, p.Model);
             if (!string.IsNullOrEmpty(meta.NoiseSchedule)) p.Schedule = NormalizeScheduleForModel(meta.NoiseSchedule, p.Model, p.Schedule);
-            if (!meta.IsSdFormat) p.Variety = meta.SmDyn || meta.Sm;
+            if (!meta.IsSdFormat)
+            {
+                p.Sm = meta.Sm;
+                p.SmDyn = meta.SmDyn;
+                p.Variety = meta.Variety;
+            }
 
             p.Sampler = NormalizeSamplerForModel(p.Sampler, p.Model);
             p.Schedule = NormalizeScheduleForModel(p.Schedule, p.Model);
@@ -91,6 +105,7 @@ public sealed partial class MainWindow
         if (IsAdvancedWindowOpen) SyncSidebarToAdvanced();
 
         LoadPromptFromBuffer();
+        UpdateEffortUI();
         UpdateSplitVisibility();
         UpdateSizeWarningVisuals();
 
@@ -126,6 +141,8 @@ public sealed partial class MainWindow
 
         var p = ImageRequestParameters;
         if (options.Model) ApplyImportedImageModel(meta, p, _i2iEditMode == I2IEditMode.Denoise ? GenerationModels : I2IModels);
+        if (options.Settings && ModelCapabilities.SupportsEffort(p.Model))
+            p.Effort = meta.Effort ?? (meta.ModelDisplayName.Contains("-medium", System.StringComparison.Ordinal) ? "medium" : "high");
         var presetMatch = ExtractImportedPromptPresetMatch(positivePrompt, negativePrompt, p.Model);
         if (options.Settings)
         {
@@ -138,14 +155,21 @@ public sealed partial class MainWindow
             _i2iPositivePrompt = positivePrompt;
             _i2iStylePrompt = "";
         }
-        if (options.NegativePrompt) _i2iNegativePrompt = negativePrompt;
+        if (options.NegativePrompt && (meta.HighNegativePrompt != null || !ModelCapabilities.IsMedium(p)))
+            _i2iNegativePrompt = meta.HighNegativePrompt ?? negativePrompt;
 
         if (options.Settings)
         {
-            p.QualityToggle = presetMatch.QualityMatched;
-            p.UcPreset = presetMatch.UcPresetMatched ?? 2;
+            RestoreImportedHighDraft(meta, p);
+            p.QualityToggle = meta.QualityToggle ?? presetMatch.QualityMatched;
+            p.QualityPreset = meta.QualityPreset ?? presetMatch.QualityPreset;
+            if (!ModelCapabilities.IsMedium(p))
+            {
+                p.UcPreset = meta.UcPreset ?? presetMatch.UcPresetMatched ?? 2;
+                p.UcPresetId = meta.UcPresetId ?? presetMatch.UcPresetId ?? (p.UcPreset == 0 ? "heavy" : p.UcPreset == 1 ? "light" : "none");
+            }
 
-            if (meta.Steps > 0)
+            if (meta.Steps > 0 && !ModelCapabilities.IsMedium(p))
             {
                 if (blockOversizedSteps && meta.Steps > 28)
                     skipped.Add(Lf("metadata.skipped.steps", meta.Steps));
@@ -153,10 +177,15 @@ public sealed partial class MainWindow
                     p.Steps = meta.Steps;
             }
             if (meta.Scale > 0) p.Scale = meta.Scale;
-            if (!meta.IsSdFormat) p.CfgRescale = meta.CfgRescale;
-            if (!string.IsNullOrEmpty(meta.Sampler)) p.Sampler = NormalizeSamplerForModel(meta.Sampler, p.Model);
+            if (!meta.IsSdFormat && !ModelCapabilities.IsMedium(p)) p.CfgRescale = meta.CfgRescale;
+            if (!ModelCapabilities.IsMedium(p) && !string.IsNullOrEmpty(meta.Sampler)) p.Sampler = NormalizeSamplerForModel(meta.Sampler, p.Model);
             if (!string.IsNullOrEmpty(meta.NoiseSchedule)) p.Schedule = NormalizeScheduleForModel(meta.NoiseSchedule, p.Model, p.Schedule);
-            if (!meta.IsSdFormat) p.Variety = meta.SmDyn || meta.Sm;
+            if (!meta.IsSdFormat)
+            {
+                p.Sm = meta.Sm;
+                p.SmDyn = meta.SmDyn;
+                p.Variety = meta.Variety;
+            }
 
             p.Sampler = NormalizeSamplerForModel(p.Sampler, p.Model);
             p.Schedule = NormalizeScheduleForModel(p.Schedule, p.Model);
@@ -174,6 +203,7 @@ public sealed partial class MainWindow
 
         RefreshCharacterPanel();
         LoadPromptFromBuffer();
+        UpdateEffortUI();
         UpdateSplitVisibility();
         if (IsAdvancedWindowOpen) SyncSidebarToAdvanced();
 

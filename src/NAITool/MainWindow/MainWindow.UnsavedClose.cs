@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using NAITool.Services;
 using System.Threading.Tasks;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -76,21 +78,12 @@ public sealed partial class MainWindow
 
     private bool HasUnsavedWorkspaceChanges(out string workspaceName)
     {
-        workspaceName = _currentMode switch
-        {
-            AppMode.I2I => L("mode.i2i"),
-            AppMode.Upscale => L("mode.upscale"),
-            AppMode.Effects => L("mode.post"),
-            _ => "",
-        };
-
-        return _currentMode switch
-        {
-            AppMode.I2I => HasUnsavedI2IWorkspaceChanges(),
-            AppMode.Upscale => _upscaleInputImageBytes != null && _upscaleWorkspaceDirty,
-            AppMode.Effects => _effectsImageBytes != null && _effectsWorkspaceDirty,
-            _ => false,
-        };
+        var workspaces = WorkspaceUnsavedSummary.Collect(
+            HasUnsavedI2IWorkspaceChanges(),
+            _upscaleInputImageBytes != null && _upscaleWorkspaceDirty,
+            _effectsImageBytes != null && _effectsWorkspaceDirty);
+        workspaceName = string.Join(", ", workspaces.Select(key => L(key)));
+        return workspaces.Length > 0;
     }
 
     private bool HasUnsavedI2IWorkspaceChanges()

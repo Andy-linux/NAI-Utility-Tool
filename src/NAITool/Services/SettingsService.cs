@@ -17,9 +17,19 @@ public class SettingsService
 {
     private static string AppRootDir => AppPathResolver.AppRootDir;
 
-    private static readonly string ConfigDir = Path.Combine(AppRootDir, "user", "config");
-    private static readonly string SettingsFilePath = Path.Combine(ConfigDir, "settings.json");
-    private static readonly string ApiConfigFilePath = Path.Combine(ConfigDir, "apiconfig.json");
+    private static string DefaultConfigDir => Path.Combine(AppRootDir, "user", "config");
+    private readonly string ConfigDir;
+    private readonly string SettingsFilePath;
+    private readonly string ApiConfigFilePath;
+
+    public SettingsService() : this(DefaultConfigDir) { }
+
+    internal SettingsService(string configDir)
+    {
+        ConfigDir = Path.GetFullPath(configDir);
+        SettingsFilePath = Path.Combine(ConfigDir, "settings.json");
+        ApiConfigFilePath = Path.Combine(ConfigDir, "apiconfig.json");
+    }
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -33,7 +43,7 @@ public class SettingsService
     public bool HasApiTokens => Accounts.Any(a => !string.IsNullOrWhiteSpace(a.Token));
     private readonly object _saveLock = new();
 
-    // Retain cache by credential identity, never by editable row index.
+    // Retain cache by credential identity.
     public void SetApiTokens(IEnumerable<string> tokens)
     {
         lock (_saveLock)
@@ -53,9 +63,28 @@ public class SettingsService
         }
     }
 
-    public bool ApiTokenDecryptFailed { get; private set; }
+    // UI row mapping can preserve undecryptable ciphertext in untouched rows.
+    public void SetApiAccounts(IEnumerable<ApiAccount> accounts)
+    {
+        lock (_saveLock)
+        {
+            var canonical = new Dictionary<string, ApiAccount>(StringComparer.Ordinal);
+            CachedApiConfig.Accounts = accounts.Select(account =>
+            {
+                if (account.Token.Length == 0) return account;
+                if (canonical.TryGetValue(account.Token, out var first)) return first;
+                canonical.Add(account.Token, account);
+                return account;
+            }).ToList();
+        }
+    }
 
-    public static bool SettingsFileExists => File.Exists(SettingsFilePath);
+    public bool ApiTokenDecryptFailed { get; private set; }
+    public bool SettingsRecoveredFromBackup { get; private set; }
+    public bool ApiConfigRecoveredFromBackup { get; private set; }
+
+    public static bool SettingsFileExists => File.Exists(Path.Combine(DefaultConfigDir, "settings.json")) ||
+        File.Exists(Path.Combine(DefaultConfigDir, "settings.json.bak"));
 
     private static byte[] GetMachineEntropy()
     {
@@ -94,26 +123,48 @@ public class SettingsService
     /// <summary>从磁盘加载设置（通用 + API 凭证 + 缓存账户信息）</summary>
     public void Load()
     {
+        lock (_saveLock) LoadCore();
+    }
+
+    private void LoadCore()
+    {
+        SettingsRecoveredFromBackup = false;
+        ApiConfigRecoveredFromBackup = false;
+        ApiTokenDecryptFailed = false;
+        Settings = new();
+        CachedApiConfig = new();
         try
         {
-            if (File.Exists(SettingsFilePath))
+            if (File.Exists(SettingsFilePath) || File.Exists(SettingsFilePath + ".bak"))
             {
-                var json = File.ReadAllText(SettingsFilePath);
+                var json = AtomicJsonFile.Read(SettingsFilePath, out bool recovered, ValidateSettingsJson);
+                SettingsRecoveredFromBackup = recovered;
                 Settings = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new();
                 Settings.Normalize();
             }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Settings] Load failed: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[Settings] Load failed: {ex.GetType().Name}");
             Settings = new();
         }
 
         try
         {
-            if (File.Exists(ApiConfigFilePath))
+            if (File.Exists(ApiConfigFilePath) || File.Exists(ApiConfigFilePath + ".bak"))
             {
-                var json = File.ReadAllText(ApiConfigFilePath);
+                string json;
+                bool recovered;
+                try
+                {
+                    json = AtomicJsonFile.Read(ApiConfigFilePath, out recovered, ValidateUsableApiConfigJson, ProtectLegacyBackup);
+                }
+                catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+                {
+                    // Foreign-machine DPAPI data remains intact and editable when neither copy decrypts.
+                    json = AtomicJsonFile.Read(ApiConfigFilePath, out recovered, ValidateApiConfigJson, ProtectLegacyBackup);
+                }
+                ApiConfigRecoveredFromBackup = recovered;
                 using var document = JsonDocument.Parse(json);
                 if (document.RootElement.TryGetProperty(nameof(ApiConfig.Accounts), out _))
                 {
@@ -169,7 +220,7 @@ public class SettingsService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[ApiConfig] 加载失败: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[ApiConfig] Load failed: {ex.GetType().Name}");
         }
     }
 
@@ -183,23 +234,73 @@ public class SettingsService
             Settings.Normalize();
 
             var settingsJson = JsonSerializer.Serialize(Settings, JsonOptions);
-            File.WriteAllText(SettingsFilePath, settingsJson);
 
             foreach (var account in Accounts)
             {
-                if (!string.IsNullOrWhiteSpace(account.Token) && account.EncryptedApiToken == null)
-                    account.EncryptedApiToken = EncryptToken(account.Token);
+                if (!string.IsNullOrWhiteSpace(account.Token))
+                {
+                    // Re-encrypt changed credentials.
+                    if (account.EncryptedApiToken == null || DecryptToken(account.EncryptedApiToken) != account.Token)
+                        account.EncryptedApiToken = EncryptToken(account.Token);
+                }
+                // Keep undecryptable ciphertext for recovery; explicit UI clearing creates a new empty account.
             }
             var apiJson = JsonSerializer.Serialize(CachedApiConfig, JsonOptions);
-            File.WriteAllText(ApiConfigFilePath, apiJson);
+            ValidateApiConfigJson(apiJson);
+            AtomicJsonFile.Write(SettingsFilePath, settingsJson, ValidateSettingsJson);
+            AtomicJsonFile.Write(ApiConfigFilePath, apiJson,
+                ValidateApiConfigJson, ProtectLegacyBackup);
 
             return true;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Settings] Save failed: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[Settings] Save failed: {ex.GetType().Name}");
             return false;
         }
+    }
+
+    private static string ProtectLegacyBackup(string json)
+    {
+        // Encrypt legacy credentials in the recovery copy.
+        using var parsed = JsonDocument.Parse(json);
+        if (parsed.RootElement.TryGetProperty(nameof(ApiConfig.Accounts), out _)) return json;
+        var legacy = JsonSerializer.Deserialize<LegacyApiConfig>(json, JsonOptions)!;
+        if (string.IsNullOrWhiteSpace(legacy.EncryptedApiToken) && !string.IsNullOrWhiteSpace(legacy.ApiToken))
+            legacy.EncryptedApiToken = EncryptToken(legacy.ApiToken);
+        legacy.ApiToken = null;
+        return JsonSerializer.Serialize(legacy, JsonOptions);
+    }
+
+    private static void ValidateSettingsJson(string json)
+    {
+        _ = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions)
+            ?? throw new JsonException("Invalid settings.");
+    }
+
+    private static void ValidateUsableApiConfigJson(string json)
+    {
+        ValidateApiConfigJson(json);
+        using var parsed = JsonDocument.Parse(json);
+        IEnumerable<string?> encrypted;
+        if (parsed.RootElement.TryGetProperty(nameof(ApiConfig.Accounts), out _))
+            encrypted = (JsonSerializer.Deserialize<ApiConfig>(json, JsonOptions)!.Accounts ?? [])
+                .Where(a => a != null).Select(a => a.EncryptedApiToken);
+        else
+            encrypted = [JsonSerializer.Deserialize<LegacyApiConfig>(json, JsonOptions)!.EncryptedApiToken];
+        if (encrypted.Any(value => !string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(DecryptToken(value))))
+            throw new JsonException("Credential cannot be decrypted.");
+    }
+
+    private static void ValidateApiConfigJson(string json)
+    {
+        using var parsed = JsonDocument.Parse(json);
+        if (parsed.RootElement.TryGetProperty(nameof(ApiConfig.Accounts), out _))
+            _ = JsonSerializer.Deserialize<ApiConfig>(json, JsonOptions)
+                ?? throw new JsonException("Invalid API configuration.");
+        else
+            _ = JsonSerializer.Deserialize<LegacyApiConfig>(json, JsonOptions)
+                ?? throw new JsonException("Invalid legacy API configuration.");
     }
 
     private sealed class LegacyApiConfig
@@ -231,6 +332,12 @@ public class AppSettings
     public double GalleryThumbnailHeight { get; set; } = DefaultGalleryThumbnailHeight;
     public ApiCallMode ApiCallMode { get; set; } = ApiCallMode.RoundRobin;
     public string ApiBaseUrl { get; set; } = "";
+    // Waiting plus execution is the end-to-end budget where no queue-start signal exists.
+    public int ApiWaitingTimeoutSeconds { get; set; } = 60;
+    public int ApiGenerationTimeoutSeconds { get; set; } = 300;
+    public int ApiUpscaleTimeoutSeconds { get; set; } = 300;
+    public int ApiTextTimeoutSeconds { get; set; } = 120;
+    public int ApiReadOnlyTimeoutSeconds { get; set; } = 15;
     public bool WeightHighlight { get; set; } = true;
     public bool AutoComplete { get; set; } = true;
     public bool RememberPromptAndParameters { get; set; } = true;
@@ -292,6 +399,11 @@ public class AppSettings
             ? Math.Clamp(GalleryThumbnailHeight, MinGalleryThumbnailHeight, MaxGalleryThumbnailHeight)
             : DefaultGalleryThumbnailHeight;
         ApiBaseUrl = NormalizeApiBaseUrl(ApiBaseUrl);
+        ApiWaitingTimeoutSeconds = Math.Clamp(ApiWaitingTimeoutSeconds, 1, 300);
+        ApiGenerationTimeoutSeconds = Math.Clamp(ApiGenerationTimeoutSeconds, 1, 3600);
+        ApiUpscaleTimeoutSeconds = Math.Clamp(ApiUpscaleTimeoutSeconds, 1, 3600);
+        ApiTextTimeoutSeconds = Math.Clamp(ApiTextTimeoutSeconds, 1, 3600);
+        ApiReadOnlyTimeoutSeconds = Math.Clamp(ApiReadOnlyTimeoutSeconds, 1, 3600);
         if (!Enum.IsDefined(ApiCallMode)) ApiCallMode = ApiCallMode.RoundRobin;
         if (!string.IsNullOrWhiteSpace(LanguageCode))
             LanguageCode = LocalizationService.NormalizeLanguageCode(LanguageCode);
@@ -314,6 +426,7 @@ public class AppSettings
             >= 1.25 => 1.5,
             _ => 1.0,
         } : 1.5;
+        ReverseTagger ??= new();
         OnnxPerformance ??= new()
         {
             UnloadModelAfterInference = ReverseTagger.UnloadModelAfterInference,
@@ -321,11 +434,13 @@ public class AppSettings
         OnnxPerformance.Normalize();
         PostEffectsPerformance ??= new();
         PostEffectsPerformance.Normalize();
-        ReverseTagger ??= new();
         ReverseTagger.UnloadModelAfterInference = OnnxPerformance.UnloadModelAfterInference;
         GenParameters ??= new() { Model = NAIParameters.DefaultGenerationModel };
         InpaintParameters ??= new() { Model = NAIParameters.DefaultInpaintModel };
         I2IDenoiseParameters ??= new() { Model = NAIParameters.DefaultI2IDenoiseModel, DenoiseStrength = 0.7, DenoiseNoise = 0 };
+        GenParameters.Model ??= NAIParameters.DefaultGenerationModel;
+        InpaintParameters.Model ??= NAIParameters.DefaultInpaintModel;
+        I2IDenoiseParameters.Model ??= NAIParameters.DefaultI2IDenoiseModel;
         RememberedPrompts ??= new();
         Automation ??= new();
         Automation.Normalize();
@@ -353,7 +468,9 @@ public class AppSettings
 
         return Uri.TryCreate(normalized, UriKind.Absolute, out var uri) &&
                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) &&
-               !string.IsNullOrWhiteSpace(uri.Host);
+               !string.IsNullOrWhiteSpace(uri.Host) &&
+               string.IsNullOrEmpty(uri.UserInfo) && string.IsNullOrEmpty(uri.Query) &&
+               string.IsNullOrEmpty(uri.Fragment);
     }
 }
 

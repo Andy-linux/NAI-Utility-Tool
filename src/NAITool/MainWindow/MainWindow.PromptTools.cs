@@ -122,28 +122,6 @@ public sealed partial class MainWindow
 
         try
         {
-            if (_settings.Settings.UsesCustomApiBaseUrl)
-            {
-                var unsupportedDialog = new ContentDialog
-                {
-                    Title = L("dialog.prompt_generator.title"),
-                    Content = new TextBlock
-                    {
-                        Text = L("dialog.prompt_generator.custom_endpoint_unsupported"),
-                        TextWrapping = TextWrapping.Wrap,
-                        MaxWidth = 420,
-                    },
-                    CloseButtonText = L("button.close"),
-                    CloseButtonStyle = (Style)Application.Current.Resources["AccentButtonStyle"],
-                    DefaultButton = ContentDialogButton.Close,
-                    XamlRoot = this.Content.XamlRoot,
-                    RequestedTheme = ((FrameworkElement)this.Content).RequestedTheme,
-                };
-                unsupportedDialog.Resources["ContentDialogMaxWidth"] = 520.0;
-                await unsupportedDialog.ShowAsync();
-                return;
-            }
-
             var inputBox = new TextBox
             {
                 AcceptsReturn = true,
@@ -249,6 +227,7 @@ public sealed partial class MainWindow
                 foreach (string model in modelCandidates)
                 {
                     var (text, error) = await _naiService.GeneratePromptTextAsync(instruction, model);
+                    _ = RefreshAnlasInfoAsync(forceRefresh: true);
                     if (!string.IsNullOrWhiteSpace(text))
                     {
                         outputBox.Text = ExtractGeneratedPromptText(text);

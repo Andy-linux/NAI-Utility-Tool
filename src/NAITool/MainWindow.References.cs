@@ -172,11 +172,16 @@ public sealed partial class MainWindow
         if (!_settings.HasApiTokens)
             return 0;
 
-        int steps = stepOverride ?? parameters.Steps;
+        bool medium = ModelCapabilities.IsMedium(parameters);
+        parameters = ModelCapabilities.CreateRequestSnapshot(parameters);
+        model = parameters.Model;
+        int steps = medium ? parameters.Steps : stepOverride ?? parameters.Steps;
         bool imageToImage = imageToImageOverride ??
             (_currentMode == AppMode.I2I && _i2iEditMode == I2IEditMode.Denoise);
         var cost = ApiRequestCost.Image(model, width, height, steps,
             sm: parameters.Sm && !imageToImage && _currentMode != AppMode.I2I,
+            smDyn: parameters.Sm && parameters.SmDyn && !imageToImage && _currentMode != AppMode.I2I,
+            characterReference: SupportsPreciseReferenceFeature() && ActivePreciseReferenceCount() > 0,
             strength: imageToImage ? parameters.DenoiseStrength
                 : _currentMode == AppMode.I2I && IsV4PlusModelKey(model) ? parameters.InpaintStrength : 1);
 
@@ -324,6 +329,7 @@ public sealed partial class MainWindow
             string rawBase64 = entry.OriginalImageBase64 ?? entry.ImageBase64;
             var (vibeData, error) = await _naiService.EncodeVibeAsync(
                 rawBase64, model, entry.InformationExtracted, ct);
+            _ = RefreshAnlasInfoAsync(forceRefresh: true);
 
             if (vibeData == null)
                 return Lf("references.error.vibe_encode_failed", entry.FileName, error ?? "");

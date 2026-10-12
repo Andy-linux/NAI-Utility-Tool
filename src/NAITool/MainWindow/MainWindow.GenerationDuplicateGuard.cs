@@ -48,7 +48,7 @@ public sealed partial class MainWindow
         return ComputeStableHash(json);
     }
 
-    private static object[] CreateCharacterSignatureData(List<CharacterPromptInfo>? characters)
+    private static object[] CreateCharacterSignatureData(List<CharacterPromptInfo>? characters, bool medium = false)
     {
         if (characters == null || characters.Count == 0)
             return [];
@@ -57,7 +57,7 @@ public sealed partial class MainWindow
             .Select(x => new
             {
                 x.PositivePrompt,
-                x.NegativePrompt,
+                NegativePrompt = medium ? "" : x.NegativePrompt,
                 x.CenterX,
                 x.CenterY,
                 x.UseCustomPosition,
@@ -113,6 +113,8 @@ public sealed partial class MainWindow
         List<VibeTransferInfo>? vibes,
         List<PreciseReferenceInfo>? preciseReferences)
     {
+        parameters = ModelCapabilities.CreateRequestSnapshot(parameters);
+        if (ModelCapabilities.IsMedium(parameters)) negativePrompt = "";
         var payload = new
         {
             Kind = "text2img",
@@ -124,16 +126,20 @@ public sealed partial class MainWindow
             parameters.Scale,
             parameters.CfgRescale,
             parameters.Sm,
+            parameters.SmDyn,
+            parameters.Effort,
             parameters.Variety,
             parameters.QualityToggle,
+            parameters.QualityPreset,
+            parameters.UcPresetId,
             parameters.Steps,
-            parameters.UcPreset,
+            UcPreset = NovelAiPromptPresets.ResolveUcId(parameters),
             Seed = SeedValue.ToRequestValue(actualSeed),
             Prompt = prompt,
             NegativePrompt = negativePrompt,
-            Characters = CreateCharacterSignatureData(characters),
-            Vibes = CreateVibeSignatureData(vibes),
-            PreciseReferences = CreatePreciseReferenceSignatureData(preciseReferences),
+            Characters = CreateCharacterSignatureData(characters, ModelCapabilities.IsMedium(parameters)),
+            Vibes = CreateVibeSignatureData(NovelAiAnlasCalculator.IsV5Model(parameters.Model) ? null : vibes),
+            PreciseReferences = CreatePreciseReferenceSignatureData(IsV45ModelKey(parameters.Model) ? preciseReferences : null),
         };
 
         return new GenerationRequestSignature
@@ -157,6 +163,8 @@ public sealed partial class MainWindow
         string? maskBase64,
         Vector2 imageOffset)
     {
+        parameters = ModelCapabilities.CreateRequestSnapshot(parameters);
+        if (ModelCapabilities.IsMedium(parameters)) negativePrompt = "";
         var payload = new
         {
             Kind = kind,
@@ -168,10 +176,14 @@ public sealed partial class MainWindow
             parameters.Scale,
             parameters.CfgRescale,
             parameters.Sm,
+            parameters.SmDyn,
+            parameters.Effort,
             parameters.Variety,
             parameters.QualityToggle,
+            parameters.QualityPreset,
+            parameters.UcPresetId,
             parameters.Steps,
-            parameters.UcPreset,
+            UcPreset = NovelAiPromptPresets.ResolveUcId(parameters),
             parameters.DenoiseStrength,
             parameters.DenoiseNoise,
             parameters.InpaintStrength,
@@ -183,9 +195,9 @@ public sealed partial class MainWindow
             MaskHash = ComputeStableHash(maskBase64),
             ImageOffsetX = imageOffset.X,
             ImageOffsetY = imageOffset.Y,
-            Characters = CreateCharacterSignatureData(characters),
-            Vibes = CreateVibeSignatureData(vibes),
-            PreciseReferences = CreatePreciseReferenceSignatureData(preciseReferences),
+            Characters = CreateCharacterSignatureData(characters, ModelCapabilities.IsMedium(parameters)),
+            Vibes = CreateVibeSignatureData(NovelAiAnlasCalculator.IsV5Model(parameters.Model) ? null : vibes),
+            PreciseReferences = CreatePreciseReferenceSignatureData(IsV45ModelKey(parameters.Model) ? preciseReferences : null),
         };
 
         return new GenerationRequestSignature

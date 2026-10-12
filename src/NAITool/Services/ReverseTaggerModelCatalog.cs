@@ -19,8 +19,7 @@ internal static class ReverseTaggerModelCatalog
             if (string.IsNullOrWhiteSpace(modelDirectory) || !Directory.Exists(modelDirectory))
                 return false;
 
-            bool hasOnnx = Directory.GetFiles(modelDirectory, "*.onnx", SearchOption.AllDirectories).Length > 0;
-            return hasOnnx && File.Exists(GetTagsCsvPath(modelDirectory));
+            return ModelIntegrity.IsUsableDirectory(modelDirectory);
         }
         catch
         {
@@ -30,7 +29,11 @@ internal static class ReverseTaggerModelCatalog
 
     public static IReadOnlyList<ReverseTagDefinition> LoadTagDefinitions(string modelDirectory)
     {
-        var csvPath = GetTagsCsvPath(modelDirectory);
+        return LoadTagDefinitionsFromFile(GetTagsCsvPath(modelDirectory));
+    }
+
+    internal static IReadOnlyList<ReverseTagDefinition> LoadTagDefinitionsFromFile(string csvPath)
+    {
         if (!File.Exists(csvPath))
             throw new FileNotFoundException(L("reverse.error.tags_csv_missing"));
 
@@ -134,6 +137,8 @@ internal static class ReverseTaggerModelCatalog
             builder.Append(ch);
         }
 
+        if (inQuotes)
+            throw new InvalidDataException("Unterminated CSV quoted field.");
         fields.Add(builder.ToString());
         return fields;
     }
@@ -234,13 +239,15 @@ internal static class ReverseTaggerModelCatalog
             tag = default!;
 
             int largestRequiredColumn = Math.Max(_nameColumn, _categoryColumn);
-            if (fields.Count <= largestRequiredColumn)
-                return false;
+            if (fields.Count <= Math.Max(largestRequiredColumn, _modelIndexColumn ?? 0))
+                throw new InvalidDataException("Incomplete tag CSV row.");
 
             int index = _modelIndexColumn.HasValue
                 ? ParseRequiredInt(fields[_modelIndexColumn.Value], L("reverse.csv.tag_index"))
                 : ordinalIndex;
             string name = fields[_nameColumn];
+            if (string.IsNullOrWhiteSpace(name))
+                throw new InvalidDataException("Empty tag name.");
             int category = ParseRequiredInt(fields[_categoryColumn], L("reverse.csv.tag_category"));
             var ips = _intellectualPropertiesColumn.HasValue && fields.Count > _intellectualPropertiesColumn.Value
                 ? ParseIps(fields[_intellectualPropertiesColumn.Value])

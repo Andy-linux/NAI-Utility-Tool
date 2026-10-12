@@ -207,7 +207,9 @@ public sealed partial class MainWindow
         if (CurrentRequestUsesAnlas()) return true;
         if (!IsAssetProtectionStepLimitEnabled())
         {
-            int steps = IsAdvancedWindowOpen ? (int)_advNbSteps.Value : CurrentParams.Steps;
+            int steps = ModelCapabilities.IsMedium(CurrentParams)
+                ? ModelCapabilities.CreateRequestSnapshot(CurrentParams).Steps
+                : IsAdvancedWindowOpen ? (int)_advNbSteps.Value : CurrentParams.Steps;
             if (steps > 28) return true;
         }
         return false;
@@ -224,7 +226,7 @@ public sealed partial class MainWindow
         });
         content.Children.Add(new TextBlock
         {
-            Text = anlasCost.ToString(),
+            Text = anlasCost.ToString() + " Anlas",
             Opacity = 0.9,
             VerticalAlignment = VerticalAlignment.Center,
         });
@@ -261,7 +263,7 @@ public sealed partial class MainWindow
         {
             content.Children.Add(new TextBlock
             {
-                Text = anlasCost.Value.ToString(),
+                Text = anlasCost.Value.ToString() + " Anlas",
                 Opacity = 0.9,
                 VerticalAlignment = VerticalAlignment.Center,
             });
@@ -399,6 +401,7 @@ public sealed partial class MainWindow
     {
         if (BtnRedoGenerate == null) return;
 
+        BtnRedoGenerate.Style = (Style)Application.Current.Resources[EstimateCurrentRequestAnlasCost() > 0 ? "AccentButtonStyle" : "SubtleButtonStyle"];
         bool warn = _currentMode == AppMode.I2I &&
                     MaskCanvas.IsInPreviewMode &&
                     EstimateCurrentRequestAnlasCost() > 0;
@@ -410,7 +413,7 @@ public sealed partial class MainWindow
         }
         else
         {
-            BtnRedoGenerate.Content = CreateSymbolActionButtonContent(Symbol.Refresh, L("button.regenerate"));
+            BtnRedoGenerate.Content = CreateAnlasActionButtonContent(L("button.regenerate"), EstimateCurrentRequestAnlasCost());
             ClearGoldAccentButtonStyle(BtnRedoGenerate);
         }
     }
@@ -421,14 +424,15 @@ public sealed partial class MainWindow
 
         BtnEnhanceGenResult.IsEnabled = _currentGenImageBytes != null && !_generateRequestRunning;
         int estimatedAnlas = EstimateGenEnhanceAnlasCost();
+        BtnEnhanceGenResult.Style = (Style)Application.Current.Resources[estimatedAnlas > 0 ? "AccentButtonStyle" : "SubtleButtonStyle"];
         if (estimatedAnlas > 0)
         {
-            BtnEnhanceGenResult.Content = CreateFontIconActionButtonContent("\uE771", L("button.enhance"), estimatedAnlas);
+            BtnEnhanceGenResult.Content = CreateAnlasActionButtonContent(L("button.enhance"), estimatedAnlas);
             ApplyGoldAccentButtonStyle(BtnEnhanceGenResult);
         }
         else
         {
-            BtnEnhanceGenResult.Content = CreateFontIconActionButtonContent("\uE771", L("button.enhance"));
+            BtnEnhanceGenResult.Content = CreateFontIconActionButtonContent("\uE771", L("button.enhance"), estimatedAnlas);
             ClearGoldAccentButtonStyle(BtnEnhanceGenResult);
         }
     }
@@ -438,6 +442,7 @@ public sealed partial class MainWindow
         if (IsAnyGenerateLoopRunning()) return;
         BtnGenerate.IsEnabled = !_generateRequestRunning;
         bool hasKey = _settings.HasApiTokens;
+        ToolTipService.SetToolTip(BtnGenerate, null);
         var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         if (hasKey && _anlasRefreshRunning && !_anlasInitialFetchDone)
         {
@@ -464,14 +469,21 @@ public sealed partial class MainWindow
                 });
                 content.Children.Add(new TextBlock
                 {
-                    Text = estimatedAnlas.ToString(),
+                    Text = "≈ " + estimatedAnlas.ToString() + " Anlas",
                     Opacity = 0.9,
                 });
             }
             else
             {
-                content.Children.Add(new SymbolIcon(Symbol.Send));
+                content.Children.Add(new FontIcon
+                {
+                    FontFamily = SymbolFontFamily,
+                    Glyph = "\uF159",
+                    FontSize = 16,
+                });
+                content.Children.Add(new TextBlock { Text = "0 Anlas", Opacity = 0.9 });
             }
+            ToolTipService.SetToolTip(BtnGenerate, L("quota.estimate_hint"));
             content.Children.Add(new TextBlock { Text = L("button.send") });
         }
         else

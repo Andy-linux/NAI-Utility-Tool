@@ -38,7 +38,7 @@ public sealed partial class MainWindow
             CompactPaneLength = 48,
             AlwaysShowHeader = false,
             Content = contentHost,
-            Width = 1080,
+            Width = Math.Min(1080, Math.Max(320, root.ActualWidth - 64)),
             RequestedTheme = root.RequestedTheme,
         };
 
@@ -549,7 +549,7 @@ public sealed partial class MainWindow
         {
             Content = panel,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
             Padding = new Thickness(0, 0, 0, 8),

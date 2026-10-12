@@ -255,6 +255,8 @@ public sealed partial class MainWindow
         MenuSendGenToInspect.Text = L("action.send_to_inspect");
         TxtDeleteGenResult.Text = L("button.delete");
         TxtCloseGenResult.Text = L("button.close");
+        ToolTipService.SetToolTip(BtnDeleteGenResult, TxtDeleteGenResult.Text);
+        ToolTipService.SetToolTip(BtnCloseGenResultBar, TxtCloseGenResult.Text);
         TxtApplyResult.Text = L("button.apply");
         TxtRedoGenerate.Text = L("button.regenerate");
         TxtCompareResult.Text = L("button.compare");
@@ -273,6 +275,8 @@ public sealed partial class MainWindow
         TxtSuperDropEffects.Text = L("superdrop.effects");
         TxtSuperDropInspect.Text = L("superdrop.inspect");
         TxtHistoryTitle.Text = L("history.title");
+        ToolTipService.SetToolTip(BtnHistoryBlur, L("history.blur"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(BtnHistoryBlur, L("history.blur"));
         ToolTipService.SetToolTip(HistoryResizeHandle, L("history.resize_sidebar"));
         HistoryDatePicker.PlaceholderText = L("history.select_date");
         ToolTipService.SetToolTip(GalleryImageSizeControl, L("gallery.image_size"));

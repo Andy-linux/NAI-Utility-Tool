@@ -423,7 +423,6 @@ public sealed partial class MainWindow
                 ShowI2IResultBar(resetPosition: true);
                 if (!keepGenerateButtonInteractive)
                     BtnGenerate.IsEnabled = true;
-                _ = RefreshAnlasInfoAsync(forceRefresh: true);
                 DebugLog($"[Inpaint] Completed | Seed={actualSeed}");
                 TxtStatus.Text = L("generate.status.completed");
                 return true;
@@ -439,8 +438,8 @@ public sealed partial class MainWindow
         }
         catch (Exception ex)
         {
-            DebugLog($"[Inpaint] Failed: {ex}");
-            TxtStatus.Text = Lf("generate.status.failed", ex.Message);
+            DebugLog($"[Inpaint] Failed: {ex.GetType().Name}");
+            TxtStatus.Text = L(NovelAIRequestPolicy.ExceptionKey(ex));
             if (!keepGenerateButtonInteractive)
                 BtnGenerate.IsEnabled = true;
             return false;
@@ -504,10 +503,12 @@ public sealed partial class MainWindow
             })
             : null;
 
+        var requestDraft = CaptureClientParameterDraft(ImageRequestParameters);
         var (imageBytes, error) = await _naiService.InpaintAsync(
             imageBase64, maskBase64,
             MaskCanvas.CanvasW, MaskCanvas.CanvasH,
             prompt, negPrompt, chars, vibes, preciseReferences, progress, ct);
+        _ = RefreshAnlasInfoAsync(forceRefresh: true);
 
         acceptStreamPreview = false;
         ++streamPreviewVer;
@@ -537,6 +538,7 @@ public sealed partial class MainWindow
             return null;
         }
 
+        imageBytes = AddClientParameterDraftMetadata(imageBytes, requestDraft);
         var textChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(imageBytes));
 
         using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
@@ -641,7 +643,6 @@ public sealed partial class MainWindow
                 ShowI2IResultBar(resetPosition: true);
                 if (!keepGenerateButtonInteractive)
                     BtnGenerate.IsEnabled = true;
-                _ = RefreshAnlasInfoAsync(forceRefresh: true);
                 DebugLog($"[Denoise] Completed | Seed={actualSeed}");
                 TxtStatus.Text = L("generate.status.completed");
                 return true;
@@ -657,8 +658,8 @@ public sealed partial class MainWindow
         }
         catch (Exception ex)
         {
-            DebugLog($"[Denoise] Failed: {ex}");
-            TxtStatus.Text = Lf("generate.status.failed", ex.Message);
+            DebugLog($"[Denoise] Failed: {ex.GetType().Name}");
+            TxtStatus.Text = L(NovelAIRequestPolicy.ExceptionKey(ex));
             if (!keepGenerateButtonInteractive)
                 BtnGenerate.IsEnabled = true;
             return false;
@@ -722,10 +723,12 @@ public sealed partial class MainWindow
             })
             : null;
 
+        var requestDraft = CaptureClientParameterDraft(ImageRequestParameters);
         var (imageBytes, error) = await _naiService.ImageToImageAsync(
             imageBase64,
             MaskCanvas.CanvasW, MaskCanvas.CanvasH,
             prompt, negPrompt, chars, vibes, preciseReferences, progress, ct);
+        _ = RefreshAnlasInfoAsync(forceRefresh: true);
 
         acceptStreamPreview = false;
         ++streamPreviewVer;
@@ -755,6 +758,7 @@ public sealed partial class MainWindow
             return null;
         }
 
+        imageBytes = AddClientParameterDraftMetadata(imageBytes, requestDraft);
         var textChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(imageBytes));
 
         using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
@@ -897,7 +901,6 @@ public sealed partial class MainWindow
                 if (resultBitmap != null)
                 {
                     _i2iPreviewDirty = true;
-                    _ = RefreshAnlasInfoAsync(forceRefresh: true);
                     TxtStatus.Text = L("generate.status.regenerated");
                     return true;
                 }
@@ -977,7 +980,7 @@ public sealed partial class MainWindow
 
     private void SetResultBarEnabled(bool enabled)
     {
-        foreach (var child in ((StackPanel)((Border)ResultActionBar.Children[0]).Child).Children)
+        foreach (var child in ((StackPanel)((ScrollViewer)((Border)ResultActionBar.Children[0]).Child).Content).Children)
         {
             if (child is Button btn) btn.IsEnabled = enabled;
         }

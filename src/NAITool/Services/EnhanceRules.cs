@@ -33,7 +33,13 @@ internal static class EnhanceRules
         double scale = useMax
             ? Math.Min(2, Math.Sqrt((double)MaxPixels / ((long)width * height)))
             : amount;
-        return ((int)Math.Floor(width * scale), (int)Math.Floor(height * scale));
+        int outputWidth = (int)Math.Floor(width * scale);
+        int outputHeight = (int)Math.Floor(height * scale);
+        // The official generateEnhance dispatcher rounds ordinary dimensions to
+        // the nearest 64 before resizing the input; ties round upward (85097.If).
+        // Max sends the source dimensions with upscaled_enhance instead.
+        return useMax ? (outputWidth, outputHeight) :
+            (Math.Max(64, ((outputWidth + 32) / 64) * 64), Math.Max(64, ((outputHeight + 32) / 64) * 64));
     }
 
     internal static List<double> GetAvailableAmounts(int width, int height)
@@ -42,13 +48,12 @@ internal static class EnhanceRules
         if (width <= 0 || height <= 0 || (long)width * height > MaxPixels)
             return amounts;
 
-        amounts.Add(1.0);
-        bool standardPortrait = width == 832 && height == 1216 || width == 1216 && height == 832;
-        foreach (double amount in standardPortrait ? new[] { 1.5 } : new[] { 1.5, 2.0 })
+        foreach (double amount in new[] { 1.0, 1.5, 2.0 })
         {
             var dims = GetOutputDimensions(width, height, amount);
-            if ((long)dims.Width * dims.Height <= MaxPixels &&
-                (standardPortrait || dims.Width % 64 == 0 && dims.Height % 64 == 0))
+            // Imported source images need not be aligned; apply the official
+            // request rounding before enforcing the actual output pixel cap.
+            if ((long)dims.Width * dims.Height <= MaxPixels)
                 amounts.Add(amount);
         }
         return amounts;

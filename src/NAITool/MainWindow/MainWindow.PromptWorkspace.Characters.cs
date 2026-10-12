@@ -97,6 +97,12 @@ public sealed partial class MainWindow
 
     private UIElement BuildCharacterUI(CharacterEntry entry, int index)
     {
+        bool medium = ModelCapabilities.IsMedium(CurrentParams);
+        if (medium)
+        {
+            SaveCharacterPrompt(entry);
+            entry.IsPositiveTab = true;
+        }
         var container = new StackPanel { Spacing = 4 };
 
         var headerGrid = new Grid();
@@ -146,6 +152,7 @@ public sealed partial class MainWindow
         var tabNeg = new Microsoft.UI.Xaml.Controls.Primitives.ToggleButton
         {
             Content = CreateTabHeaderText(L("prompt.negative_compact_character"), 11), IsChecked = !entry.IsPositiveTab,
+            IsEnabled = !medium,
             CornerRadius = new CornerRadius(0, 4, 4, 0),
             MinWidth = 0, Height = 26, Padding = new Thickness(8, 2, 8, 2),
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -562,7 +569,7 @@ public sealed partial class MainWindow
         {
             if (entry.IsDisabled) continue;
             entry.PositivePrompt = StripCharCountPrefix(entry.PositivePrompt);
-            entry.NegativePrompt = StripCharCountPrefix(entry.NegativePrompt);
+            entry.NegativePrompt = HighDraftRules.TransformNegative(CurrentParams, entry.NegativePrompt, StripCharCountPrefix);
             if (entry.PromptBox != null)
             {
                 entry.PromptBox.Text = entry.IsPositiveTab ? entry.PositivePrompt : entry.NegativePrompt;
