@@ -10,7 +10,17 @@ The fork version remains `1.3.0_fork.1`. This document describes the **dev stage
 
 ## Dev goal and status (2026-10-17)
 
-**The dev branch aims to align original-client interactions, effective generation requests, generated results and original-image Info reproduction with the NovelAI website, while retaining local extensions.** This stage uses the captured website build `78a367e` as its reference. Completing this cleanup does not establish identical behavior for every model, input and backend result.
+**The dev branch aims to align original-client interactions, effective generation requests, generated results and original-image Info reproduction with the NovelAI website, while retaining local extensions.** Recorded references include website builds `78a367e` and `b50892a`. Completing this cleanup does not establish identical behavior for every model, input and backend result.
+
+### Local import / Vibe / Reset update
+
+- Import: selected explicit-empty prompts or character lists replace stale input. Unchecked/missing fields and an empty append retain existing values; images without importable references retain the attached Vibes.
+- Vibe: distinguish source extraction from encoded-reference generation strength. Encoded-only entries expose no ineffective extraction slider and preserve their bytes. Source-backed files use exact model/extraction cache slots; new V4.5 Full sources default to `0.7`. Multiple encoded strengths can use the observed website normalization rule, while single-reference imports preserve the toggle.
+- Reset: the sidebar button restores fresh V5 Full Medium generation input, 832x1216 and a random seed. It clears generation characters/references and old High drafts without deleting API configuration, saved outputs or history, and prevents pending advanced-control text from restoring stale values.
+
+Live validation: one official original completed native import -> generation through the configured API gateway -> returned-image import -> generation again. Both raw response images and saved outputs matched the original RGB pixel-for-pixel, with identical encoded references and effective strength. Bounded native sequences also exercised empty/append/unchecked character imports, no-reference retention, Reset and High re-entry.
+
+Limits: this validates the recorded sample/states, not every model or combination. Native new-source extraction-control automation remains incomplete and no new encoding was sampled. Separate persisted V3/V4 reference collections are not implemented; normalization preference is session-scoped. Dirty i2i/cross-workspace combinations remain targeted verification work.
 
 ### Stage changelog
 
