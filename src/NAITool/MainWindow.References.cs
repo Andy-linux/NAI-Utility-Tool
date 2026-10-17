@@ -22,6 +22,7 @@ public sealed partial class MainWindow
     private const int MaxVibeTransfers = 16;
     private const int MaxPreciseReferences = 16;
 
+    private bool _normalizeVibeStrengths = true;
     private readonly List<VibeTransferEntry> _genVibeTransfers = new();
     private readonly List<PreciseReferenceEntry> _genPreciseReferences = new();
 
@@ -32,6 +33,8 @@ public sealed partial class MainWindow
         public double Strength { get; set; } = 0.6;
         public double InformationExtracted { get; set; } = 1.0;
         public bool IsEncodedFile { get; set; }
+        public bool HasInformationExtracted { get; set; } = true;
+        public string? EncodingModel { get; set; }
         public bool IsCollapsed { get; set; }
         public bool IsDisabled { get; set; }
         /// <summary>原始图片 SHA256 前缀（仅原始图片条目）</summary>
@@ -256,17 +259,23 @@ public sealed partial class MainWindow
 
     private void ApplyReferenceDataFromMetadata(ImageMetadata? meta, AppMode? targetMode = null)
     {
+        if (meta == null || !meta.VibeTransfers.Any(x => !string.IsNullOrWhiteSpace(x.ImageBase64)) &&
+            !meta.PreciseReferences.Any(x => !string.IsNullOrWhiteSpace(x.ImageBase64))) return;
+        // Validate before replacing either list; malformed metadata must not erase attachments.
+        foreach (var item in meta.VibeTransfers) Convert.FromBase64String(item.ImageBase64);
+        foreach (var item in meta.PreciseReferences) Convert.FromBase64String(item.ImageBase64);
         _genVibeTransfers.Clear();
         _genPreciseReferences.Clear();
 
-        if (meta == null)
-            return;
-
-        AppMode mode = targetMode ?? _currentMode;
-
-        if (SupportsVibeTransferFeature(mode))
+        if (meta.VibeTransfers.Count > 0)
         {
-            foreach (var vibe in meta.VibeTransfers.Take(GetMaxAllowedVibeTransfers()))
+            if (meta.VibeTransfers.Count > 1 && meta.VibeTransfers.All(x => x.IsEncoded))
+            {
+                double totalStrength = meta.VibeTransfers.Sum(x => Math.Abs(x.Strength));
+                if (totalStrength > 1.01) _normalizeVibeStrengths = false;
+                else if (totalStrength >= 0.99) _normalizeVibeStrengths = true;
+            }
+            foreach (var vibe in meta.VibeTransfers.Take(MaxVibeTransfers))
             {
                 if (string.IsNullOrWhiteSpace(vibe.ImageBase64))
                     continue;
@@ -277,12 +286,16 @@ public sealed partial class MainWindow
                     ImageBase64 = vibe.ImageBase64,
                     Strength = Math.Clamp(vibe.Strength, 0, 1),
                     InformationExtracted = Math.Clamp(vibe.InformationExtracted, 0, 1),
-                    IsEncodedFile = true,
+                    IsEncodedFile = vibe.IsEncoded,
+                    EncodingModel = vibe.EncodingModel,
+                    HasInformationExtracted = vibe.HasInformationExtracted,
+                    OriginalImageBase64 = vibe.IsEncoded ? null : vibe.ImageBase64,
+                    OriginalImageHash = vibe.IsEncoded ? null : VibeCacheService.ComputeImageHash(Convert.FromBase64String(vibe.ImageBase64)),
                 });
             }
         }
 
-        if (SupportsPreciseReferenceFeature(mode))
+        if (meta.PreciseReferences.Count > 0)
         {
             foreach (var reference in meta.PreciseReferences.Take(MaxPreciseReferences))
             {
@@ -315,6 +328,7 @@ public sealed partial class MainWindow
         if (!SupportsVibeTransferFeature())
             return null;
 
+        RecheckVibeTransferCacheState();
         if (!NovelAIService.IsV4PlusModel(model))
             return null;
 
@@ -337,6 +351,8 @@ public sealed partial class MainWindow
             string encodedBase64 = Convert.ToBase64String(vibeData);
             entry.ImageBase64 = encodedBase64;
             entry.IsEncodedFile = true;
+            entry.EncodingModel = model;
+            entry.HasInformationExtracted = true;
             entry.IsCachedEncoding = true;
 
             if (entry.OriginalImageHash != null)
@@ -377,7 +393,9 @@ public sealed partial class MainWindow
         if (ActivePreciseReferenceCount() > 0) return null;
 
         var result = _genVibeTransfers
-            .Where(x => !x.IsDisabled && !string.IsNullOrWhiteSpace(x.ImageBase64))
+            .Where(x => !x.IsDisabled && !string.IsNullOrWhiteSpace(x.ImageBase64) &&
+                (!x.IsEncodedFile || NovelAIService.IsV4PlusModel(GetCurrentModelKey()) &&
+                    VibeTransferInfo.IsCompatibleEncoding(x.EncodingModel, GetCurrentModelKey())))
             .Select(x => new VibeTransferInfo
             {
                 FileName = x.FileName,
@@ -385,6 +403,9 @@ public sealed partial class MainWindow
                 Strength = Math.Clamp(x.Strength, 0, 1),
                 InformationExtracted = Math.Clamp(x.InformationExtracted, 0, 1),
                 IsEncoded = x.IsEncodedFile,
+                NormalizeStrength = _normalizeVibeStrengths,
+                EncodingModel = x.EncodingModel,
+                HasInformationExtracted = x.HasInformationExtracted,
             })
             .ToList();
 

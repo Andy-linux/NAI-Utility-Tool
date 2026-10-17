@@ -391,7 +391,7 @@ public static class VibeCacheService
     /// <summary>
     /// 从 .naiv4vibe JSON 中提取 base64 编码数据。
     /// </summary>
-    public static string? ExtractEncodingFromVibeJson(string json, double? targetIe = null)
+    public static string? ExtractEncodingFromVibeJson(string json, double? targetIe = null, string? model = null)
     {
         try
         {
@@ -401,20 +401,33 @@ public static class VibeCacheService
             if (!root.TryGetProperty("encodings", out var encodings))
                 return null;
 
+            string? encodingKey = model == null ? null : VibeTransferInfo.EncodingFamily(model) switch
+            {
+                "nai-diffusion-4-curated-preview" => "v4curated",
+                "nai-diffusion-4-full" => "v4full",
+                "nai-diffusion-4-5-curated" => "v4-5curated",
+                "nai-diffusion-4-5-full" => "v4-5full",
+                _ => null,
+            };
             foreach (var group in encodings.EnumerateObject())
             {
+                // Legacy local cache envelopes used v4full for every importInfo.model.
+                if (encodingKey != null && group.Name != encodingKey &&
+                    !(group.Name == "v4full" && ExtractModelFromVibeJson(json) == model && !root.TryGetProperty("identifier", out _))) continue;
                 foreach (var slot in group.Value.EnumerateObject())
                 {
                     if (!slot.Value.TryGetProperty("encoding", out var enc))
                         continue;
 
-                    if (targetIe.HasValue && slot.Value.TryGetProperty("params", out var p) &&
-                        p.TryGetProperty("information_extracted", out var ie))
+                    if (targetIe.HasValue)
                     {
-                        double storedIe = ie.GetDouble();
-                        if (Math.Abs(storedIe - targetIe.Value) > 0.005)
+                        if (!slot.Value.TryGetProperty("params", out var p) ||
+                            !p.TryGetProperty("information_extracted", out var ie) ||
+                            !ie.TryGetDouble(out double storedIe) || Math.Abs(storedIe - targetIe.Value) > 0.005)
                             continue;
                     }
+                    else if (root.TryGetProperty("type", out var sourceType) && sourceType.GetString() == "encoding" && slot.Name != "unknown")
+                        continue;
 
                     string? encoding = enc.GetString();
                     if (!string.IsNullOrWhiteSpace(encoding))

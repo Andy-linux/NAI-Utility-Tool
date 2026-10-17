@@ -25,6 +25,12 @@ public sealed partial class MainWindow
             return;
 
         VibeTransferContainer.Children.Clear();
+        if (_genVibeTransfers.Count > 0 && NovelAIService.IsV4PlusModel(GetCurrentModelKey()))
+        {
+            var normalize = new CheckBox { Content = L("references.vibe.normalize_strengths"), IsChecked = _normalizeVibeStrengths };
+            normalize.Click += (_, _) => _normalizeVibeStrengths = normalize.IsChecked == true;
+            VibeTransferContainer.Children.Add(normalize);
+        }
         for (int i = 0; i < _genVibeTransfers.Count; i++)
             VibeTransferContainer.Children.Add(BuildVibeTransferUI(_genVibeTransfers[i], i));
 
@@ -172,6 +178,12 @@ public sealed partial class MainWindow
                 entry.OriginalThumbnailHash = picked.ThumbnailHash;
                 entry.OriginalImageBase64 = picked.OriginalBase64;
                 entry.IsCachedEncoding = picked.IsCachedHit;
+                entry.OriginalImagePath = picked.OriginalImagePath;
+                entry.EncodingModel = picked.EncodingModel ?? (picked.IsCachedHit ? GetCurrentModelKey() : null);
+                entry.HasInformationExtracted = picked.HasInformationExtracted;
+                entry.InformationExtracted = picked.InformationExtracted;
+                entry.Strength = picked.Strength;
+                RecheckVibeTransferCacheState(refreshPanel: false);
                 RefreshVibeTransferPanel();
                 UpdateGenerateButtonWarning();
                 TxtStatus.Text = Lf("references.vibe.updated", entry.FileName);
@@ -192,7 +204,15 @@ public sealed partial class MainWindow
             strengthRow.IsHitTestVisible = canEdit;
             strengthRow.Opacity = canEdit ? 1.0 : 0.72;
             root.Children.Add(strengthRow);
+            if (entry.IsEncodedFile && !VibeTransferInfo.IsCompatibleEncoding(entry.EncodingModel, GetCurrentModelKey()))
+                root.Children.Add(new TextBlock { Text = L("references.vibe.incompatible_encoding"), FontSize = 12 });
 
+            if (entry.IsEncodedFile && string.IsNullOrWhiteSpace(entry.OriginalImageBase64))
+            {
+                root.Children.Add(new TextBlock { Text = L("references.vibe.encoded_extraction_unavailable"), FontSize = 12, TextWrapping = TextWrapping.Wrap });
+            }
+            else
+            {
             var infoRow = BuildReferenceSliderRow(
                 L("references.vibe.info_extracted"),
                 0, 1, entry.InformationExtracted,
@@ -204,6 +224,7 @@ public sealed partial class MainWindow
             infoRow.IsHitTestVisible = canEdit;
             infoRow.Opacity = canEdit ? 1.0 : 0.72;
             root.Children.Add(infoRow);
+            }
         }
 
         if (index < _genVibeTransfers.Count - 1)

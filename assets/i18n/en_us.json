@@ -1,4 +1,7 @@
 {
+  "references.vibe.normalize_strengths": "Normalize reference strengths",
+  "references.vibe.encoded_extraction_unavailable": "Encoded; original extraction unavailable",
+  "references.vibe.incompatible_encoding": "Encoding unavailable for this model",
   "settings.hub.developer.log_mode": "Logging mode",
   "settings.hub.developer.log_simple": "Simple — completed HTTP 2xx calls",
   "settings.hub.developer.log_debug": "Debug — all stages and failures",

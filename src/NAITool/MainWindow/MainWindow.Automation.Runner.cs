@@ -89,6 +89,9 @@ public sealed partial class MainWindow
                         ImageBase64 = selected.ImageBase64,
                         Strength = Math.Clamp(selected.Strength, 0, 1),
                         InformationExtracted = Math.Clamp(selected.InformationExtracted, 0, 1),
+                        IsEncoded = selected.IsEncodedFile,
+                        EncodingModel = selected.EncodingModel,
+                        HasInformationExtracted = selected.HasInformationExtracted,
                     }
                 ];
                 notes.Add(Lf("automation.note.vibe", selected.FileName));
@@ -113,6 +116,9 @@ public sealed partial class MainWindow
         Strength = x.Strength,
         InformationExtracted = x.InformationExtracted,
         IsEncodedFile = x.IsEncodedFile,
+        EncodingModel = x.EncodingModel,
+        HasInformationExtracted = x.HasInformationExtracted,
+        OriginalImagePath = x.OriginalImagePath,
         IsCollapsed = x.IsCollapsed,
         IsDisabled = x.IsDisabled,
         OriginalImageHash = x.OriginalImageHash,

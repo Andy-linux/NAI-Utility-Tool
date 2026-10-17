@@ -38,6 +38,7 @@ public sealed partial class MainWindow
         }
 
         _genVibeTransfers.Add(newEntry);
+        RecheckVibeTransferCacheState(refreshPanel: false);
         RefreshReferencePanels();
         UpdateGenerateButtonWarning();
         TxtStatus.Text = Lf("references.status.added_vibe", newEntry.FileName);
@@ -85,6 +86,10 @@ public sealed partial class MainWindow
             OriginalImageBase64 = picked.OriginalBase64,
             OriginalImagePath = picked.OriginalImagePath,
             IsCachedEncoding = picked.IsCachedHit,
+            EncodingModel = picked.EncodingModel ?? (picked.IsCachedHit ? GetCurrentModelKey() : null),
+            HasInformationExtracted = picked.HasInformationExtracted,
+            InformationExtracted = picked.InformationExtracted,
+            Strength = picked.Strength,
         };
     }
 
@@ -137,7 +142,11 @@ public sealed partial class MainWindow
         string? ThumbnailHash = null,
         string? OriginalBase64 = null,
         bool IsCachedHit = false,
-        string? OriginalImagePath = null);
+        string? OriginalImagePath = null,
+        string? EncodingModel = null,
+        bool HasInformationExtracted = true,
+        double InformationExtracted = 1.0,
+        double Strength = 0.6);
 
     private async Task<VibePickResult?> PickVibeTransferSourceAsync()
     {
@@ -177,7 +186,47 @@ public sealed partial class MainWindow
                 return null;
             }
 
-            return new VibePickResult(file.Name, Convert.ToBase64String(bytes), IsEncodedFile: true);
+            string json = System.Text.Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF', ' ', '\r', '\n', '\t');
+            if (json.StartsWith("{"))
+            {
+                string? encoding = VibeCacheService.ExtractEncodingFromVibeJson(json, model: VibeCacheService.ExtractModelFromVibeJson(json) ?? GetCurrentModelKey());
+                using var document = System.Text.Json.JsonDocument.Parse(json);
+                var root = document.RootElement;
+                string? model = VibeCacheService.ExtractModelFromVibeJson(json) ?? GetCurrentModelKey();
+                string? source = root.TryGetProperty("type", out var type) && type.GetString() == "image" &&
+                    root.TryGetProperty("image", out var image) && image.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? image.GetString() : null;
+                bool knownExtraction = root.TryGetProperty("importInfo", out var importInfo) &&
+                    importInfo.TryGetProperty("information_extracted", out var ie) && ie.TryGetDouble(out _);
+                double extraction = knownExtraction
+                    ? importInfo.GetProperty("information_extracted").GetDouble()
+                    : VibeTransferInfo.DefaultInformationExtracted(model);
+                double strength = importInfo.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                    importInfo.TryGetProperty("strength", out var strengthValue) && strengthValue.TryGetDouble(out var storedStrength)
+                    ? Math.Clamp(storedStrength, 0, 1) : 0.6;
+                if (!string.IsNullOrWhiteSpace(source))
+                    encoding = knownExtraction ? VibeCacheService.ExtractEncodingFromVibeJson(json, extraction, model) : null;
+                if (!string.IsNullOrWhiteSpace(source))
+                {
+                    byte[] sourceBytes = Convert.FromBase64String(source);
+                    string hash = VibeCacheService.ComputeImageHash(sourceBytes);
+                    if (encoding != null && knownExtraction && model != null)
+                        VibeCacheService.SaveVibe(VibeCacheService.GetCacheDir(AppRootDir), sourceBytes, sourceBytes,
+                            Convert.FromBase64String(encoding), extraction, model);
+                    return new VibePickResult(file.Name, encoding ?? source, IsEncodedFile: encoding != null, ImageHash: hash,
+                        OriginalBase64: source, IsCachedHit: encoding != null, EncodingModel: model,
+                        HasInformationExtracted: knownExtraction, InformationExtracted: extraction, Strength: strength);
+                }
+                if (encoding == null)
+                {
+                    TxtStatus.Text = Lf("references.error.cannot_read_encoded_vibe", file.Name);
+                    return null;
+                }
+                return new VibePickResult(file.Name, encoding, IsEncodedFile: true,
+                    EncodingModel: model, HasInformationExtracted: knownExtraction, InformationExtracted: extraction, Strength: strength);
+            }
+            return new VibePickResult(file.Name, Convert.ToBase64String(bytes), IsEncodedFile: true,
+                EncodingModel: GetCurrentModelKey(), HasInformationExtracted: false);
         }
 
         if (RequiresEncodedVibeFileOnly())
@@ -198,32 +247,33 @@ public sealed partial class MainWindow
             VibeCacheService.CreateCanonicalThumbnail(pngBytes));
         string originalBase64 = Convert.ToBase64String(pngBytes);
         string currentModel = GetCurrentModelKey();
+        double defaultExtraction = VibeTransferInfo.DefaultInformationExtracted(currentModel);
         string cacheDir = VibeCacheService.GetCacheDir(AppRootDir);
         string? originalPath = string.IsNullOrWhiteSpace(file.Path) ? null : file.Path;
 
         string? cachedEncoding = VibeCacheService.TryGetCachedVibeByLookup(
-            cacheDir, imageHash, 1.0, currentModel);
+            cacheDir, imageHash, defaultExtraction, currentModel);
         if (cachedEncoding != null)
         {
             TxtStatus.Text = Lf("references.status.cached_vibe_loaded", file.Name, currentModel);
             return new VibePickResult(file.Name, cachedEncoding, IsEncodedFile: true,
                 ImageHash: imageHash, ThumbnailHash: thumbnailHash, OriginalBase64: originalBase64, IsCachedHit: true,
-                OriginalImagePath: originalPath);
+                OriginalImagePath: originalPath, InformationExtracted: defaultExtraction);
         }
 
         var (thumbnailMatchedEncoding, matchedImageHash) = VibeCacheService.TryGetCachedVibeByThumbnailHash(
-            cacheDir, thumbnailHash, 1.0, currentModel);
+            cacheDir, thumbnailHash, defaultExtraction, currentModel);
         if (thumbnailMatchedEncoding != null && matchedImageHash != null)
         {
             TxtStatus.Text = Lf("references.status.cached_vibe_loaded", file.Name, currentModel);
             return new VibePickResult(file.Name, thumbnailMatchedEncoding, IsEncodedFile: true,
                 ImageHash: matchedImageHash, ThumbnailHash: thumbnailHash, OriginalBase64: originalBase64, IsCachedHit: true,
-                OriginalImagePath: originalPath);
+                OriginalImagePath: originalPath, InformationExtracted: defaultExtraction);
         }
 
         return new VibePickResult(file.Name, originalBase64, IsEncodedFile: false,
             ImageHash: imageHash, ThumbnailHash: thumbnailHash, OriginalBase64: originalBase64,
-            OriginalImagePath: originalPath);
+            OriginalImagePath: originalPath, InformationExtracted: defaultExtraction);
     }
 
     private bool TryReportVibeTransferUnavailable(int maxVibeTransfers)
@@ -298,6 +348,7 @@ public sealed partial class MainWindow
         }
 
         _genVibeTransfers.Add(newEntry);
+        RecheckVibeTransferCacheState(refreshPanel: false);
         RefreshReferencePanels();
         UpdateGenerateButtonWarning();
         TxtStatus.Text = Lf("references.status.added_vibe", newEntry.FileName);

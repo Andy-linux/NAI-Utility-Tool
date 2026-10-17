@@ -471,13 +471,18 @@ public partial class NovelAIService : IDisposable
         {
             var v = vibeTransfers[i];
             if (v.IsEncoded)
+            {
+                if (!VibeTransferInfo.IsCompatibleEncoding(v.EncodingModel, model))
+                    throw new InvalidOperationException($"Vibe encoding is unavailable for {model}: {v.FileName}");
                 continue;
+            }
 
             var (vibeData, error) = await EncodeVibeAsync(v.ImageBase64, model, v.InformationExtracted, ct);
             if (vibeData != null)
             {
                 v.ImageBase64 = Convert.ToBase64String(vibeData);
                 v.IsEncoded = true;
+                v.EncodingModel = model;
             }
             else
             {
@@ -495,8 +500,18 @@ public partial class NovelAIService : IDisposable
             return;
 
         parameters["reference_image_multiple"] = vibeTransfers.Select(x => x.ImageBase64).ToList();
-        parameters["reference_strength_multiple"] = vibeTransfers.Select(x => x.Strength).ToList();
-        parameters["reference_information_extracted_multiple"] = vibeTransfers.Select(x => x.InformationExtracted).ToList();
+        var strengths = vibeTransfers.Select(x => x.Strength).ToList();
+        if (vibeTransfers.All(x => x.IsEncoded))
+        {
+            bool normalize = vibeTransfers[0].NormalizeStrength;
+            double total = strengths.Sum(x => Math.Abs(x));
+            if (normalize && strengths.Count > 1 && total > 1)
+                strengths = strengths.Select(x => x / total).ToList();
+            parameters["normalize_reference_strength_multiple"] = normalize;
+        }
+        parameters["reference_strength_multiple"] = strengths;
+        if (!vibeTransfers.All(x => x.IsEncoded))
+            parameters["reference_information_extracted_multiple"] = vibeTransfers.Select(x => x.InformationExtracted).ToList();
     }
 
     private static void ApplyPreciseReferenceParameters(

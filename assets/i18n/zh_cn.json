@@ -1,4 +1,7 @@
 {
+    "references.vibe.normalize_strengths": "归一化参考强度",
+    "references.vibe.encoded_extraction_unavailable": "已编码；原始信息提取量不可用",
+    "references.vibe.incompatible_encoding": "此模型无法使用该编码",
     "settings.hub.developer.log_mode": "日志模式",
     "settings.hub.developer.log_simple": "简易 — 完整接收的 HTTP 2xx 调用",
     "settings.hub.developer.log_debug": "Debug — 所有阶段与失败",

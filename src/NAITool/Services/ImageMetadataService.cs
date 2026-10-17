@@ -110,6 +110,11 @@ public static class ImageMetadataService
                         meta.Effort = "high";
                         break;
                 }
+                foreach (var vibe in meta.VibeTransfers)
+                {
+                    vibe.EncodingModel = VibeTransferInfo.EncodingFamily(meta.ModelDisplayName);
+                    vibe.IsEncoded = NovelAIService.IsV4PlusModel(vibe.EncodingModel);
+                }
                 meta.TextChunks = new Dictionary<string, string>(textChunks, StringComparer.Ordinal);
                 return meta;
             }
@@ -1180,8 +1185,9 @@ public static class ImageMetadataService
     private static void ParseVibeTransfers(JsonElement root, ImageMetadata meta)
     {
         if (root.TryGetProperty("reference_image_multiple", out var imageArray) &&
-            root.TryGetProperty("reference_information_extracted_multiple", out var infoArray))
+            imageArray.ValueKind == JsonValueKind.Array)
         {
+            root.TryGetProperty("reference_information_extracted_multiple", out var infoArray);
             var strengthValues = TryReadDoubleArray(root, "reference_strength_multiple");
             int index = 0;
             foreach (var item in imageArray.EnumerateArray())
@@ -1200,6 +1206,9 @@ public static class ImageMetadataService
                     ImageBase64 = imageBase64,
                     Strength = strength,
                     InformationExtracted = info,
+                    HasInformationExtracted = infoArray.ValueKind == JsonValueKind.Array && index < infoArray.GetArrayLength() && infoArray[index].ValueKind == JsonValueKind.Number,
+                    IsEncoded = NovelAIService.IsV4PlusModel(VibeTransferInfo.EncodingFamily(meta.ModelDisplayName)),
+                    EncodingModel = meta.ModelDisplayName,
                     FileName = LocalizationService.Instance.Format("references.imported.vibe_numbered", index + 1),
                 });
                 index++;
@@ -1218,6 +1227,9 @@ public static class ImageMetadataService
                     ImageBase64 = imageBase64,
                     Strength = TryReadDouble(root, "reference_strength", 0.6),
                     InformationExtracted = TryReadDouble(root, "reference_information_extracted", 1.0),
+                    HasInformationExtracted = root.TryGetProperty("reference_information_extracted", out var singleInfo) && singleInfo.ValueKind == JsonValueKind.Number,
+                    IsEncoded = NovelAIService.IsV4PlusModel(VibeTransferInfo.EncodingFamily(meta.ModelDisplayName)),
+                    EncodingModel = meta.ModelDisplayName,
                     FileName = LocalizationService.Instance.Format("references.imported.vibe_numbered", 1),
                 });
             }

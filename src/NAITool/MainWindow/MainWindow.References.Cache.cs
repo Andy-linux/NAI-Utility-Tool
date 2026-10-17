@@ -42,12 +42,12 @@ public sealed partial class MainWindow
             {
                 entry.ImageBase64 = cachedEncoding;
                 entry.IsEncodedFile = true;
+                entry.EncodingModel = currentModel;
                 entry.IsCachedEncoding = true;
             }
-            else
+            else if (entry.OriginalImageBase64 != null)
             {
-                if (entry.OriginalImageBase64 != null)
-                    entry.ImageBase64 = entry.OriginalImageBase64;
+                entry.ImageBase64 = entry.OriginalImageBase64;
                 entry.IsEncodedFile = false;
                 entry.IsCachedEncoding = false;
             }

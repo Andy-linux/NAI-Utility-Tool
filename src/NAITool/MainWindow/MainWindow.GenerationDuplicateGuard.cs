@@ -76,8 +76,9 @@ public sealed partial class MainWindow
             {
                 x.FileName,
                 x.Strength,
-                x.InformationExtracted,
+                InformationExtracted = x.IsEncoded ? (double?)null : x.InformationExtracted,
                 x.IsEncoded,
+                x.NormalizeStrength,
                 ImageHash = ComputeStableHash(x.ImageBase64),
             })
             .Cast<object>()
