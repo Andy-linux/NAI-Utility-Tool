@@ -53,7 +53,7 @@ public sealed partial class MainWindow
 
     private async Task<MetadataImportSelection?> ShowMetadataImportDialogAsync(ImageMetadata meta, bool toI2I, bool chooseTarget, bool hasImage)
     {
-        bool hasCharacters = meta.CharacterPrompts.Count > 0;
+        bool hasCharacters = meta.HasCharacterPrompts;
         bool hasReferences = meta.VibeTransfers.Count > 0 || meta.PreciseReferences.Count > 0;
         bool hasActualPrompt = meta.ActualPositivePrompt != null || meta.ActualNegativePrompt != null ||
             meta.ActualCharacterPrompts.Any(x => x != null) || meta.ActualCharacterNegativePrompts.Any(x => x != null);
@@ -70,9 +70,9 @@ public sealed partial class MainWindow
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
         };
 
-        var prompt = Option("metadata.import.prompt", !string.IsNullOrWhiteSpace(meta.PositivePrompt) || meta.ActualPositivePrompt != null);
+        var prompt = Option("metadata.import.prompt", meta.HasPositivePrompt || meta.ActualPositivePrompt != null);
         var image = Option("metadata.import.image_for_i2i", hasImage);
-        var negative = Option("metadata.import.negative", !string.IsNullOrWhiteSpace(meta.NegativePrompt) || meta.ActualNegativePrompt != null);
+        var negative = Option("metadata.import.negative", meta.HasNegativePrompt || meta.ActualNegativePrompt != null);
         var characters = Option("metadata.import.characters", hasCharacters);
         ((TextBlock)characters.Content).Text = Lf("metadata.import.characters", meta.CharacterPrompts.Count);
         var append = Option("metadata.import.append_characters", hasCharacters, false);
@@ -155,7 +155,7 @@ public sealed partial class MainWindow
 
     private void ImportSelectedCharacters(ImageMetadata meta, MetadataImportSelection selection, bool toI2I, List<string> notes)
     {
-        if (!selection.Characters) return;
+        if (!selection.Characters || !meta.HasCharacterPrompts) return;
         SaveAllCharacterPrompts();
         var target = toI2I ? _i2iCharacters : _genCharacters;
         int count = ImportCharactersFromMetadata(target, meta, selection);

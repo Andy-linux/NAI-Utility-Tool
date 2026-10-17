@@ -786,6 +786,8 @@ public sealed partial class MainWindow
         bool blockOversizedDimensions = IsAssetProtectionSizeLimitEnabled();
         var skipped = new List<string>();
         var notes = new List<string>();
+        SaveCurrentPromptToBuffer();
+        SaveAllCharacterPrompts();
         var p = _settings.Settings.GenParameters;
         ApplyImportedImageModel(meta, p, GenerationModels);
 
@@ -796,9 +798,12 @@ public sealed partial class MainWindow
         string positivePrompt = presetMatch.PositivePrompt;
         string negativePrompt = presetMatch.NegativePrompt;
 
-        _genPositivePrompt = positivePrompt;
-        if (!ModelCapabilities.IsMedium(p)) _genNegativePrompt = negativePrompt;
-        _genStylePrompt = "";
+        if (meta.HasPositivePrompt)
+        {
+            _genPositivePrompt = positivePrompt;
+            _genStylePrompt = "";
+        }
+        if (meta.HasNegativePrompt) _genNegativePrompt = negativePrompt;
 
         p.QualityToggle = meta.QualityToggle ?? presetMatch.QualityMatched;
         p.QualityPreset = meta.QualityPreset ?? presetMatch.QualityPreset;
@@ -842,10 +847,8 @@ public sealed partial class MainWindow
         if (!skipSeed) NbSeed.Value = p.Seed;
         ChkVariety.IsChecked = p.Variety;
 
-        if (meta.CharacterPrompts.Count > 0)
+        if (meta.HasCharacterPrompts)
             SetGenCharactersFromMetadata(meta);
-        else
-            _genCharacters.Clear();
         ApplyReferenceDataFromMetadata(meta);
         RefreshCharacterPanel();
 

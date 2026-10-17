@@ -15,6 +15,9 @@ public class ImageMetadata
     public string Model { get; set; } = "";
     public string ModelHash { get; set; } = "";
     public string ModelDisplayName => !string.IsNullOrWhiteSpace(Model) ? Model : Source ?? "";
+    public bool HasPositivePrompt { get; set; }
+    public bool HasNegativePrompt { get; set; }
+    public bool HasCharacterPrompts { get; set; }
     public string PositivePrompt { get; set; } = "";
     public string NegativePrompt { get; set; } = "";
     public string? ActualPositivePrompt { get; set; }
@@ -304,12 +307,15 @@ public static class ImageMetadataService
 
         if (negIdx >= 0 && negIdx < paramsLineIdx)
         {
+            meta.HasPositivePrompt = true;
+            meta.HasNegativePrompt = true;
             meta.PositivePrompt = text[..negIdx].Trim();
             int negStart = text.IndexOf(':', negIdx) + 1;
             meta.NegativePrompt = text[negStart..paramsLineIdx].Trim();
         }
         else
         {
+            meta.HasPositivePrompt = true;
             meta.PositivePrompt = text[..paramsLineIdx].Trim();
             meta.NegativePrompt = "";
         }
@@ -692,10 +698,16 @@ public static class ImageMetadataService
                 Source = TryReadString(root, "Source", "source"),
             };
 
-            if (root.TryGetProperty("prompt", out var prompt))
+            if (root.TryGetProperty("prompt", out var prompt) && prompt.ValueKind == JsonValueKind.String)
+            {
+                meta.HasPositivePrompt = true;
                 meta.PositivePrompt = prompt.GetString() ?? "";
-            if (root.TryGetProperty("uc", out var uc))
+            }
+            if (root.TryGetProperty("uc", out var uc) && uc.ValueKind == JsonValueKind.String)
+            {
+                meta.HasNegativePrompt = true;
                 meta.NegativePrompt = uc.GetString() ?? "";
+            }
             if (root.TryGetProperty("width", out var w))
                 meta.Width = w.GetInt32();
             if (root.TryGetProperty("height", out var h))
@@ -756,6 +768,10 @@ public static class ImageMetadataService
                 if (v4p.TryGetProperty("use_coords", out var promptUseCoords) &&
                     promptUseCoords.ValueKind is JsonValueKind.True or JsonValueKind.False)
                     meta.UseCharacterCoordinates = promptUseCoords.GetBoolean();
+                meta.HasCharacterPrompts = v4p.TryGetProperty("caption", out var characterCaption) &&
+                    characterCaption.ValueKind == JsonValueKind.Object &&
+                    characterCaption.TryGetProperty("char_captions", out var declaredCharacters) &&
+                    declaredCharacters.ValueKind == JsonValueKind.Array;
                 ReadCharacterCaptions(v4p, meta.CharacterPrompts, meta.CharacterCenters);
             }
 

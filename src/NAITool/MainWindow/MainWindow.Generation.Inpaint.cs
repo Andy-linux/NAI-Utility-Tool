@@ -236,6 +236,8 @@ public sealed partial class MainWindow
     {
         try
         {
+            var device = MaskCanvas.GetDevice() ?? CanvasDevice.GetSharedDevice();
+            var bitmap = await LoadI2IDisplayBitmapAsync(device, imageBytes);
             SaveCurrentPromptToBuffer();
             _lastGeneratedImageBytes = null;
             _i2iImageTextChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(imageBytes));
@@ -255,16 +257,15 @@ public sealed partial class MainWindow
             string sendPos, sendNeg, sendStyle;
             if (meta != null && (meta.IsNaiParsed || meta.IsSdFormat))
             {
-                sendPos = meta.PositivePrompt;
-                sendNeg = meta.NegativePrompt;
-                sendStyle = "";
+                sendPos = meta.HasPositivePrompt ? meta.PositivePrompt : _i2iPositivePrompt;
+                sendNeg = meta.HasNegativePrompt ? meta.NegativePrompt : _i2iNegativePrompt;
+                sendStyle = meta.HasPositivePrompt ? "" : _i2iStylePrompt;
 
                 if (meta.IsNaiParsed)
                 {
-                    if (meta.CharacterPrompts.Count > 0)
+                    SaveAllCharacterPrompts();
+                    if (meta.HasCharacterPrompts)
                         SetI2ICharactersFromMetadata(meta);
-                    else
-                        _i2iCharacters.Clear();
                     ApplyReferenceDataFromMetadata(meta, AppMode.I2I);
                 }
             }
@@ -275,13 +276,10 @@ public sealed partial class MainWindow
                 sendStyle = _genStylePrompt;
             }
 
-            var device = MaskCanvas.GetDevice() ?? CanvasDevice.GetSharedDevice();
-
-            var bitmap = await LoadI2IDisplayBitmapAsync(device, imageBytes);
-
             int imgW = (int)bitmap.SizeInPixels.Width;
             int imgH = (int)bitmap.SizeInPixels.Height;
 
+            SwitchMode(AppMode.I2I);
             if (importMetadata)
             {
                 _i2iPositivePrompt = sendPos;
@@ -302,7 +300,8 @@ public sealed partial class MainWindow
                 p => p.W == canvasW && p.H == canvasH);
             if (idx >= 0) CboSize.SelectedIndex = idx;
 
-            SwitchMode(AppMode.I2I);
+            LoadPromptFromBuffer();
+            RefreshCharacterPanel();
             if (meta != null)
                 ApplyImportedImageModel(meta, CurrentParams,
                     _i2iEditMode == I2IEditMode.Denoise ? GenerationModels : I2IModels);

@@ -9,6 +9,8 @@ public sealed partial class MainWindow
     {
         if (!options.HasSelection) return;
         SwitchMode(AppMode.ImageGeneration);
+        SaveCurrentPromptToBuffer();
+        SaveAllCharacterPrompts();
 
         bool blockOversizedSteps = IsAssetProtectionStepLimitEnabled();
         bool blockOversizedDimensions = IsAssetProtectionSizeLimitEnabled();
@@ -38,12 +40,12 @@ public sealed partial class MainWindow
             negativePrompt = presetMatch.NegativePrompt;
         }
 
-        if (options.Prompt)
+        if (options.Prompt && (meta.HasPositivePrompt || options.ActualPrompt && meta.ActualPositivePrompt != null))
         {
             _genPositivePrompt = positivePrompt;
             _genStylePrompt = "";
         }
-        if (options.NegativePrompt && !ModelCapabilities.IsMedium(p))
+        if (options.NegativePrompt && (meta.HasNegativePrompt || options.ActualPrompt && meta.ActualNegativePrompt != null))
             _genNegativePrompt = negativePrompt;
 
         if (options.Settings)
@@ -154,12 +156,12 @@ public sealed partial class MainWindow
             negativePrompt = presetMatch.NegativePrompt;
         }
 
-        if (options.Prompt)
+        if (options.Prompt && (meta.HasPositivePrompt || options.ActualPrompt && meta.ActualPositivePrompt != null))
         {
             _i2iPositivePrompt = positivePrompt;
             _i2iStylePrompt = "";
         }
-        if (options.NegativePrompt && !ModelCapabilities.IsMedium(p))
+        if (options.NegativePrompt && (meta.HasNegativePrompt || options.ActualPrompt && meta.ActualNegativePrompt != null))
             _i2iNegativePrompt = negativePrompt;
 
         if (options.Settings)
