@@ -826,28 +826,17 @@ public partial class NovelAIService : IDisposable
         if (width <= 0 || height <= 0 || (long)width * height > EnhanceRules.MaxPixels)
             throw new ArgumentOutOfRangeException(nameof(width), "Enhance dimensions exceed the supported pixel range.");
 
-        using var source = SKBitmap.Decode(imageBytes)
-            ?? throw new InvalidDataException("Unable to decode the source image for Enhance.");
-        using var resized = source.Width == width && source.Height == height
-            ? null
-            : source.Resize(new SKImageInfo(width, height, SKColorType.Bgra8888,
-                SKAlphaType.Premul), SKSamplingOptions.Default)
-                ?? throw new InvalidDataException("Unable to resize the source image for Enhance.");
-        using var pixmap = (resized ?? source).PeekPixels();
-        using var stream = new SKDynamicMemoryWStream();
-        if (!pixmap.Encode(stream, new SKWebpEncoderOptions(SKWebpEncoderCompression.Lossless, 75)))
-            throw new InvalidDataException("Unable to encode the source image for Enhance.");
-        using var encoded = stream.DetachAsData();
-        return Convert.ToBase64String(encoded.ToArray());
+        // Enhance sends the selected result itself; target dimensions belong to request parameters.
+        return Convert.ToBase64String(imageBytes);
     }
 
     private static string AddEnhancePromptHint(string prompt)
     {
-        if (prompt.Contains("upscaled, blurry", StringComparison.OrdinalIgnoreCase))
+        if (prompt.Contains("upscaled, blurry", StringComparison.Ordinal))
             return prompt;
         const string hint = ", -2::upscaled, blurry::,";
-        int textIndex = prompt.LastIndexOf("Text:", StringComparison.OrdinalIgnoreCase);
-        return textIndex >= 0 ? prompt.Insert(textIndex, hint + " ") : prompt + hint;
+        var marker = NovelAiPromptPresets.TextMarker.Match(prompt);
+        return marker.Success ? prompt.Insert(marker.Index, hint) : prompt + hint;
     }
 
     public async Task<(byte[]? ImageBytes, string? Error)> ImageToImageAsync(
@@ -935,7 +924,7 @@ public partial class NovelAIService : IDisposable
         if (isEnhance)
         {
             parameters["params_version"] = 4;
-            parameters["add_original_image"] = false;
+            parameters["add_original_image"] = true;
             parameters["color_correct"] = false;
             parameters["sm"] = false;
             parameters["sm_dyn"] = false;
