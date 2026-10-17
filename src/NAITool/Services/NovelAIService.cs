@@ -426,42 +426,37 @@ public partial class NovelAIService : IDisposable
 
     private static string PrepareDirectorReferenceImage(string base64Image)
     {
-        const int TargetW = 1024;
-        const int TargetH = 1536;
-
         byte[] bytes = Convert.FromBase64String(base64Image);
-        using var bitmap = SKBitmap.Decode(bytes);
+        // Strip recognized stealth alpha bits before filtering, as for the website's reference input.
+        using var bitmap = InpaintImageProcessing.DecodeClean(bytes);
         if (bitmap == null)
             return base64Image;
 
-        if (bitmap.Width == TargetW && bitmap.Height == TargetH
-            && bitmap.ColorType == SKColorType.Rgb888x)
-            return base64Image;
-
-        float srcRatio = (float)bitmap.Width / bitmap.Height;
-        float tgtRatio = (float)TargetW / TargetH;
+        double srcRatio = (double)bitmap.Width / bitmap.Height;
+        var target = new[] { (Width: 1024, Height: 1536), (Width: 1536, Height: 1024), (Width: 1472, Height: 1472) }
+            .OrderBy(size => Math.Abs((double)size.Width / size.Height - srcRatio)).First();
+        int TargetW = target.Width, TargetH = target.Height;
+        double tgtRatio = (double)TargetW / TargetH;
 
         int newW, newH;
         if (srcRatio > tgtRatio)
         {
             newW = TargetW;
-            newH = (int)(TargetW / srcRatio);
+            newH = Math.Max(1, (int)Math.Floor(TargetW / srcRatio + .5));
         }
         else
         {
             newH = TargetH;
-            newW = (int)(TargetH * srcRatio);
+            newW = Math.Max(1, (int)Math.Floor(TargetH * srcRatio + .5));
         }
 
-        using var resized = bitmap.Resize(new SKImageInfo(newW, newH, SKColorType.Rgb888x, SKAlphaType.Opaque), SKSamplingOptions.Default);
-        if (resized == null)
-            return base64Image;
+        using var resized = LanczosImageResize.Resize(bitmap, newW, newH);
 
         using var canvas = new SKBitmap(TargetW, TargetH, SKColorType.Rgb888x, SKAlphaType.Opaque);
         canvas.Erase(SKColors.Black);
         using var c = new SKCanvas(canvas);
-        int offsetX = (TargetW - newW) / 2;
-        int offsetY = (TargetH - newH) / 2;
+        int offsetX = (int)Math.Floor((TargetW - newW) / 2.0 + .5);
+        int offsetY = (int)Math.Floor((TargetH - newH) / 2.0 + .5);
         c.DrawBitmap(resized, offsetX, offsetY);
 
         using var image = SKImage.FromBitmap(canvas);
@@ -516,7 +511,7 @@ public partial class NovelAIService : IDisposable
         parameters["director_reference_strength_values"] = preciseReferences
             .Select(x => Math.Clamp(x.Strength, 0, 1)).ToList();
         parameters["director_reference_secondary_strength_values"] = preciseReferences
-            .Select(x => Math.Round(1.0 - Math.Clamp(x.Fidelity, 0, 1), 2)).ToList();
+            .Select(x => 1.0 - Math.Clamp(x.Fidelity, 0, 1)).ToList();
         parameters["director_reference_information_extracted"] = preciseReferences
             .Select(_ => 1.0).ToList();
         parameters["director_reference_descriptions"] = preciseReferences
