@@ -17,20 +17,33 @@ public sealed partial class MainWindow
     {
         if (_metadataImportDialogOpen) return;
         _metadataImportDialogOpen = true;
+        using var diagnostic = BeginUiBusinessLog("metadata_import", new { toI2I, fileName });
+        diagnostic.Stage("import_raw_info", new { meta.RawJson, meta });
         try
         {
             var selection = await ShowMetadataImportDialogAsync(meta, toI2I, chooseTarget, sourceImage != null);
+            diagnostic.Stage("import_selection", new { selection, cancelled = selection == null });
             if (selection == null) return;
             if (selection.ToI2I)
             {
                 if (selection.Image && sourceImage != null &&
                     !await SendImageToI2IAsync(sourceImage, sourcePath, importMetadata: false))
+                {
+                    diagnostic.Stage("import_image_failed");
                     return;
+                }
                 if (_currentMode != AppMode.I2I) SwitchMode(AppMode.I2I);
                 ApplyMetadataToI2I(meta, fileName, selection);
             }
             else
                 ApplyMetadataToGeneration(meta, selection);
+            RememberBusinessImport(selection.ToI2I ? "i2i" : "generation", diagnostic, meta, fileName, selection);
+            diagnostic.Stage("import_applied", CaptureBusinessInputs());
+        }
+        catch (Exception ex)
+        {
+            diagnostic.Stage("import_failed", ex.ToString());
+            throw;
         }
         finally
         {

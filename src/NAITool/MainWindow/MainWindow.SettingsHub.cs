@@ -416,7 +416,14 @@ public sealed partial class MainWindow
                     "\uEC7A",
                     L("settings.hub.developer.log_enabled"),
                     L("settings.hub.developer.log_hint"),
-                    CreateSettingsHubToggleSwitch(_settings.Settings.DevLogEnabled, ApplyDeveloperLogSetting)));
+                    CreateSettingsHubToggleSwitch(_settings.Settings.DevLogEnabled, ApplyDeveloperLogSetting)),
+                CreateSettingsHubLayer(
+                    "\uEC7A", L("settings.hub.developer.log_mode"), L("settings.hub.developer.log_full_hint"),
+                    CreateSettingsHubComboBox(
+                        new[] { new SettingsHubComboOption(L("settings.hub.developer.log_simple"), "Simple"),
+                            new SettingsHubComboOption(L("settings.hub.developer.log_debug"), "Debug") },
+                        _settings.Settings.DevLogMode,
+                        value => { _settings.Settings.DevLogMode = value; _settings.Save(); }, 220)));
         }
 
         UIElement BuildSectionContent(SettingsHubSection section, Action refresh) => section switch

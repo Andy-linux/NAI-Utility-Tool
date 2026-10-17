@@ -328,6 +328,7 @@ public sealed partial class MainWindow
 
     private async Task<bool> DoInpaintGenerateAsync(bool forceRandomSeed = false)
     {
+        using var diagnostic = BeginUiBusinessLog("inpaint", new { forceRandomSeed });
         if (_i2iEditMode == I2IEditMode.Denoise)
             return await DoDenoiseGenerateAsync(forceRandomSeed);
 

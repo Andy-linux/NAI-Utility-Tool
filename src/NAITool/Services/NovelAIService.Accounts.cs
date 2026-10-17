@@ -86,6 +86,7 @@ public partial class NovelAIService
 
     private async Task<ApiAccount> SelectAccountAsync(ApiRequestCost cost, CancellationToken ct)
     {
+        BusinessLog.Current?.Stage("account_selection_start");
         string baseUrl = _settings.Settings.ApiBaseUrl;
         var configuredAccounts = _settings.Accounts;
         {
@@ -115,9 +116,20 @@ public partial class NovelAIService
             !RequestBelongsToEndpoint(request.RequestUri))
             throw new InvalidOperationException(L("settings.api.configuration_changed"));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", account.Token);
+        BusinessLog.Current?.Dispatch(request);
         try
         {
             var response = await GetOrCreateClient().SendAsync(request, completion, ct);
+            BusinessLog.Current?.Headers(response);
+            if (!response.IsSuccessStatusCode && BusinessLog.Current?.Debug == true)
+            {
+                try
+                {
+                    using var errorStream = await response.Content.ReadAsStreamAsync(ct);
+                    _ = await NovelAIImageResponse.ReadBoundedAsync(errorStream, ct);
+                }
+                catch (Exception ex) { BusinessLog.Current?.Stage("error_body_read_failed", ex.ToString()); }
+            }
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
                 account.IsTokenValid = false;

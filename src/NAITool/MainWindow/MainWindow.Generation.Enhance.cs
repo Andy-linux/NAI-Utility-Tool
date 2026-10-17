@@ -339,6 +339,7 @@ public sealed partial class MainWindow
         EnhanceOptions options, bool forceRandomSeed = false)
     {
         if (_generateRequestRunning) return false;
+        using var diagnostic = BeginUiBusinessLog("enhance", new { image = Convert.ToBase64String(sourceImageBytes), options, forceRandomSeed });
         if (!TryGetImageDimensions(sourceImageBytes, out int sourceWidth, out int sourceHeight))
         { TxtStatus.Text = L("generate.error.empty_result"); return false; }
         int width = options.OutputWidth;

@@ -418,11 +418,11 @@ public sealed partial class MainWindow : Window
             _reverseTaggerService.Dispose();
         };
 
-        DebugLog($"[Startup] App root={AppRootDir} | DevLog={_settings.Settings.DevLogEnabled} | Language={_settings.Settings.LanguageCode}");
         ApplyRememberedPromptAndParameterPreference();
         ApplyCachedAccountInfo();
         AutoDetectTaggerModel();
         _naiService = new NovelAIService(_settings);
+        DebugLog($"[Startup] App root={AppRootDir} | DevLog={_settings.Settings.DevLogEnabled} | Language={_settings.Settings.LanguageCode}");
         LoadPromptShortcuts();
         LoadWildcards();
         EnsureDefaultFxPresets();

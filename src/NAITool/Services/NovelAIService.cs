@@ -595,39 +595,9 @@ public partial class NovelAIService : IDisposable
             }).ToList();
     }
 
-    private static object? SanitizeLogValue(object? value)
-    {
-        if (value == null)
-            return null;
-
-        if (value is string text)
-        {
-            if (text.Length > 200)
-                return $"<long text, length {text.Length}>";
-            return text;
-        }
-
-        if (value is IDictionary dictionary)
-        {
-            var result = new Dictionary<string, object?>();
-            foreach (DictionaryEntry entry in dictionary)
-            {
-                string key = entry.Key?.ToString() ?? "";
-                result[key] = SanitizeLogValue(entry.Value);
-            }
-            return result;
-        }
-
-        if (value is IEnumerable enumerable && value is not byte[])
-        {
-            var result = new List<object?>();
-            foreach (var item in enumerable)
-                result.Add(SanitizeLogValue(item));
-            return result;
-        }
-
-        return value;
-    }
+    internal BusinessLog BeginBusinessLog(object input, bool unassociatedUiReport = false) => new(
+        _settings.Settings.DevLogEnabled, _settings.Settings.DevLogMode == "Debug",
+        Path.Combine(AppPathResolver.AppRootDir, "logs"), _settings.Accounts.Select(a => a.Token), input, unassociatedUiReport);
 
     private void WriteRequestLog(
         string requestName,
@@ -638,55 +608,10 @@ public partial class NovelAIService : IDisposable
         byte[]? imageBytes = null,
         Exception? exception = null)
     {
-        if (!_settings.Settings.DevLogEnabled)
-            return;
-
-        try
-        {
-            string dir = Path.Combine(AppPathResolver.AppRootDir, "logs");
-            Directory.CreateDirectory(dir);
-            string path = Path.Combine(dir, $"api_{DateTime.Now:yyyy-MM-dd}.txt");
-
-            var builder = new StringBuilder();
-            builder.AppendLine(new string('=', 72));
-            builder.AppendLine($"Time: {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}");
-            builder.AppendLine($"Request: {requestName}");
-            builder.AppendLine($"Elapsed: {elapsedMs} ms");
-
-            if (response != null)
-            {
-                builder.AppendLine($"Response status: {(int)response.StatusCode}");
-                builder.AppendLine($"Response type: {response.Content.Headers.ContentType}");
-                if (response.Content.Headers.ContentLength.HasValue)
-                    builder.AppendLine($"Response length: {response.Content.Headers.ContentLength.Value} bytes");
-            }
-
-            if (exception != null)
-            {
-                builder.AppendLine($"Exception: {SafeException(exception)}");
-            }
-
-            builder.AppendLine("Request payload:");
-            builder.AppendLine("<request payload withheld>");
-
-            if (!string.IsNullOrWhiteSpace(responseText))
-            {
-                builder.AppendLine("Response body:");
-                builder.AppendLine("<response body withheld>");
-            }
-
-            if (imageBytes != null)
-            {
-                builder.AppendLine($"Response image: {imageBytes.Length} bytes");
-                // Omit image metadata from logs.
-            }
-
-            builder.AppendLine();
-            File.AppendAllText(path, builder.ToString(), Encoding.UTF8);
-        }
-        catch
-        {
-        }
+        BusinessLog.Current?.Stage(exception != null ? "request_failure" : "parsed_result",
+            new { requestName, preparation_and_request_elapsed_ms = elapsedMs,
+                parse_outcome = exception != null ? "failed" : imageBytes != null || responseText != null ? "result" : "no_result",
+                responseText, exception = exception?.ToString() });
     }
 
     private static bool IsPngOrWebp(byte[] bytes)
@@ -740,15 +665,21 @@ public partial class NovelAIService : IDisposable
         IProgress<byte[]>? progress = null,
         CancellationToken ct = default)
     {
+        using var diagnostic = BeginBusinessLog(new { operation = "inpaint", imageBase64, maskBase64, width, height, prompt, negativePrompt, characters, vibeTransfers, preciseReferences, parameters = _settings.Settings.InpaintParameters });
         if (!_settings.HasApiTokens)
+        {
+            diagnostic.Stage("request_rejected", new { reason = "missing_api_token" });
             return (null, L("api.error.token_missing_network"));
-
+        }
         bool streamGeneration = _settings.Settings.StreamGeneration;
         var naiParams = ModelCapabilities.CreateRequestSnapshot(_settings.Settings.InpaintParameters);
         if (!_settings.Settings.UsesCustomApiBaseUrl &&
             NovelAiAnlasCalculator.PaidBaseCost(naiParams.Model, width, height, naiParams.Steps,
                 sm: false, strength: IsV4PlusModel(naiParams.Model) ? naiParams.InpaintStrength : 1) > NovelAiAnlasCalculator.MaxBaseCost)
+        {
+            diagnostic.Stage("request_rejected", new { reason = "generation_cost_limit", maximum_base_cost = NovelAiAnlasCalculator.MaxBaseCost });
             return (null, Lf("api.error.generation_cost_limit", NovelAiAnlasCalculator.MaxBaseCost));
+        }
 
         object seed = SeedValue.ToRequestValue(SeedValue.Resolve(naiParams.Seed));
         bool isV4Plus = IsV4PlusModel(naiParams.Model);
@@ -875,8 +806,7 @@ public partial class NovelAIService : IDisposable
 
         try
         {
-            var json = JsonSerializer.Serialize(payload, JsonOptions);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var content = diagnostic.Content(payload);
             var endpoints = GetApiEndpoints();
             var url = streamGeneration ? endpoints.GenerateStreamUrl : endpoints.GenerateUrl;
             using var requestTimeoutCts = CreateRequestTimeoutTokenSource(ImageGenerationRequestTimeout, ct);
@@ -981,14 +911,20 @@ public partial class NovelAIService : IDisposable
         bool isEnhance = false,
         bool upscaledEnhance = false)
     {
+        using var diagnostic = BeginBusinessLog(new { operation = isEnhance ? "enhance" : "i2i", imageBase64, width, height, prompt, negativePrompt, characters, vibeTransfers, preciseReferences, parameters = parametersOverride ?? _settings.Settings.I2IDenoiseParameters });
         if (!_settings.HasApiTokens)
+        {
+            diagnostic.Stage("request_rejected", new { reason = "missing_api_token" });
             return (null, L("api.error.token_missing_network"));
-
+        }
         bool streamGeneration = _settings.Settings.StreamGeneration;
         var naiParams = ModelCapabilities.CreateRequestSnapshot(parametersOverride ?? _settings.Settings.I2IDenoiseParameters);
         if ((isEnhance && (width <= 0 || height <= 0 || (long)width * height > EnhanceRules.MaxPixels)) ||
             (upscaledEnhance && (!isEnhance || !EnhanceRules.CanUseMax(naiParams.Model, width, height))))
+        {
+            diagnostic.Stage("request_rejected", new { reason = "enhance_size_or_max_upscale_constraint" });
             return (null, L("enhance.size_limit"));
+        }
 
         var pricedSize = upscaledEnhance
             ? EnhanceRules.GetOutputDimensions(width, height, 1.0, useMax: true)
@@ -996,7 +932,10 @@ public partial class NovelAIService : IDisposable
         if (!_settings.Settings.UsesCustomApiBaseUrl &&
             NovelAiAnlasCalculator.PaidBaseCost(naiParams.Model, pricedSize.Width, pricedSize.Height, naiParams.Steps,
                 sm: false, strength: naiParams.DenoiseStrength) > NovelAiAnlasCalculator.MaxBaseCost)
+        {
+            diagnostic.Stage("request_rejected", new { reason = "generation_cost_limit", maximum_base_cost = NovelAiAnlasCalculator.MaxBaseCost });
             return (null, Lf("api.error.generation_cost_limit", NovelAiAnlasCalculator.MaxBaseCost));
+        }
 
         string resolvedSeed = SeedValue.Resolve(naiParams.Seed);
         object seed = SeedValue.ToRequestValue(resolvedSeed);
@@ -1137,8 +1076,7 @@ public partial class NovelAIService : IDisposable
 
         try
         {
-            var json = JsonSerializer.Serialize(payload, JsonOptions);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var content = diagnostic.Content(payload);
             var endpoints = GetApiEndpoints();
             var url = streamGeneration ? endpoints.GenerateStreamUrl : endpoints.GenerateUrl;
             using var requestTimeoutCts = CreateRequestTimeoutTokenSource(ImageGenerationRequestTimeout, ct);
@@ -1211,16 +1149,22 @@ public partial class NovelAIService : IDisposable
     {
         LastGenerationErrorStatusCode = null;
 
+        using var diagnostic = BeginBusinessLog(new { operation = "generate", width, height, prompt, negativePrompt, characters, vibeTransfers, preciseReferences, parameters = _settings.Settings.GenParameters });
         if (!_settings.HasApiTokens)
+        {
+            diagnostic.Stage("request_rejected", new { reason = "missing_api_token" });
             return (null, L("api.error.token_missing_network_api"));
-
+        }
         bool streamGeneration = _settings.Settings.StreamGeneration;
         var naiParams = ModelCapabilities.CreateRequestSnapshot(_settings.Settings.GenParameters);
         string model = naiParams.Model;
         if (!_settings.Settings.UsesCustomApiBaseUrl &&
             NovelAiAnlasCalculator.PaidBaseCost(naiParams.Model, width, height, naiParams.Steps,
                 sm: naiParams.Sm, strength: 1, smDyn: naiParams.Sm && naiParams.SmDyn) > NovelAiAnlasCalculator.MaxBaseCost)
+        {
+            diagnostic.Stage("request_rejected", new { reason = "generation_cost_limit", maximum_base_cost = NovelAiAnlasCalculator.MaxBaseCost });
             return (null, Lf("api.error.generation_cost_limit", NovelAiAnlasCalculator.MaxBaseCost));
+        }
 
         object seed = SeedValue.ToRequestValue(SeedValue.Resolve(naiParams.Seed));
         bool isV4Plus = IsV4PlusModel(model);
@@ -1341,8 +1285,7 @@ public partial class NovelAIService : IDisposable
 
         try
         {
-            var json = JsonSerializer.Serialize(payload, JsonOptions);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var content = diagnostic.Content(payload);
             var endpoints = GetApiEndpoints();
             var url = streamGeneration ? endpoints.GenerateStreamUrl : endpoints.GenerateUrl;
             using var requestTimeoutCts = CreateRequestTimeoutTokenSource(ImageGenerationRequestTimeout, ct);
@@ -1457,10 +1400,17 @@ public partial class NovelAIService : IDisposable
         string imageBase64, string model, double informationExtracted,
         CancellationToken ct = default)
     {
+        using var diagnostic = BeginBusinessLog(new { operation = "encode_vibe", imageBase64, model, informationExtracted });
         if (!_settings.HasApiTokens)
+        {
+            diagnostic.Stage("request_rejected", new { reason = "missing_api_token" });
             return (null, L("api.error.token_missing_network_api"));
-
-        if (!SupportsVibeTransferModel(model)) return (null, "This model does not support Vibe encoding.");
+        }
+        if (!SupportsVibeTransferModel(model))
+        {
+            diagnostic.Stage("request_rejected", new { reason = "vibe_model_unsupported" });
+            return (null, "This model does not support Vibe encoding.");
+        }
         var payload = new Dictionary<string, object>
         {
             ["image"] = imageBase64,
@@ -1471,8 +1421,7 @@ public partial class NovelAIService : IDisposable
 
         try
         {
-            var json = JsonSerializer.Serialize(payload, JsonOptions);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var content = diagnostic.Content(payload);
             var endpoints = GetApiEndpoints();
             using var request = new HttpRequestMessage(HttpMethod.Post, endpoints.EncodeVibeUrl) { Content = content };
             using var timeout = CreateRequestTimeoutTokenSource(ImageGenerationRequestTimeout, ct);
@@ -1558,9 +1507,12 @@ public partial class NovelAIService : IDisposable
     public async Task<(string? Text, string? Error)> GeneratePromptTextAsync(
         string instruction, string model, CancellationToken ct = default)
     {
+        using var diagnostic = BeginBusinessLog(new { operation = "prompt_text", instruction, model });
         if (!_settings.HasApiTokens)
+        {
+            diagnostic.Stage("request_rejected", new { reason = "missing_api_token" });
             return (null, L("api.error.token_missing_network_api"));
-
+        }
         var messages = new[]
         {
             new Dictionary<string, string> { ["role"] = "user", ["content"] = instruction },
@@ -1578,8 +1530,7 @@ public partial class NovelAIService : IDisposable
 
         try
         {
-            var json = JsonSerializer.Serialize(payload, JsonOptions);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var content = diagnostic.Content(payload);
 
             var endpoints = GetApiEndpoints();
             using var request = new HttpRequestMessage(HttpMethod.Post, endpoints.TextChatCompletionUrl) { Content = content };
@@ -1649,8 +1600,7 @@ public partial class NovelAIService : IDisposable
             stopwatch.Stop();
             var result = textBuilder.ToString();
 
-            var logPayloadCopy = new Dictionary<string, object>(payload) { ["_streaming_result_length"] = result.Length };
-            WriteRequestLog("Prompt text generation (streaming)", logPayloadCopy, stopwatch.ElapsedMilliseconds, response, result);
+            WriteRequestLog("Prompt text generation (streaming)", payload, stopwatch.ElapsedMilliseconds, response, result);
 
             if (!textFinished) throw new InvalidDataException("Text stream ended without completion.");
             if (!string.IsNullOrWhiteSpace(result))

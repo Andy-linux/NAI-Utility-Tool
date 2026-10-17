@@ -1,4 +1,8 @@
-﻿{
+{
+  "settings.hub.developer.log_mode": "Logging mode",
+  "settings.hub.developer.log_simple": "Simple — completed HTTP 2xx calls",
+  "settings.hub.developer.log_debug": "Debug — all stages and failures",
+  "settings.hub.developer.log_full_hint": "Local, off by default. Simple saves only completed request summaries without image payloads, retaining 7 UTC dates and up to 8 MiB. Debug captures full requests, responses, imports and saves. API credentials are redacted; explicit Debug logs business data even with image privacy mode enabled.",
   "api.safe.authentication": "Authentication rejected.",
   "api.safe.forbidden": "Operation is not authorized.",
   "api.safe.payment": "Insufficient quota or payment required.",
@@ -428,7 +432,7 @@
   "settings.hub.language.description": "Choose the interface language used across the app.",
   "settings.hub.developer.title": "Developer Options",
   "settings.hub.developer.log_enabled": "Enable logging",
-  "settings.hub.developer.log_hint": "When enabled, runtime logs are saved to the logs folder in the app directory.\nDetailed generation and I2I request parameters, response status, and image metadata will be recorded for troubleshooting.",
+  "settings.hub.developer.log_hint": "Logs are stored in the app logs folder. Use Simple for daily records or Debug to investigate full import, request and response differences.",
   "tooltip.brush": "Brush (B)",
   "tooltip.eraser": "Eraser (E)",
   "tooltip.random_seed": "Random seed (set to 0)",

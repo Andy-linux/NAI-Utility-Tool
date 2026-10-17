@@ -84,6 +84,7 @@ public sealed partial class MainWindow
 
     private async Task<bool> DoImageGenerationAsync(bool forceRandomSeed = false)
     {
+        using var diagnostic = BeginUiBusinessLog("generate", new { forceRandomSeed, size = GetSelectedSize(), automation = _automationRunContext });
         _lastGenerationFailureStatusCode = null;
         var autoContext = _autoGenRunning ? _automationRunContext : null;
         var (w, h) = autoContext?.CurrentSizeOverride ?? GetSelectedSize();
@@ -710,16 +711,19 @@ public sealed partial class MainWindow
 
     private async Task ApplyDroppedImageMetadata(byte[] bytes, string fileName, bool skipSeed = false, bool promptForOptions = false)
     {
+        using var diagnostic = BeginUiBusinessLog("metadata_read", new { fileName });
         var meta = await Task.Run(() => ImageMetadataService.ReadFromBytes(bytes));
+        diagnostic.Stage("import_raw_info", new { meta?.RawJson, meta });
         if (meta == null || (!meta.IsNaiParsed && !(promptForOptions && meta.IsSdFormat)))
         {
+            diagnostic.Stage("import_parse_failed", new { fileName });
             TxtStatus.Text = Lf("metadata.drop_no_nai_data", fileName);
             return;
         }
 
         if (promptForOptions)
         {
-            await ImportMetadataAsync(meta);
+            await ImportMetadataAsync(meta, fileName: fileName);
             return;
         }
 
@@ -805,6 +809,10 @@ public sealed partial class MainWindow
         if (skipped.Count > 0) notes.Add(Lf("metadata.note.skipped", string.Join(", ", skipped)));
         AppendReferenceImportNotes(meta, notes);
 
+        RememberBusinessImport("generation", diagnostic, meta, fileName, new
+        { Prompt = true, NegativePrompt = true, Characters = true, Model = true, Settings = true,
+            Size = true, Seed = !skipSeed, References = true, ActualPrompt = false, skipped = skipped.ToArray() });
+        diagnostic.Stage("import_applied", CaptureBusinessInputs());
         TxtStatus.Text = notes.Count > 0
             ? Lf("metadata.applied_with_notes", fileName, string.Join("; ", notes))
             : Lf("metadata.applied", fileName);

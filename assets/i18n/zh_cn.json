@@ -1,4 +1,8 @@
-﻿{
+{
+    "settings.hub.developer.log_mode": "日志模式",
+    "settings.hub.developer.log_simple": "简易 — 完整接收的 HTTP 2xx 调用",
+    "settings.hub.developer.log_debug": "Debug — 所有阶段与失败",
+    "settings.hub.developer.log_full_hint": "仅本地，默认关闭。简易模式记录成功请求摘要，不保存图像数据，保留最近7个UTC日期，总量最多8 MiB；Debug记录完整请求、响应、导入和保存过程。API凭据脱敏；主动开启Debug时即使图片隐私模式启用也记录业务内容。",
     "api.safe.authentication": "身份验证被拒绝。",
     "api.safe.forbidden": "此操作未获授权。",
     "api.safe.payment": "额度不足或需要付费。",
@@ -384,7 +388,7 @@
     "settings.hub.language.description":  "选择整个应用使用的界面语言。",
     "settings.hub.developer.title":  "开发者选项",
     "settings.hub.developer.log_enabled":  "日志记录",
-    "settings.hub.developer.log_hint":  "启用后，程序运行日志会保存到程序目录下的 logs 文件夹中。\n会记录每次生图或重绘请求的详细参数、响应状态和返回图像元数据，便于排查问题。",
+    "settings.hub.developer.log_hint":  "日志保存到程序目录的 logs 文件夹。简易模式适合日常使用；Debug 模式用于检查导入、请求与响应的完整差异。",
     "tooltip.brush":  "画笔 (B)",
     "tooltip.eraser":  "橡皮擦 (E)",
     "tooltip.random_seed":  "随机种子（设为 0）",

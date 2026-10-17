@@ -13,11 +13,18 @@ public partial class NovelAIService
     public async Task<(byte[]? ImageBytes, string? Error)> UpscaleImageAsync(
         byte[] imageBytes, CancellationToken ct = default)
     {
+        using var diagnostic = BeginBusinessLog(new { operation = "upscale", image = Convert.ToBase64String(imageBytes) });
         if (!_settings.HasApiTokens)
+        {
+            diagnostic.Stage("request_rejected", new { reason = "missing_api_token" });
             return (null, L("api.error.token_missing_network"));
+        }
         if (_settings.Settings.AccountAssetProtectionMode &&
             _settings.Settings.AccountAssetProtectionDisablePaidFeatures)
+        {
+            diagnostic.Stage("request_rejected", new { reason = "asset_protection_paid_upscale_blocked" });
             return (null, L("upscale.official.protection_blocked"));
+        }
 
         var stopwatch = Stopwatch.StartNew();
         var payload = new Dictionary<string, object>();
@@ -31,7 +38,7 @@ public partial class NovelAIService
 
             using var request = new HttpRequestMessage(HttpMethod.Post, GetApiEndpoints().UpscaleUrl)
             {
-                Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json"),
+                Content = diagnostic.Content(payload),
             };
             // Use the same credential boundary as generation and account queries.
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/zip"));
@@ -49,11 +56,17 @@ public partial class NovelAIService
 
             byte[]? result = await ReadGeneratedImageBytesAsync(response.Content, timeout.Token, findImageEntry: true);
             if (result == null)
+            {
+                diagnostic.Stage("parse_failed", "empty_zip");
                 return (null, L("api.error.empty_zip"));
+            }
             using var codec = SKCodec.Create(new MemoryStream(result));
             if (codec == null || codec.Info.Width != prepared.Width * NovelAiUpscaleRules.Scale ||
                 codec.Info.Height != prepared.Height * NovelAiUpscaleRules.Scale)
+            {
+                diagnostic.Stage("parse_failed", "invalid_result_dimensions");
                 return (null, L("upscale.official.invalid_result"));
+            }
 
             WriteRequestLog("NovelAI upscale", payload, stopwatch.ElapsedMilliseconds, response, imageBytes: result);
             return (result, null);

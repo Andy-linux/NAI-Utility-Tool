@@ -260,17 +260,14 @@ public sealed partial class MainWindow
 
     private void DebugLog(string msg)
     {
-        if (!_settings.Settings.DevLogEnabled) return;
-        try
+        if (BusinessLog.Current != null)
         {
-            string dir = System.IO.Path.Combine(AppRootDir, "logs");
-            System.IO.Directory.CreateDirectory(dir);
-            string path = System.IO.Path.Combine(dir,
-                $"debug_{DateTime.Now:yyyy-MM-dd}.txt");
-            System.IO.File.AppendAllText(path,
-                $"[{DateTime.Now:HH:mm:ss.fff}] {msg}\n");
+            BusinessLog.Current.Stage("ui_report", msg);
+            return;
         }
-        catch { }
+        if (!_settings.Settings.DevLogEnabled || _settings.Settings.DevLogMode != "Debug") return;
+        using var diagnostic = _naiService.BeginBusinessLog(new { operation = "ui_report" }, unassociatedUiReport: true);
+        diagnostic.Stage("ui_report", msg);
     }
 
     private void UpdatePromptHighlights()

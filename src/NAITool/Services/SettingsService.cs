@@ -368,6 +368,7 @@ public class AppSettings
     public string AppearanceTransparency { get; set; } = "Standard";
     public string LanguageCode { get; set; } = "";
     public bool DevLogEnabled { get; set; }
+    public string DevLogMode { get; set; } = "Simple";
     public bool StreamGeneration { get; set; }
     public int EnhanceMagnitude { get; set; } = 3;
     public bool EnhanceShowIndividualSettings { get; set; }
