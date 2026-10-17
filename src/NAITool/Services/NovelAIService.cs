@@ -457,9 +457,14 @@ public partial class NovelAIService : IDisposable
         parameters.Remove("ucPreset"); parameters.Remove("uc_preset");
         parameters.Remove("qualityToggle"); parameters.Remove("quality_toggle");
         parameters.Remove("uc");
+        if (!IsV5Model(p.Model) || !p.TagHintTransparentBackground)
+            parameters.Remove("tag_hint_transparent_background");
+        if (!IsV5Model(p.Model)) parameters.Remove("straight_alpha");
         var sigma = ModelCapabilities.GetSkipCfgAboveSigma(p.Model, width, height, p.Variety);
         if (sigma.HasValue) parameters["skip_cfg_above_sigma"] = sigma.Value;
         else parameters.Remove("skip_cfg_above_sigma");
+        // Official V4+ capabilities disable Decrisper independently of CFG Rescale.
+        if (IsV4PlusModel(p.Model)) parameters["dynamic_thresholding"] = false;
         if (ModelCapabilities.IsMedium(p)) parameters.Remove("cfg_rescale");
         if (IsV5Model(p.Model))
         {
@@ -708,7 +713,7 @@ public partial class NovelAIService : IDisposable
             ["cfg_rescale"] = naiParams.CfgRescale,
             ["legacy"] = false,
             ["legacy_v3_extend"] = false,
-            ["dynamic_thresholding"] = naiParams.CfgRescale > 0,
+            ["dynamic_thresholding"] = naiParams.DynamicThresholding,
             ["skip_cfg_above_sigma"] = null,
             ["strength"] = isV4Plus ? Math.Clamp(naiParams.InpaintStrength, 0, 1) : 1.0,
             ["noise"] = isV4Plus ? Math.Clamp(naiParams.InpaintNoise, 0, 1) : 0.0,
@@ -965,7 +970,7 @@ public partial class NovelAIService : IDisposable
             ["cfg_rescale"] = naiParams.CfgRescale,
             ["legacy"] = false,
             ["legacy_v3_extend"] = false,
-            ["dynamic_thresholding"] = naiParams.CfgRescale > 0,
+            ["dynamic_thresholding"] = naiParams.DynamicThresholding,
             ["skip_cfg_above_sigma"] = null,
             ["strength"] = Math.Clamp(naiParams.DenoiseStrength, 0, 1),
             ["noise"] = Math.Clamp(naiParams.DenoiseNoise, 0, 1),
@@ -1190,7 +1195,7 @@ public partial class NovelAIService : IDisposable
             ["cfg_rescale"] = naiParams.CfgRescale,
             ["legacy"] = false,
             ["legacy_v3_extend"] = false,
-            ["dynamic_thresholding"] = naiParams.CfgRescale > 0,
+            ["dynamic_thresholding"] = naiParams.DynamicThresholding,
             ["skip_cfg_above_sigma"] = null,
             ["qualityToggle"] = naiParams.QualityToggle,
             ["quality_toggle"] = naiParams.QualityToggle,

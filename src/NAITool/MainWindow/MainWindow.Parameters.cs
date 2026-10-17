@@ -113,26 +113,23 @@ public sealed partial class MainWindow
         return available.FirstOrDefault() ?? "k_euler_ancestral";
     }
 
-    private static string NormalizeScheduleForModel(string? schedule, string? model, string? fallback = null)
+    private static string NormalizeScheduleForModel(string? schedule, string? model, string? fallback = null, string? sampler = null)
     {
         string normalized = (schedule ?? "").Trim();
-        if (AvailableSchedules.Contains(normalized, StringComparer.Ordinal))
-            return normalized;
-
-        // Imports from Stable Diffusion or other tools may carry schedule names
-        // that NovelAI does not accept directly. Map them to the closest safe value.
         if (normalized.Equals("normal", StringComparison.OrdinalIgnoreCase) ||
             normalized.Equals("simple", StringComparison.OrdinalIgnoreCase) ||
             normalized.Equals("sgm uniform", StringComparison.OrdinalIgnoreCase) ||
             normalized.Equals("sgm_uniform", StringComparison.OrdinalIgnoreCase) ||
             normalized.Equals("automatic", StringComparison.OrdinalIgnoreCase))
-            return "native";
-
-        string fallbackNormalized = (fallback ?? "").Trim();
-        if (AvailableSchedules.Contains(fallbackNormalized, StringComparer.Ordinal))
-            return fallbackNormalized;
-
-        return AvailableSchedules.FirstOrDefault() ?? "karras";
+            normalized = "native";
+        if (!AvailableSchedules.Contains(normalized, StringComparer.Ordinal))
+            normalized = (fallback ?? "").Trim();
+        return ModelCapabilities.CreateRequestSnapshot(new NAIParameters
+        {
+            Model = model ?? "",
+            Sampler = sampler ?? "k_euler_ancestral",
+            Schedule = normalized,
+        }).Schedule;
     }
 
     private sealed class ImportedPromptPresetMatch
@@ -358,6 +355,16 @@ public sealed partial class MainWindow
         _advCboSampler.SelectedIndex = Array.IndexOf(samplers, selected);
         if (_advCboSampler.SelectedIndex < 0)
             _advCboSampler.SelectedIndex = 0;
+        if (_advCboSchedule != null)
+        {
+            var schedules = AvailableSchedules.Where(s =>
+                s == NormalizeScheduleForModel(s, model, sampler: selected)).ToArray();
+            _advCboSchedule.Items.Clear();
+            foreach (var s in schedules) _advCboSchedule.Items.Add(CreateTextComboBoxItem(s));
+            _advCboSchedule.SelectedIndex = Array.IndexOf(schedules,
+                NormalizeScheduleForModel(CurrentParams.Schedule, model, sampler: selected));
+            _advCboSchedule.IsEnabled = schedules.Length > 1;
+        }
     }
 
     private void UpdateModelDependentUI()
@@ -366,7 +373,7 @@ public sealed partial class MainWindow
         bool isV3 = IsCurrentModelV3();
         UpdateImageRequestParameterControls();
         CurrentParams.Sampler = NormalizeSamplerForModel(CurrentParams.Sampler, GetCurrentModelKey());
-        CurrentParams.Schedule = NormalizeScheduleForModel(CurrentParams.Schedule, GetCurrentModelKey());
+        CurrentParams.Schedule = NormalizeScheduleForModel(CurrentParams.Schedule, GetCurrentModelKey(), sampler: CurrentParams.Sampler);
         RecheckVibeTransferCacheState();
         UpdateReferenceButtonAndPanelState();
         ChkVariety.Visibility = Visibility.Visible;
@@ -387,6 +394,8 @@ public sealed partial class MainWindow
                 _advChkTransparentBackground.Visibility = IsV5ModelKey(GetCurrentModelKey()) ? Visibility.Visible : Visibility.Collapsed;
             if (_advChkStraightAlpha != null)
                 _advChkStraightAlpha.Visibility = IsV5ModelKey(GetCurrentModelKey()) ? Visibility.Visible : Visibility.Collapsed;
+            if (_advChkDecrisper != null)
+                _advChkDecrisper.Visibility = IsV3ModelKey(GetCurrentModelKey()) ? Visibility.Visible : Visibility.Collapsed;
             RefreshAdvancedSamplerOptions();
         }
 
@@ -409,7 +418,7 @@ public sealed partial class MainWindow
         p.Variety = ChkVariety.IsChecked == true;
         p.Model = GetSelectedComboText(CboModel) ?? p.Model;
         p.Sampler = NormalizeSamplerForModel(p.Sampler, p.Model);
-        p.Schedule = NormalizeScheduleForModel(p.Schedule, p.Model);
+        p.Schedule = NormalizeScheduleForModel(p.Schedule, p.Model, sampler: p.Sampler);
     }
 
     private static NAIParameters CreateDefaultGenerationParameters() => new()
@@ -420,13 +429,11 @@ public sealed partial class MainWindow
     private static NAIParameters CreateDefaultInpaintParameters() => new()
     {
         Model = NAIParameters.DefaultInpaintModel,
-        Steps = 28,
     };
 
     private static NAIParameters CreateDefaultI2IDenoiseParameters() => new()
     {
         Model = NAIParameters.DefaultI2IDenoiseModel,
-        Steps = 28,
         DenoiseStrength = 0.7,
         DenoiseNoise = 0,
     };

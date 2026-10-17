@@ -31,6 +31,7 @@ public class ImageMetadata
     public int Steps { get; set; }
     public double Scale { get; set; }
     public double CfgRescale { get; set; }
+    public bool DynamicThresholding { get; set; }
     public string? Seed { get; set; }
     public string Sampler { get; set; } = "";
     public string NoiseSchedule { get; set; } = "";
@@ -651,6 +652,9 @@ public static class ImageMetadataService
                 meta.Scale = scale.GetDouble();
             if (root.TryGetProperty("cfg_rescale", out var cfgRescale))
                 meta.CfgRescale = cfgRescale.GetDouble();
+            if (root.TryGetProperty("dynamic_thresholding", out var dynamicThresholding) &&
+                dynamicThresholding.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                meta.DynamicThresholding = dynamicThresholding.GetBoolean();
             if (root.TryGetProperty("seed", out var seed))
                 meta.Seed = SeedValue.ReadJson(seed);
             if (root.TryGetProperty("sampler", out var sampler))

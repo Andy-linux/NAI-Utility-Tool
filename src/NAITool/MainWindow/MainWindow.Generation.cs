@@ -761,10 +761,11 @@ public sealed partial class MainWindow
         if (!skipSeed && !string.IsNullOrEmpty(meta.Seed)) p.Seed = meta.Seed;
         if (meta.Scale > 0) p.Scale = meta.Scale;
         if (!ModelCapabilities.IsMedium(p)) p.CfgRescale = meta.CfgRescale;
-        if (meta.TagHintTransparentBackground.HasValue) p.TagHintTransparentBackground = meta.TagHintTransparentBackground.Value;
+        p.TagHintTransparentBackground = meta.TagHintTransparentBackground ?? false;
         if (meta.StraightAlpha.HasValue) p.StraightAlpha = meta.StraightAlpha.Value;
         if (!ModelCapabilities.IsMedium(p) && !string.IsNullOrEmpty(meta.Sampler)) p.Sampler = meta.Sampler;
         if (!string.IsNullOrEmpty(meta.NoiseSchedule)) p.Schedule = meta.NoiseSchedule;
+        p.DynamicThresholding = meta.DynamicThresholding;
         p.Sm = meta.Sm;
         p.SmDyn = meta.SmDyn;
         p.Variety = meta.Variety;

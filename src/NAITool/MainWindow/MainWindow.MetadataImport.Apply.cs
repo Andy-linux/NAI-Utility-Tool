@@ -66,20 +66,21 @@ public sealed partial class MainWindow
             if (!meta.IsSdFormat)
             {
                 if (!ModelCapabilities.IsMedium(p)) p.CfgRescale = meta.CfgRescale;
-                if (meta.TagHintTransparentBackground.HasValue) p.TagHintTransparentBackground = meta.TagHintTransparentBackground.Value;
-                if (meta.StraightAlpha.HasValue) p.StraightAlpha = meta.StraightAlpha.Value;
             }
             if (!ModelCapabilities.IsMedium(p) && !string.IsNullOrEmpty(meta.Sampler)) p.Sampler = NormalizeSamplerForModel(meta.Sampler, p.Model);
-            if (!string.IsNullOrEmpty(meta.NoiseSchedule)) p.Schedule = NormalizeScheduleForModel(meta.NoiseSchedule, p.Model, p.Schedule);
+            if (!string.IsNullOrEmpty(meta.NoiseSchedule)) p.Schedule = NormalizeScheduleForModel(meta.NoiseSchedule, p.Model, p.Schedule, p.Sampler);
             if (!meta.IsSdFormat)
             {
+                p.TagHintTransparentBackground = meta.TagHintTransparentBackground ?? false;
+                if (meta.StraightAlpha.HasValue) p.StraightAlpha = meta.StraightAlpha.Value;
+                p.DynamicThresholding = meta.DynamicThresholding;
                 p.Sm = meta.Sm;
                 p.SmDyn = meta.SmDyn;
                 p.Variety = meta.Variety;
             }
 
             p.Sampler = NormalizeSamplerForModel(p.Sampler, p.Model);
-            p.Schedule = NormalizeScheduleForModel(p.Schedule, p.Model);
+            p.Schedule = NormalizeScheduleForModel(p.Schedule, p.Model, sampler: p.Sampler);
         }
         if (options.Seed && !string.IsNullOrEmpty(meta.Seed)) p.Seed = meta.Seed;
 
@@ -179,16 +180,19 @@ public sealed partial class MainWindow
             if (meta.Scale > 0) p.Scale = meta.Scale;
             if (!meta.IsSdFormat && !ModelCapabilities.IsMedium(p)) p.CfgRescale = meta.CfgRescale;
             if (!ModelCapabilities.IsMedium(p) && !string.IsNullOrEmpty(meta.Sampler)) p.Sampler = NormalizeSamplerForModel(meta.Sampler, p.Model);
-            if (!string.IsNullOrEmpty(meta.NoiseSchedule)) p.Schedule = NormalizeScheduleForModel(meta.NoiseSchedule, p.Model, p.Schedule);
+            if (!string.IsNullOrEmpty(meta.NoiseSchedule)) p.Schedule = NormalizeScheduleForModel(meta.NoiseSchedule, p.Model, p.Schedule, p.Sampler);
             if (!meta.IsSdFormat)
             {
+                p.TagHintTransparentBackground = meta.TagHintTransparentBackground ?? false;
+                if (meta.StraightAlpha.HasValue) p.StraightAlpha = meta.StraightAlpha.Value;
+                p.DynamicThresholding = meta.DynamicThresholding;
                 p.Sm = meta.Sm;
                 p.SmDyn = meta.SmDyn;
                 p.Variety = meta.Variety;
             }
 
             p.Sampler = NormalizeSamplerForModel(p.Sampler, p.Model);
-            p.Schedule = NormalizeScheduleForModel(p.Schedule, p.Model);
+            p.Schedule = NormalizeScheduleForModel(p.Schedule, p.Model, sampler: p.Sampler);
         }
         if (options.Seed && !string.IsNullOrEmpty(meta.Seed)) p.Seed = meta.Seed;
 

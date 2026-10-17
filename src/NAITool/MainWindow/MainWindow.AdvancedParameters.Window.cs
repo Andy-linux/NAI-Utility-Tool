@@ -70,6 +70,9 @@ public sealed partial class MainWindow
         _advNbMaxHeight.Value = _customHeight;
         _advChkSmea.IsChecked = p.Sm;
         _advChkSmeaDyn.IsChecked = p.SmDyn;
+        _advChkTransparentBackground.IsChecked = p.TagHintTransparentBackground;
+        _advChkStraightAlpha.IsChecked = p.StraightAlpha;
+        _advChkDecrisper.IsChecked = p.DynamicThresholding;
         _advCboQuality.SelectedIndex = !p.QualityToggle ? 2 : p.QualityPreset == "light" && NovelAiPromptPresets.SupportsLightQuality(p.Model) ? 1 : 0;
         RefreshUcPresetOptions(p);
         _isSyncingSidebarAdv = false;
@@ -170,6 +173,11 @@ public sealed partial class MainWindow
             VerticalContentAlignment = VerticalAlignment.Center,
             Visibility = IsV5ModelKey(p.Model) ? Visibility.Visible : Visibility.Collapsed,
         };
+        _advChkDecrisper = new CheckBox
+        {
+            Content = "Decrisper", IsChecked = p.DynamicThresholding,
+            Visibility = IsV3ModelKey(p.Model) ? Visibility.Visible : Visibility.Collapsed,
+        };
         _advNbSeed.ValueChanged += (_, _) =>
         {
             if (_isSyncingSidebarAdv) return;
@@ -216,7 +224,10 @@ public sealed partial class MainWindow
         _advNbSteps.ValueChanged += OnAdvStepsValueChanged;
 
         foreach (var s in GetAvailableSamplersForModel(p.Model)) _advCboSampler.Items.Add(CreateTextComboBoxItem(s));
-        foreach (var s in AvailableSchedules) _advCboSchedule.Items.Add(CreateTextComboBoxItem(s));
+        var availableSchedules = AvailableSchedules.Where(s =>
+            s == NormalizeScheduleForModel(s, p.Model, sampler: p.Sampler)).ToArray();
+        foreach (var s in availableSchedules) _advCboSchedule.Items.Add(CreateTextComboBoxItem(s));
+        _advCboSchedule.IsEnabled = availableSchedules.Length > 1;
         foreach (var preset in MaskCanvasControl.CanvasPresets)
             _advCboSize.Items.Add(CreateTextComboBoxItem(preset.Label));
 
@@ -225,8 +236,21 @@ public sealed partial class MainWindow
         p.Sampler = NormalizeSamplerForModel(p.Sampler, p.Model);
         _advCboSampler.SelectedIndex = Array.IndexOf(availableSamplers, p.Sampler);
         if (_advCboSampler.SelectedIndex < 0) _advCboSampler.SelectedIndex = 0;
-        _advCboSchedule.SelectedIndex = Array.IndexOf(AvailableSchedules, p.Schedule);
-        if (_advCboSchedule.SelectedIndex < 0) _advCboSchedule.SelectedIndex = 0;
+        _advCboSchedule.SelectedIndex = Array.IndexOf(availableSchedules,
+            NormalizeScheduleForModel(p.Schedule, p.Model, sampler: p.Sampler));
+        _advCboSampler.SelectionChanged += (_, _) =>
+        {
+            var current = CurrentParams;
+            string sampler = GetSelectedComboText(_advCboSampler) ?? current.Sampler;
+            string schedule = GetSelectedComboText(_advCboSchedule) ?? current.Schedule;
+            var schedules = AvailableSchedules.Where(s =>
+                s == NormalizeScheduleForModel(s, current.Model, sampler: sampler)).ToArray();
+            _advCboSchedule.Items.Clear();
+            foreach (var s in schedules) _advCboSchedule.Items.Add(CreateTextComboBoxItem(s));
+            _advCboSchedule.SelectedIndex = Array.IndexOf(schedules,
+                NormalizeScheduleForModel(schedule, current.Model, sampler: sampler));
+            _advCboSchedule.IsEnabled = schedules.Length > 1;
+        };
 
         SuppressNumberBoxClearButton(_advNbSteps);
         SuppressNumberBoxClearButton(_advNbScale);
@@ -341,6 +365,9 @@ public sealed partial class MainWindow
         Grid.SetRow(_advChkSmeaDyn, 7);
         Grid.SetColumn(_advChkSmeaDyn, 1);
         paramsGrid.Children.Add(_advChkSmeaDyn);
+        Grid.SetRow(_advChkDecrisper, 7);
+        Grid.SetColumn(_advChkDecrisper, 0);
+        paramsGrid.Children.Add(_advChkDecrisper);
 
         var rootPanel = new StackPanel
         {
@@ -425,7 +452,7 @@ public sealed partial class MainWindow
         var p = CurrentParams;
         bool medium = ModelCapabilities.IsMedium(p);
         if (!medium) p.Sampler = GetSelectedComboText(_advCboSampler) ?? p.Sampler;
-        p.Schedule = GetSelectedComboText(_advCboSchedule) ?? p.Schedule;
+        p.Schedule = NormalizeScheduleForModel(GetSelectedComboText(_advCboSchedule) ?? p.Schedule, p.Model, sampler: p.Sampler);
         if (!medium) p.Steps = (int)_advNbSteps.Value;
         p.Seed = _advNbSeed.Value;
         p.Scale = Math.Round(_advNbScale.Value, 1);
@@ -443,6 +470,7 @@ public sealed partial class MainWindow
         }
         p.TagHintTransparentBackground = _advChkTransparentBackground.IsChecked == true;
         p.StraightAlpha = _advChkStraightAlpha.IsChecked == true;
+        p.DynamicThresholding = _advChkDecrisper.IsChecked == true;
 
         NbSeed.Value = p.Seed;
         ChkVariety.IsChecked = p.Variety;

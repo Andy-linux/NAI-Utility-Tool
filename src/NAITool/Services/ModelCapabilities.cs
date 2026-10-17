@@ -26,6 +26,22 @@ internal static class ModelCapabilities
             result.UcPresetId = "heavy";
         }
         if (NovelAiAnlasCalculator.IsV5Model(result.Model)) result.Schedule = "karras";
+        else
+        {
+            string[] schedules = result.Sampler switch
+            {
+                "k_dpm_2" => ["exponential", "polyexponential"],
+                "k_euler" or "k_euler_ancestral" or "k_dpmpp_2s_ancestral" or
+                "k_dpmpp_2m" or "k_dpmpp_2m_sde" or "k_dpmpp_sde" =>
+                    NovelAIService.IsV4PlusModel(result.Model)
+                        ? ["karras", "exponential", "polyexponential"]
+                        : ["native", "karras", "exponential", "polyexponential"],
+                _ => [],
+            };
+            if (!System.Linq.Enumerable.Contains(schedules, result.Schedule))
+                result.Schedule = result.Sampler is "k_dpm_2" or "k_dpmpp_2m" ? "exponential"
+                    : schedules.Length > 0 ? "karras" : "native";
+        }
         result.UcPresetId = NovelAiPromptPresets.ResolveUcId(result);
         if (result.QualityPreset is not ("standard" or "light" or "none"))
             result.QualityPreset = "standard";

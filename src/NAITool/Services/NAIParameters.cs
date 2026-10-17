@@ -10,9 +10,28 @@ public class NAIParameters
 
     public string Model { get; set; } = DefaultGenerationModel;
     public string Sampler { get; set; } = "k_euler_ancestral";
-    public string Schedule { get; set; } = "karras";
-    public double Scale { get; set; } = 3.0;
+    private string? _schedule;
+    public string Schedule
+    {
+        get => _schedule ?? (ModelCapabilities.BaseModel(Model) is "nai-diffusion" or "safe-diffusion" or "nai-diffusion-furry" or "nai-diffusion-2" ? "native" : "karras");
+        set => _schedule = value;
+    }
+    private double? _scale;
+    public double Scale
+    {
+        get => _scale ?? ModelCapabilities.BaseModel(Model) switch
+        {
+            "nai-diffusion-5-full" or "nai-diffusion-5-full-medium" or "nai-diffusion-5-curated" => 7,
+            "nai-diffusion-4-5-full" or "nai-diffusion-4-5-curated" or "nai-diffusion-3" => 5,
+            "nai-diffusion-4-full" or "nai-diffusion-4-curated" or "nai-diffusion-4-curated-preview" => 5.5,
+            "nai-diffusion-furry-3" => 6.2,
+            "nai-diffusion" or "safe-diffusion" or "nai-diffusion-furry" or "nai-diffusion-2" => 10,
+            _ => 3,
+        };
+        set => _scale = value;
+    }
     public double CfgRescale { get; set; } = 0;
+    public bool DynamicThresholding { get; set; } = false;
     public bool Sm { get; set; }
     public bool SmDyn { get; set; }
     // Effort is a client-side choice; wire representation is resolved by ModelCapabilities.
@@ -23,12 +42,20 @@ public class NAIParameters
     public string QualityPreset { get; set; } = "standard";
     [JsonIgnore]
     public string QualityPresetId { get => QualityToggle ? QualityPreset : "none"; set { QualityPreset = value == "none" ? "standard" : value; QualityToggle = value != "none"; } }
-    public bool TagHintTransparentBackground { get; set; } = true;
-    public bool StraightAlpha { get; set; } = false;
+    public bool TagHintTransparentBackground { get; set; } = false;
+    public bool StraightAlpha { get; set; } = true;
     private int? _steps;
     public int Steps
     {
-        get => _steps ?? (Model is "nai-diffusion-5-full" or "nai-diffusion-5-full-inpainting" ? 23 : 28);
+        get => _steps ?? ModelCapabilities.BaseModel(Model) switch
+        {
+            "nai-diffusion-5-full-medium" => 14,
+            "nai-diffusion-5-full" or "nai-diffusion-5-curated" or
+            "nai-diffusion-4-5-full" or "nai-diffusion-4-5-curated" or
+            "nai-diffusion-4-full" or "nai-diffusion-4-curated" or "nai-diffusion-4-curated-preview" or
+            "nai-diffusion-3" or "nai-diffusion-furry-3" => 23,
+            _ => 28,
+        };
         set => _steps = value;
     }
     [JsonConverter(typeof(SeedTextJsonConverter))]

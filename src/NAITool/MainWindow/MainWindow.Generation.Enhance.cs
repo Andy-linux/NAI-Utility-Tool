@@ -548,6 +548,7 @@ public sealed partial class MainWindow
         Schedule = source.Schedule,
         Scale = source.Scale,
         CfgRescale = source.CfgRescale,
+        DynamicThresholding = source.DynamicThresholding,
         TagHintTransparentBackground = source.TagHintTransparentBackground,
         StraightAlpha = source.StraightAlpha,
         Sm = source.Sm,
