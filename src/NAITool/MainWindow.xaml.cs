@@ -539,6 +539,7 @@ public sealed partial class MainWindow : Window
     private void SetGenerationRequestRunning(bool running)
     {
         _generateRequestRunning = running;
+        BtnResetGeneration.IsEnabled = !running && !_continuousGenRunning && !_autoGenRunning;
         if (running && _settings.Settings.EnableGenerationWaitingAnimation)
             StartGenerationPreviewPulse();
         else

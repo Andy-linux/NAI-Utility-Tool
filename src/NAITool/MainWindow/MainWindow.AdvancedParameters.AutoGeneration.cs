@@ -218,6 +218,7 @@ public sealed partial class MainWindow
 
     private void UpdateAutoGenUI()
     {
+        BtnResetGeneration.IsEnabled = !_generateRequestRunning && !_continuousGenRunning && !_autoGenRunning;
         bool waitingForCurrentRequest =
             _generateRequestRunning &&
             ((_autoGenRunning && _autoGenCts?.IsCancellationRequested == true) ||

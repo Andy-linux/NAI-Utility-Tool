@@ -372,6 +372,8 @@ public sealed partial class MainWindow
     private void UpdateModelDependentUI()
     {
         if (ChkVariety == null || CboModel == null) return;
+        BtnResetGeneration.Visibility = _currentMode == AppMode.ImageGeneration ? Visibility.Visible : Visibility.Collapsed;
+        BtnResetGeneration.IsEnabled = !_generateRequestRunning && !_continuousGenRunning && !_autoGenRunning;
         bool isV3 = IsCurrentModelV3();
         UpdateImageRequestParameterControls();
         CurrentParams.Sampler = NormalizeSamplerForModel(CurrentParams.Sampler, GetCurrentModelKey());
@@ -421,6 +423,60 @@ public sealed partial class MainWindow
         p.Model = GetSelectedComboText(CboModel) ?? p.Model;
         p.Sampler = NormalizeSamplerForModel(p.Sampler, p.Model);
         p.Schedule = NormalizeScheduleForModel(p.Schedule, p.Model, sampler: p.Sampler);
+    }
+
+    private void OnResetGeneration(object sender, RoutedEventArgs e)
+    {
+        if (_currentMode != AppMode.ImageGeneration || _generateRequestRunning || _continuousGenRunning || _autoGenRunning) return;
+        bool wasPopulating = _populatingModelList;
+        bool wasSyncing = _isSyncingSidebarAdv;
+        _populatingModelList = true;
+        _isSyncingSidebarAdv = true;
+        try
+        {
+            var defaults = CreateDefaultGenerationParameters();
+            defaults.Effort = "medium";
+            _settings.Settings.GenParameters = defaults;
+            _genPositivePrompt = _genNegativePrompt = _genStylePrompt = "";
+            _genCharacters.Clear();
+            ClearReferenceFeatures();
+            _normalizeVibeStrengths = true;
+            _lastGenerationRequestFingerprint = null;
+            _customWidth = 832;
+            _customHeight = 1216;
+            _isPositiveTab = true;
+            TabPositive.IsChecked = true;
+            TabNegative.IsChecked = false;
+            TxtPrompt.Text = "";
+            TxtStylePrompt.Text = "";
+            if (IsAdvancedWindowOpen)
+            {
+                _advNbScale.Text = defaults.Scale.ToString(CultureInfo.CurrentCulture);
+                _advNbScale.Value = defaults.Scale;
+            }
+            CboModel.SelectedIndex = Array.IndexOf(GenerationModels, defaults.Model);
+            LoadPromptFromBuffer();
+            SyncParamsToUI();
+            RefreshCharacterPanel();
+            UpdateSplitVisibility();
+            if (IsAdvancedWindowOpen)
+            {
+                SyncSidebarToAdvanced();
+                _isSyncingSidebarAdv = true;
+                _advNbScale.Value = defaults.Scale;
+                UpdateEffortUI();
+            }
+            UpdatePromptHighlights();
+            UpdateStyleHighlights();
+        }
+        finally
+        {
+            _populatingModelList = wasPopulating;
+            _isSyncingSidebarAdv = wasSyncing;
+        }
+        SyncRememberedPromptAndParameterState();
+        _settings.Save();
+        TxtStatus.Text = L("generation.reset");
     }
 
     private static NAIParameters CreateDefaultGenerationParameters() => new()

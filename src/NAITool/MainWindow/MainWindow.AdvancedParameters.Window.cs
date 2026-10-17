@@ -448,7 +448,7 @@ public sealed partial class MainWindow
 
     private void SaveAdvancedPanelToSettings()
     {
-        if (_advCboSampler == null) return;
+        if (_advCboSampler == null || _isSyncingSidebarAdv) return;
         var p = CurrentParams;
         bool medium = ModelCapabilities.IsMedium(p);
         if (!medium) p.Sampler = GetSelectedComboText(_advCboSampler) ?? p.Sampler;
