@@ -395,8 +395,6 @@ public sealed partial class MainWindow
                     return false;
                 }
 
-                if (CurrentCharacterEntries.Count > 0)
-                    ApplyCharCountPrefixStrip();
                 if (ActiveVibeTransferCount() > 0 && ActivePreciseReferenceCount() == 0)
                 {
                     string? encodeError = await EnsureVibesEncodedAsync(enhanceParams.Model, ct);

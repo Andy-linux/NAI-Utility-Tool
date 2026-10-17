@@ -125,6 +125,7 @@ public sealed partial class MainWindow
             List<CharacterPromptInfo>? chars;
             List<VibeTransferInfo>? vibes;
             List<PreciseReferenceInfo>? preciseReferences;
+            ApplyCharCountPrefixStrip();
             while (true)
             {
                 actualSeed = SeedValue.Resolve(p.Seed, forceRandomSeed);
@@ -154,7 +155,6 @@ public sealed partial class MainWindow
                     return false;
                 }
 
-                if (CurrentCharacterEntries.Count > 0) ApplyCharCountPrefixStrip();
                 chars = (CurrentCharacterEntries.Count > 0 && !IsCurrentModelV3()) ? GetCharacterData(wildcardContext) : null;
                 if (autoContext?.CurrentVibeOverride == null &&
                     ActiveVibeTransferCount() > 0 &&

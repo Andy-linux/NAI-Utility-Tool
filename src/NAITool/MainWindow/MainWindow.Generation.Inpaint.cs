@@ -345,6 +345,7 @@ public sealed partial class MainWindow
         { TxtStatus.Text = L("inpaint.error.canvas_not_initialized"); return false; }
         if (!MaskCanvas.HasMaskContent())
         { TxtStatus.Text = L("inpaint.error.mask_required"); return false; }
+        ApplyCharCountPrefixStrip();
 
         bool keepGenerateButtonInteractive = _continuousGenRunning;
         if (!keepGenerateButtonInteractive)
@@ -383,7 +384,6 @@ public sealed partial class MainWindow
                 ip.Seed = actualSeed;
                 var wildcardContext = CreateWildcardContext(actualSeed, ip.Model);
                 var (prompt, negPrompt) = GetPrompts(wildcardContext);
-                if (CurrentCharacterEntries.Count > 0) ApplyCharCountPrefixStrip();
                 if (ActiveVibeTransferCount() > 0 && ActivePreciseReferenceCount() == 0)
                 {
                     string? encodeError = await EnsureVibesEncodedAsync(ip.Model, ct);
@@ -472,7 +472,6 @@ public sealed partial class MainWindow
             BtnGenerate.IsEnabled = true;
             return null;
         }
-        if (CurrentCharacterEntries.Count > 0) ApplyCharCountPrefixStrip();
         var chars = (CurrentCharacterEntries.Count > 0 && !IsCurrentModelV3()) ? GetCharacterData(wildcardContext) : null;
         if (ActiveVibeTransferCount() > 0 && ActivePreciseReferenceCount() == 0)
         {
@@ -556,6 +555,8 @@ public sealed partial class MainWindow
 
     private async Task<bool> DoDenoiseGenerateAsync(bool forceRandomSeed = false)
     {
+        if (!MaskCanvas.IsInPreviewMode) ApplyCharCountPrefixStrip();
+        using var diagnostic = BeginUiBusinessLog("denoise", new { forceRandomSeed });
         if (MaskCanvas.IsInPreviewMode)
         {
             return await RedoInpaintGenerateAsync(forceRandomSeed);
@@ -600,7 +601,6 @@ public sealed partial class MainWindow
                 dp.Seed = actualSeed;
                 var wildcardContext = CreateWildcardContext(actualSeed, dp.Model);
                 var (prompt, negPrompt) = GetPrompts(wildcardContext);
-                if (CurrentCharacterEntries.Count > 0) ApplyCharCountPrefixStrip();
                 if (ActiveVibeTransferCount() > 0 && ActivePreciseReferenceCount() == 0)
                 {
                     string? encodeError = await EnsureVibesEncodedAsync(dp.Model, ct);
@@ -689,7 +689,6 @@ public sealed partial class MainWindow
             BtnGenerate.IsEnabled = true;
             return null;
         }
-        if (CurrentCharacterEntries.Count > 0) ApplyCharCountPrefixStrip();
         var chars = (CurrentCharacterEntries.Count > 0 && !IsCurrentModelV3()) ? GetCharacterData(wildcardContext) : null;
         if (ActiveVibeTransferCount() > 0 && ActivePreciseReferenceCount() == 0)
         {
@@ -810,6 +809,8 @@ public sealed partial class MainWindow
 
     private async Task<bool> RedoInpaintGenerateAsync(bool forceRandomSeed = false)
     {
+        ApplyCharCountPrefixStrip();
+        using var diagnostic = BeginUiBusinessLog("i2i_regenerate", new { forceRandomSeed });
         var editMode = _i2iEditMode;
         if (MaskCanvas.Document.MaskTarget == null || MaskCanvas.GetDevice() == null)
         { TxtStatus.Text = L("inpaint.error.canvas_not_initialized"); return false; }
@@ -856,7 +857,6 @@ public sealed partial class MainWindow
                 ip.Seed = actualSeed;
                 var wildcardContext = CreateWildcardContext(actualSeed, ip.Model);
                 var (prompt, negPrompt) = GetPrompts(wildcardContext);
-                if (CurrentCharacterEntries.Count > 0) ApplyCharCountPrefixStrip();
                 if (ActiveVibeTransferCount() > 0 && ActivePreciseReferenceCount() == 0)
                 {
                     string? encodeError = await EnsureVibesEncodedAsync(ip.Model, ct);

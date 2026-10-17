@@ -542,12 +542,14 @@ public sealed partial class MainWindow
             SaveCharacterPrompt(entry);
     }
 
-    private static readonly System.Text.RegularExpressions.Regex CharCountPrefixRegex =
-        new(@"\b1(girl|boy|other)\b", System.Text.RegularExpressions.RegexOptions.Compiled);
-
     private static string StripCharCountPrefix(string prompt)
     {
-        return CharCountPrefixRegex.Replace(prompt, "$1");
+        foreach (string token in new[] { "1girl", "1boy" })
+        {
+            int index = prompt.IndexOf(token, StringComparison.Ordinal);
+            if (index >= 0) prompt = prompt.Remove(index, 1);
+        }
+        return prompt;
     }
 
     private void MoveCharacter(int index, int direction)
@@ -569,7 +571,6 @@ public sealed partial class MainWindow
         {
             if (entry.IsDisabled) continue;
             entry.PositivePrompt = StripCharCountPrefix(entry.PositivePrompt);
-            entry.NegativePrompt = HighDraftRules.TransformNegative(CurrentParams, entry.NegativePrompt, StripCharCountPrefix);
             if (entry.PromptBox != null)
             {
                 entry.PromptBox.Text = entry.IsPositiveTab ? entry.PositivePrompt : entry.NegativePrompt;
@@ -583,7 +584,7 @@ public sealed partial class MainWindow
         var result = new List<CharacterPromptInfo>();
         foreach (var entry in CurrentCharacterEntries)
         {
-            if (entry.IsDisabled) continue;
+            if (entry.IsDisabled || entry.PositivePrompt.Length == 0) continue;
             result.Add(new CharacterPromptInfo
             {
                 PositivePrompt = wildcardContext == null

@@ -676,9 +676,13 @@ public partial class NovelAIService : IDisposable
 
             if (characters is { Count: > 0 })
             {
-                foreach (var ch in characters)
+                foreach (var ch in characters.Where(ch => ch.PositivePrompt.Length > 0))
                 {
-                    var center = new Dictionary<string, double> { ["x"] = ch.CenterX, ["y"] = ch.CenterY };
+                    var center = new Dictionary<string, double>
+                    {
+                        ["x"] = IsV5Model(naiParams.Model) ? ch.CenterX : 0.1 + 0.2 * Math.Clamp((int)Math.Floor(5 * ch.CenterX), 0, 4),
+                        ["y"] = IsV5Model(naiParams.Model) ? ch.CenterY : 0.1 + 0.2 * Math.Clamp((int)Math.Floor(5 * ch.CenterY), 0, 4),
+                    };
                     posCharCaptions.Add(new Dictionary<string, object>
                     {
                         ["char_caption"] = ch.PositivePrompt,
@@ -714,7 +718,7 @@ public partial class NovelAIService : IDisposable
                 },
                 ["use_coords"] = useCoords,
                 ["use_order"] = false,
-                ["legacy_uc"] = !isV45,
+                ["legacy_uc"] = !isV45 && !IsV5Model(naiParams.Model),
             };
         }
         else
@@ -948,9 +952,13 @@ public partial class NovelAIService : IDisposable
 
             if (characters is { Count: > 0 })
             {
-                foreach (var ch in characters)
+                foreach (var ch in characters.Where(ch => ch.PositivePrompt.Length > 0))
                 {
-                    var center = new Dictionary<string, double> { ["x"] = ch.CenterX, ["y"] = ch.CenterY };
+                    var center = new Dictionary<string, double>
+                    {
+                        ["x"] = IsV5Model(naiParams.Model) ? ch.CenterX : 0.1 + 0.2 * Math.Clamp((int)Math.Floor(5 * ch.CenterX), 0, 4),
+                        ["y"] = IsV5Model(naiParams.Model) ? ch.CenterY : 0.1 + 0.2 * Math.Clamp((int)Math.Floor(5 * ch.CenterY), 0, 4),
+                    };
                     posCharCaptions.Add(new Dictionary<string, object>
                     {
                         ["char_caption"] = ch.PositivePrompt,
@@ -986,7 +994,7 @@ public partial class NovelAIService : IDisposable
                 },
                 ["use_coords"] = useCoords,
                 ["use_order"] = false,
-                ["legacy_uc"] = !isV45 && !(isEnhance && IsV5Model(naiParams.Model)),
+                ["legacy_uc"] = !isV45 && !IsV5Model(naiParams.Model),
             };
         }
         else
@@ -1160,9 +1168,13 @@ public partial class NovelAIService : IDisposable
 
             if (characters is { Count: > 0 })
             {
-                foreach (var ch in characters)
+                foreach (var ch in characters.Where(ch => ch.PositivePrompt.Length > 0))
                 {
-                    var center = new Dictionary<string, double> { ["x"] = ch.CenterX, ["y"] = ch.CenterY };
+                    var center = new Dictionary<string, double>
+                    {
+                        ["x"] = IsV5Model(naiParams.Model) ? ch.CenterX : 0.1 + 0.2 * Math.Clamp((int)Math.Floor(5 * ch.CenterX), 0, 4),
+                        ["y"] = IsV5Model(naiParams.Model) ? ch.CenterY : 0.1 + 0.2 * Math.Clamp((int)Math.Floor(5 * ch.CenterY), 0, 4),
+                    };
                     posCharCaptions.Add(new Dictionary<string, object>
                     {
                         ["char_caption"] = ch.PositivePrompt,
@@ -1198,7 +1210,7 @@ public partial class NovelAIService : IDisposable
                 },
                 ["use_coords"] = useCoords,
                 ["use_order"] = false,
-                ["legacy_uc"] = !isV45,
+                ["legacy_uc"] = !isV45 && !IsV5Model(naiParams.Model),
             };
         }
         else
