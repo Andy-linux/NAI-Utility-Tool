@@ -182,7 +182,13 @@ public sealed partial class MainWindow
     private static bool IsHistoryDateVisibleForSelection(string date, string? selectedDate) =>
         selectedDate == null || string.CompareOrdinal(date, selectedDate) <= 0;
 
-    private static string? GetDateFromFilePath(string filePath) => Path.GetFileName(Path.GetDirectoryName(filePath));
+    private string? GetDateFromFilePath(string filePath)
+    {
+        // Resolve from the catalog first: removal can happen after the physical file is gone.
+        foreach (var day in _historyByDate)
+            if (day.Value.Contains(filePath, StringComparer.OrdinalIgnoreCase)) return day.Key;
+        return File.Exists(filePath) ? File.GetCreationTime(filePath).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : null;
+    }
 
     private string AddPendingHistoryItem()
     {

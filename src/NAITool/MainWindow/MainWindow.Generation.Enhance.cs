@@ -474,7 +474,8 @@ public sealed partial class MainWindow
                 return false;
             }
 
-            string? savedPath = await SaveToOutputAsync(imageBytes, "enhance");
+            LogBusinessMetadata("returned_original_info", imageBytes);
+            string? savedPath = await SaveToOutputAsync(imageBytes, "enhance", prompt, actualSeed);
             finalAccepted = true;
             _currentGenImageBytes = imageBytes;
             _currentGenImagePath = savedPath;

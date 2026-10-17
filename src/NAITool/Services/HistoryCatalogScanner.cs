@@ -7,10 +7,10 @@ public static class HistoryCatalogScanner
 {
     public static Task<Dictionary<string, string[]>> ScanAsync(string directory, CancellationToken cancellationToken) => Task.Run(() =>
     {
-        var result = new ConcurrentDictionary<string, string[]>(StringComparer.Ordinal);
+        var collected = new ConcurrentBag<(string Path, DateTime Created, string Day)>();
         if (!Directory.Exists(directory)) return new Dictionary<string, string[]>(StringComparer.Ordinal);
         var dates = Directory.EnumerateDirectories(directory).Where(path =>
-            DateTime.TryParseExact(Path.GetFileName(path), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _));
+            DateTime.TryParseExact(Path.GetFileName(path), new[] { "yyyy-MM-dd", "yyyy-MM" }, CultureInfo.InvariantCulture, DateTimeStyles.None, out _));
         Parallel.ForEach(dates, new ParallelOptions
         {
             CancellationToken = cancellationToken,
@@ -20,20 +20,20 @@ public static class HistoryCatalogScanner
             try
             {
                 // FileInfo from enumeration already contains timestamps; avoid a stat for every sort comparison.
-                var files = new List<(string Path, DateTime Created)>();
-                foreach (var file in new DirectoryInfo(path).EnumerateFiles("*.png"))
+                foreach (var file in new DirectoryInfo(path).EnumerateFiles().Where(file =>
+                    file.Extension.Equals(".png", StringComparison.OrdinalIgnoreCase) || file.Extension.Equals(".webp", StringComparison.OrdinalIgnoreCase)))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    files.Add((file.FullName, file.CreationTimeUtc));
+                    collected.Add((file.FullName, file.CreationTimeUtc, file.CreationTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
                 }
-                var sorted = files.OrderByDescending(file => file.Created).ThenBy(file => file.Path, StringComparer.OrdinalIgnoreCase)
-                    .Select(file => file.Path).ToArray();
-                if (sorted.Length > 0) result[Path.GetFileName(path)] = sorted;
+
             }
             catch (IOException) { /* A date directory can disappear during a rescan. */ }
             catch (UnauthorizedAccessException) { /* Other dates remain browsable. */ }
         });
         cancellationToken.ThrowIfCancellationRequested();
-        return new Dictionary<string, string[]>(result, StringComparer.Ordinal);
+        return collected.GroupBy(file => file.Day).ToDictionary(group => group.Key,
+            group => group.OrderByDescending(file => file.Created).ThenBy(file => file.Path, StringComparer.OrdinalIgnoreCase)
+                .Select(file => file.Path).ToArray(), StringComparer.Ordinal);
     }, cancellationToken);
 }

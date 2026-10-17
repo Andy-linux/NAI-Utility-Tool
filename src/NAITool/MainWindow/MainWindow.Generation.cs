@@ -334,18 +334,30 @@ public sealed partial class MainWindow
         GenImageScroller.ChangeView(0, 0, zoom);
     }
 
-    private async Task<string?> SaveToOutputAsync(byte[] imageBytes, string prefix = "gen")
+    private async Task<string?> SaveToOutputAsync(byte[] imageBytes, string prefix = "gen", string? resolvedPrompt = null, string? sampleSeed = null)
     {
+        BusinessLog.Current?.Stage("save_start", new { prefix });
         if (_settings.Settings.PrivacyMode)
+        {
+            BusinessLog.Current?.Stage("save_result", new { save_outcome = "skipped_privacy" });
             return null;
-
-        var dateDir = Path.Combine(OutputBaseDir, DateTime.Now.ToString("yyyy-MM-dd"));
-        Directory.CreateDirectory(dateDir);
-        var fileName = $"{prefix}_{DateTime.Now:HHmmss_fff}.png";
-        var filePath = Path.Combine(dateDir, fileName);
-        var bytesToSave = await PrepareImageBytesForSaveAsync(imageBytes, stripMetadata: false);
-        await File.WriteAllBytesAsync(filePath, bytesToSave);
-        return filePath;
+        }
+        try
+        {
+            var dateDir = Path.Combine(OutputBaseDir, DateTime.Now.ToString("yyyy-MM"));
+            var meta = ImageMetadataService.ReadFromBytes(imageBytes);
+            var stem = ImageOutputNaming.Stem(meta?.PositivePrompt ?? resolvedPrompt ?? "", meta?.Seed ?? sampleSeed ?? "unknown");
+            var bytesToSave = await PrepareImageBytesForSaveAsync(imageBytes, stripMetadata: false);
+            var filePath = await ImageOutputNaming.SaveAsync(dateDir, stem, bytesToSave);
+            LogBusinessMetadata("post_save_metadata", bytesToSave);
+            BusinessLog.Current?.Stage("save_result", new { save_outcome = "success", result_path = filePath });
+            return filePath;
+        }
+        catch (Exception ex)
+        {
+            BusinessLog.Current?.Stage("save_result", new { save_outcome = "failed", exception = ex.ToString() });
+            throw;
+        }
     }
 
     // ═══ 生图模式浮动操作窗 ═══

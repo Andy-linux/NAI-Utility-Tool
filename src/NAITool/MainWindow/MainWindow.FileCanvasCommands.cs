@@ -311,7 +311,8 @@ public sealed partial class MainWindow
         }
 
         var picker = new FileSavePicker();
-        picker.FileTypeChoices.Add(L("file.png_image"), new List<string> { ".png" });
+        string extension = ShouldStripSavedImageMetadata(stripMetadata) ? ".png" : ImageOutputNaming.Extension(imageBytes);
+        picker.FileTypeChoices.Add(extension == ".webp" ? "WebP" : L("file.png_image"), new List<string> { extension });
         picker.SuggestedFileName = GetSuggestedSaveFileName(sourcePath);
         InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
 
@@ -326,8 +327,6 @@ public sealed partial class MainWindow
             TxtStatus.Text = L("file.error.no_image_to_save");
             return;
         }
-
-        bytesToSave = await Task.Run(() => EnsurePngEncoded(bytesToSave));
 
         try
         {
@@ -344,6 +343,11 @@ public sealed partial class MainWindow
 
     private async Task SaveAsInternal(bool stripMetadata)
     {
+        if (_currentMode == AppMode.ImageGeneration)
+        {
+            await SaveImageBytesAsAsync(_currentGenImageBytes, stripMetadata, _currentGenImagePath);
+            return;
+        }
         byte[]? bytesToSave = null;
 
         bool hasImageToSave = _currentMode switch
