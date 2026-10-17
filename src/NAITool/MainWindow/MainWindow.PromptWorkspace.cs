@@ -175,8 +175,8 @@ public sealed partial class MainWindow
 
     private static string MergeStyleAndMain(string style, string main)
     {
-        style = style?.Trim() ?? "";
-        main = main?.Trim() ?? "";
+        style = style ?? "";
+        main = main ?? "";
         if (style.Length > 0 && main.Length > 0) return style + ", " + main;
         return style.Length > 0 ? style : main;
     }
@@ -298,16 +298,15 @@ public sealed partial class MainWindow
         if (shortcutMap.Count == 0)
             return text;
 
-        var parts = Regex.Split(text, @"[,\r\n]+");
-        for (int i = 0; i < parts.Length; i++)
+        return Regex.Replace(text, @"[^,\r\n]+", match =>
         {
-            string token = parts[i].Trim();
-            if (shortcutMap.TryGetValue(token, out var fullPrompt))
-                parts[i] = fullPrompt;
-            else
-                parts[i] = token;
-        }
-        return string.Join(", ", parts.Where(x => !string.IsNullOrWhiteSpace(x)));
+            string part = match.Value;
+            string token = part.Trim();
+            if (!shortcutMap.TryGetValue(token, out var fullPrompt))
+                return part;
+            int start = part.Length - part.TrimStart().Length;
+            return part[..start] + fullPrompt + part[(start + token.Length)..];
+        });
     }
 
     // ═══════════════════════════════════════════════════════════

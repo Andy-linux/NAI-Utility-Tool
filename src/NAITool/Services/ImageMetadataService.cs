@@ -13,6 +13,7 @@ namespace NAITool.Services;
 public class ImageMetadata
 {
     public string Model { get; set; } = "";
+    public string ModelHash { get; set; } = "";
     public string ModelDisplayName => !string.IsNullOrWhiteSpace(Model) ? Model : Source ?? "";
     public string PositivePrompt { get; set; } = "";
     public string NegativePrompt { get; set; } = "";
@@ -47,9 +48,6 @@ public class ImageMetadata
     public int? UcPreset { get; set; }
     public string? UcPresetId { get; set; }
     public string? Effort { get; set; }
-    public NAIParameters? HighDraft { get; set; }
-    public string? HighNegativePrompt { get; set; }
-    public List<string>? HighCharacterNegativePrompts { get; set; }
     public bool? TagHintTransparentBackground { get; set; }
     public bool? StraightAlpha { get; set; }
     public string RawJson { get; set; } = "";
@@ -87,6 +85,28 @@ public static class ImageMetadataService
                 meta.IsNaiParsed = true;
                 meta.Software = textChunks.GetValueOrDefault("Software");
                 meta.Source = textChunks.GetValueOrDefault("Source") ?? meta.Source;
+                string hash = meta.ModelHash;
+                if (string.IsNullOrEmpty(hash) &&
+                    ImportedImageModel.ResolveForTarget(meta.Source, new[] { "nai-diffusion-5-full", "nai-diffusion-5-curated" }) != null)
+                    hash = meta.Source!.Split(' ')[^1];
+                switch (hash.ToUpperInvariant())
+                {
+                    // Official V5 image import maps these hashes to their model variants.
+                    case "70AB5786":
+                    case "93F4BD30":
+                        meta.Model = "nai-diffusion-5-full";
+                        meta.Effort = "medium";
+                        break;
+                    case "0ADF9AB7":
+                    case "657484A5":
+                        meta.Model = "nai-diffusion-5-full";
+                        meta.Effort = "high";
+                        break;
+                    case "DB276663":
+                        meta.Model = "nai-diffusion-5-curated";
+                        meta.Effort = "high";
+                        break;
+                }
                 meta.TextChunks = new Dictionary<string, string>(textChunks, StringComparer.Ordinal);
                 return meta;
             }
@@ -130,18 +150,60 @@ public static class ImageMetadataService
 
     public static Dictionary<string, string> ReadGenerationTextChunks(byte[] data)
     {
-        var textChunks = ReadPngTextChunks(data);
-        if (textChunks.ContainsKey("Comment") || textChunks.ContainsKey("parameters"))
-            return textChunks;
+        var textChunks = TryReadStealthTextChunks(data);
+        foreach (var pair in ReadPngTextChunks(data)) textChunks[pair.Key] = pair.Value;
+        foreach (var pair in ReadWebpExifTextChunks(data)) textChunks[pair.Key] = pair.Value;
+        return textChunks;
+    }
 
-        var stealthChunks = TryReadStealthTextChunks(data);
-        return stealthChunks.Count > 0 ? stealthChunks : textChunks;
+    private static Dictionary<string, string> ReadWebpExifTextChunks(byte[] data)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (data.Length < 12 || Encoding.ASCII.GetString(data, 0, 4) != "RIFF" || Encoding.ASCII.GetString(data, 8, 4) != "WEBP") return result;
+        try
+        {
+            for (int offset = 12; offset + 8 <= data.Length;)
+            {
+                int length = checked((int)BitConverter.ToUInt32(data, offset + 4));
+                if (length > data.Length - offset - 8) break;
+                if (Encoding.ASCII.GetString(data, offset, 4) == "EXIF")
+                {
+                    byte[] exif = data.AsSpan(offset + 8, length).ToArray();
+                    int start = exif.Length >= 6 && Encoding.ASCII.GetString(exif, 0, 6) == "Exif\0\0" ? 6 : 0;
+                    bool little = exif[start] == 'I' && exif[start + 1] == 'I';
+                    if (!little && !(exif[start] == 'M' && exif[start + 1] == 'M')) break;
+                    ushort U16(int p) => little ? System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(exif.AsSpan(p, 2)) : System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(exif.AsSpan(p, 2));
+                    uint U32(int p) => little ? System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(exif.AsSpan(p, 4)) : System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(exif.AsSpan(p, 4));
+                    void ReadIfd(int position, bool nested)
+                    {
+                        int count = U16(position);
+                        for (int i = 0; i < count; i++)
+                        {
+                            int p = checked(position + 2 + 12 * i);
+                            ushort tag = U16(p);
+                            if (tag == 0x8769 && !nested) ReadIfd(checked(start + (int)U32(p + 8)), true);
+                            if (tag != 0x9286) continue;
+                            int size = checked((int)U32(p + 4));
+                            int value = size <= 4 ? p + 8 : checked(start + (int)U32(p + 8));
+                            if (size < 8 || size > exif.Length - value) continue;
+                            string json = Encoding.UTF8.GetString(exif, value + 8, size - 8).TrimEnd('\0');
+                            using var doc = JsonDocument.Parse(json);
+                            foreach (var field in doc.RootElement.EnumerateObject())
+                                if (field.Value.ValueKind == JsonValueKind.String) result[field.Name] = field.Value.GetString()!;
+                        }
+                    }
+                    ReadIfd(checked(start + (int)U32(start + 4)), false);
+                }
+                offset = checked(offset + 8 + length + (length & 1));
+            }
+        }
+        catch { /* Malformed/unsupported EXIF does not block stealth or image reading. */ }
+        return result;
     }
 
     public static Dictionary<string, string> ReadRoundTripTextChunks(byte[] data)
     {
-        var textChunks = ReadPngTextChunks(data);
-        return new Dictionary<string, string>(textChunks, StringComparer.Ordinal);
+        return new Dictionary<string, string>(ReadGenerationTextChunks(data), StringComparer.Ordinal);
     }
 
     public static Dictionary<string, string> ReadPngTextChunks(byte[] data)
@@ -385,12 +447,14 @@ public static class ImageMetadataService
 
     public static byte[] ReplacePngComment(byte[] pngData, string? newComment)
     {
-        var textChunks = ReadPngTextChunks(pngData);
+        var textChunks = ReadGenerationTextChunks(pngData);
         if (newComment == null)
             textChunks.Remove("Comment");
         else
             textChunks["Comment"] = newComment;
-        return ReplacePngTextChunks(pngData, textChunks);
+        using var bitmap = DecodeRgbaUnpremulBitmap(pngData);
+        if (bitmap == null) throw new ArgumentException("Invalid PNG image.", nameof(pngData));
+        return ReapplyNovelAiMetadata(pngData, textChunks, bitmap.Width, bitmap.Height);
     }
 
     public static byte[] ReplacePngTextChunks(byte[] pngData, IReadOnlyDictionary<string, string>? textChunks)
@@ -517,24 +581,13 @@ public static class ImageMetadataService
             using var bitmap = DecodeRgbaUnpremulBitmap(pngData);
             if (bitmap == null) return pngData;
 
-            bool changed = false;
             for (int y = 0; y < bitmap.Height; y++)
             {
                 for (int x = 0; x < bitmap.Width; x++)
                 {
                     var color = bitmap.GetPixel(x, y);
-                    if (color.Alpha >= 254 && color.Alpha != 255)
-                    {
-                        bitmap.SetPixel(x, y, new SKColor(color.Red, color.Green, color.Blue, 255));
-                        changed = true;
-                    }
+                    bitmap.SetPixel(x, y, new SKColor(color.Red, color.Green, color.Blue, (byte)(color.Alpha & 0xFE)));
                 }
-            }
-
-            if (!changed)
-            {
-                // Even if all alpha values are already 255 in the decoded bitmap,
-                // re-encoding removes any hidden data carried through the original PNG structure.
             }
 
             using var image = SKImage.FromBitmap(bitmap);
@@ -635,6 +688,7 @@ public static class ImageMetadataService
             {
                 RawJson = json,
                 Model = TryReadString(root, "model", "model_name", "Model"),
+                ModelHash = TryReadString(root, "model_hash"),
                 Source = TryReadString(root, "Source", "source"),
             };
 
@@ -669,9 +723,6 @@ public static class ImageMetadataService
                 meta.SkipCfgAboveSigma = skipCfg.GetDouble();
             if (root.TryGetProperty("quality_toggle", out var qt))
                 meta.QualityToggle = qt.GetBoolean();
-            // Local roundtrip field, not an asserted upstream protocol key.
-            if (root.TryGetProperty("nai_tool_quality_preset", out var qualityPreset) && qualityPreset.ValueKind == JsonValueKind.String)
-                meta.QualityPreset = qualityPreset.GetString();
             if (root.TryGetProperty("tag_hint_uc_preset", out var ucHint) && ucHint.ValueKind == JsonValueKind.Number)
                 meta.UcPresetId = ucHint.GetInt32() switch { 2 => "heavy", 3 => "light", 4 => "humanFocus", 5 => "furryFocus", 0 => "none", _ => null };
             if (root.TryGetProperty("tag_hint_qt", out var qtHint) && qtHint.ValueKind == JsonValueKind.Number)
@@ -679,14 +730,6 @@ public static class ImageMetadataService
                 meta.QualityPreset = qtHint.GetInt32() == 3 ? "light" : "standard";
                 meta.QualityToggle = qtHint.GetInt32() != 0;
             }
-            if (root.TryGetProperty("nai_tool_high_character_negatives", out var highCharacters) && highCharacters.ValueKind == JsonValueKind.Array)
-                meta.HighCharacterNegativePrompts = highCharacters.EnumerateArray().Select(item => item.ValueKind == JsonValueKind.String ? item.GetString() ?? "" : "").ToList();
-            if (root.TryGetProperty("nai_tool_high_parameters", out var highDraft) && highDraft.ValueKind == JsonValueKind.Object)
-                meta.HighDraft = highDraft.Deserialize<NAIParameters>();
-            if (root.TryGetProperty("nai_tool_high_negative", out var highNegative) && highNegative.ValueKind == JsonValueKind.String)
-                meta.HighNegativePrompt = highNegative.GetString();
-            if (root.TryGetProperty("nai_tool_effort", out var effort) && effort.ValueKind == JsonValueKind.String)
-                meta.Effort = effort.GetString();
             if (root.TryGetProperty("ucPreset", out var ucPreset))
                 meta.UcPreset = ucPreset.GetInt32();
             if (root.TryGetProperty("tag_hint_transparent_background", out var transparent) &&
@@ -1014,7 +1057,7 @@ public static class ImageMetadataService
     {
         try
         {
-            byte[] cleaned = SetAllAlphaToOpaque(pngData);
+            byte[] cleaned = RemoveNovelAiStealthMetadata(pngData);
             using var bitmap = DecodeRgbaUnpremulBitmap(cleaned);
             if (bitmap == null)
                 return pngData;
@@ -1032,11 +1075,9 @@ public static class ImageMetadataService
             {
                 for (int y = 0; y < bitmap.Height; y++)
                 {
-                    byte alpha = 0xFF;
-                    if (bitIndex < bitStream.Length)
-                        alpha = (byte)(0xFE | bitStream[bitIndex++]);
-
+                    if (bitIndex >= bitStream.Length) break;
                     var color = bitmap.GetPixel(x, y);
+                    byte alpha = (byte)((color.Alpha & 0xFE) | bitStream[bitIndex++]);
                     bitmap.SetPixel(x, y, new SKColor(color.Red, color.Green, color.Blue, alpha));
                 }
             }
@@ -1044,34 +1085,6 @@ public static class ImageMetadataService
             using var image = SKImage.FromBitmap(bitmap);
             using var data = image.Encode(SKEncodedImageFormat.Png, 100);
             return data?.ToArray() ?? cleaned;
-        }
-        catch
-        {
-            return pngData;
-        }
-    }
-
-    private static byte[] SetAllAlphaToOpaque(byte[] pngData)
-    {
-        try
-        {
-            using var bitmap = DecodeRgbaUnpremulBitmap(pngData);
-            if (bitmap == null)
-                return pngData;
-
-            for (int y = 0; y < bitmap.Height; y++)
-            {
-                for (int x = 0; x < bitmap.Width; x++)
-                {
-                    var color = bitmap.GetPixel(x, y);
-                    if (color.Alpha != 255)
-                        bitmap.SetPixel(x, y, new SKColor(color.Red, color.Green, color.Blue, 255));
-                }
-            }
-
-            using var image = SKImage.FromBitmap(bitmap);
-            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-            return data?.ToArray() ?? pngData;
         }
         catch
         {

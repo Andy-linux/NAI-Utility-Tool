@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
@@ -504,7 +504,6 @@ public sealed partial class MainWindow
             })
             : null;
 
-        var requestDraft = CaptureClientParameterDraft(ImageRequestParameters);
         var (imageBytes, error) = await _naiService.InpaintAsync(
             imageBase64, maskBase64,
             MaskCanvas.CanvasW, MaskCanvas.CanvasH,
@@ -539,7 +538,6 @@ public sealed partial class MainWindow
             return null;
         }
 
-        imageBytes = AddClientParameterDraftMetadata(imageBytes, requestDraft);
         var textChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(imageBytes));
 
         using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
@@ -724,7 +722,6 @@ public sealed partial class MainWindow
             })
             : null;
 
-        var requestDraft = CaptureClientParameterDraft(ImageRequestParameters);
         var (imageBytes, error) = await _naiService.ImageToImageAsync(
             imageBase64,
             MaskCanvas.CanvasW, MaskCanvas.CanvasH,
@@ -759,7 +756,6 @@ public sealed partial class MainWindow
             return null;
         }
 
-        imageBytes = AddClientParameterDraftMetadata(imageBytes, requestDraft);
         var textChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(imageBytes));
 
         using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();

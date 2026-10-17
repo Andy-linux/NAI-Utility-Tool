@@ -16,6 +16,8 @@ public sealed partial class MainWindow
         var notes = new List<string>();
 
         string positivePrompt = options.PositivePromptFrom(meta);
+        if (options.Characters && !options.AppendCharacters && !options.ActualPrompt && NovelAIService.IsV5Model(meta.ModelDisplayName))
+            positivePrompt = NovelAiPromptPresets.StripAutoText(positivePrompt, meta);
         string negativePrompt = options.NegativePromptFrom(meta);
 
         if (meta.IsSdFormat)
@@ -29,7 +31,7 @@ public sealed partial class MainWindow
         if (options.Model) ApplyImportedImageModel(meta, p, GenerationModels);
         if (options.Settings && ModelCapabilities.SupportsEffort(p.Model))
             p.Effort = meta.Effort ?? (meta.ModelDisplayName.Contains("-medium", System.StringComparison.Ordinal) ? "medium" : "high");
-        var presetMatch = ExtractImportedPromptPresetMatch(positivePrompt, negativePrompt, p.Model);
+        var presetMatch = ExtractImportedPromptPresetMatch(positivePrompt, negativePrompt, p.Model, meta.TagHintTransparentBackground == true, meta.UcPresetId == "none", meta.QualityToggle == false);
         if (options.Settings)
         {
             positivePrompt = presetMatch.PositivePrompt;
@@ -41,18 +43,17 @@ public sealed partial class MainWindow
             _genPositivePrompt = positivePrompt;
             _genStylePrompt = "";
         }
-        if (options.NegativePrompt && (meta.HighNegativePrompt != null || !ModelCapabilities.IsMedium(p)))
-            _genNegativePrompt = meta.HighNegativePrompt ?? negativePrompt;
+        if (options.NegativePrompt && !ModelCapabilities.IsMedium(p))
+            _genNegativePrompt = negativePrompt;
 
         if (options.Settings)
         {
-            RestoreImportedHighDraft(meta, p);
             p.QualityToggle = meta.QualityToggle ?? presetMatch.QualityMatched;
             p.QualityPreset = meta.QualityPreset ?? presetMatch.QualityPreset;
             if (!ModelCapabilities.IsMedium(p))
             {
-                p.UcPreset = meta.UcPreset ?? presetMatch.UcPresetMatched ?? 2;
-                p.UcPresetId = meta.UcPresetId ?? presetMatch.UcPresetId ?? (p.UcPreset == 0 ? "heavy" : p.UcPreset == 1 ? "light" : "none");
+                p.UcPreset = meta.UcPresetId == "none" ? 2 : presetMatch.UcPresetMatched ?? 2;
+                p.UcPresetId = meta.UcPresetId == "none" ? "none" : presetMatch.UcPresetId ?? "none";
             }
 
             if (meta.Steps > 0 && !ModelCapabilities.IsMedium(p))
@@ -131,6 +132,8 @@ public sealed partial class MainWindow
         bool blockOversizedSteps = IsAssetProtectionStepLimitEnabled();
 
         string positivePrompt = options.PositivePromptFrom(meta);
+        if (options.Characters && !options.AppendCharacters && !options.ActualPrompt && NovelAIService.IsV5Model(meta.ModelDisplayName))
+            positivePrompt = NovelAiPromptPresets.StripAutoText(positivePrompt, meta);
         string negativePrompt = options.NegativePromptFrom(meta);
 
         if (meta.IsSdFormat)
@@ -144,7 +147,7 @@ public sealed partial class MainWindow
         if (options.Model) ApplyImportedImageModel(meta, p, _i2iEditMode == I2IEditMode.Denoise ? GenerationModels : I2IModels);
         if (options.Settings && ModelCapabilities.SupportsEffort(p.Model))
             p.Effort = meta.Effort ?? (meta.ModelDisplayName.Contains("-medium", System.StringComparison.Ordinal) ? "medium" : "high");
-        var presetMatch = ExtractImportedPromptPresetMatch(positivePrompt, negativePrompt, p.Model);
+        var presetMatch = ExtractImportedPromptPresetMatch(positivePrompt, negativePrompt, p.Model, meta.TagHintTransparentBackground == true, meta.UcPresetId == "none", meta.QualityToggle == false);
         if (options.Settings)
         {
             positivePrompt = presetMatch.PositivePrompt;
@@ -156,18 +159,17 @@ public sealed partial class MainWindow
             _i2iPositivePrompt = positivePrompt;
             _i2iStylePrompt = "";
         }
-        if (options.NegativePrompt && (meta.HighNegativePrompt != null || !ModelCapabilities.IsMedium(p)))
-            _i2iNegativePrompt = meta.HighNegativePrompt ?? negativePrompt;
+        if (options.NegativePrompt && !ModelCapabilities.IsMedium(p))
+            _i2iNegativePrompt = negativePrompt;
 
         if (options.Settings)
         {
-            RestoreImportedHighDraft(meta, p);
             p.QualityToggle = meta.QualityToggle ?? presetMatch.QualityMatched;
             p.QualityPreset = meta.QualityPreset ?? presetMatch.QualityPreset;
             if (!ModelCapabilities.IsMedium(p))
             {
-                p.UcPreset = meta.UcPreset ?? presetMatch.UcPresetMatched ?? 2;
-                p.UcPresetId = meta.UcPresetId ?? presetMatch.UcPresetId ?? (p.UcPreset == 0 ? "heavy" : p.UcPreset == 1 ? "light" : "none");
+                p.UcPreset = meta.UcPresetId == "none" ? 2 : presetMatch.UcPresetMatched ?? 2;
+                p.UcPresetId = meta.UcPresetId == "none" ? "none" : presetMatch.UcPresetId ?? "none";
             }
 
             if (meta.Steps > 0 && !ModelCapabilities.IsMedium(p))

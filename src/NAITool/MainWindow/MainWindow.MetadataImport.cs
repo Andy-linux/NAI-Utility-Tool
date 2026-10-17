@@ -158,12 +158,7 @@ public sealed partial class MainWindow
         if (!selection.Characters) return;
         SaveAllCharacterPrompts();
         var target = toI2I ? _i2iCharacters : _genCharacters;
-        bool medium = ModelCapabilities.IsMedium(toI2I ? ImageRequestParameters : _settings.Settings.GenParameters);
-        var negativeDrafts = meta.HighCharacterNegativePrompts?.ToArray() ?? target.Select(entry => entry.NegativePrompt).ToArray();
         int count = ImportCharactersFromMetadata(target, meta, selection);
-        if (medium)
-            for (int i = 0; i < target.Count; i++)
-                target[i].NegativePrompt = i < negativeDrafts.Length ? negativeDrafts[i] : "";
         if (meta.CharacterPrompts.Count > 0)
         {
             notes.Add(Lf("metadata.note.characters_imported", count));

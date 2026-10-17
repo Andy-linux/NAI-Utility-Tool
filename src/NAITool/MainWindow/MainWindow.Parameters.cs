@@ -166,15 +166,23 @@ public sealed partial class MainWindow
         public string? UcPresetId { get; init; }
     }
 
-    private ImportedPromptPresetMatch ExtractImportedPromptPresetMatch(string positivePrompt, string negativePrompt, string model)
+    private ImportedPromptPresetMatch ExtractImportedPromptPresetMatch(string positivePrompt, string negativePrompt, string model, bool transparent = false, bool ucNone = false, bool qualityNone = false)
     {
-        var qualityMatch = FindBestQualityPresetMatch(positivePrompt, model);
-        var ucMatch = FindBestUcPresetMatch(negativePrompt, model);
+        var qualityMatch = qualityNone ? null : FindBestQualityPresetMatch(positivePrompt, model);
+        string importedPositive = qualityMatch?.StrippedPrompt ?? positivePrompt;
+        if (transparent && TryStripPromptPreset(importedPositive, "transparent background", out var withoutBackground))
+            importedPositive = withoutBackground;
+        string ucBody = negativePrompt.StartsWith("nsfw, ", StringComparison.Ordinal) ? negativePrompt[6..] : negativePrompt;
+        var ucMatch = ucNone ? null : FindBestUcPresetMatch(ucBody, model);
+        string importedNegative = ucMatch?.StrippedPrompt ?? negativePrompt;
+        if (ucMatch != null && negativePrompt.StartsWith("nsfw, ", StringComparison.Ordinal) &&
+            !NovelAiPromptPresets.AddsAutomaticNsfw(model, ucMatch.UcPresetId ?? "none", positivePrompt))
+            importedNegative = "nsfw, " + importedNegative;
 
         return new ImportedPromptPresetMatch
         {
-            PositivePrompt = qualityMatch?.StrippedPrompt ?? positivePrompt,
-            NegativePrompt = ucMatch?.StrippedPrompt ?? negativePrompt,
+            PositivePrompt = importedPositive,
+            NegativePrompt = importedNegative,
             QualityMatched = qualityMatch != null,
             QualityPreset = qualityMatch?.QualityPreset ?? "standard",
             UcPresetMatched = ucMatch?.PresetIndex,
@@ -192,12 +200,16 @@ public sealed partial class MainWindow
             int tagCount = SplitPromptPresetTags(presetText).Count;
             if (tagCount == 0)
                 continue;
-            if (!TryStripPromptPreset(prompt, presetText, out string strippedPrompt))
+            if (!TryStripPromptPreset(prompt, presetText, out string strippedPrompt, prefix: NormalizePromptPresetModelKey(candidateModel) == "nai-diffusion-2", preserveWeight: !NovelAIService.IsV4PlusModel(candidateModel)))
             {
-                // Historical V4.5 metadata predates the documented location tag.
-                // Recognize it without rewriting existing user prompt text.
-                if (!presetText.StartsWith("location, ", StringComparison.Ordinal) ||
-                    !TryStripPromptPreset(prompt, presetText["location, ".Length..], out strippedPrompt))
+                string historicalPreset = NormalizePromptPresetModelKey(candidateModel) switch
+                {
+                    "nai-diffusion-4-5-full" => "location, very aesthetic, masterpiece, no text",
+                    "nai-diffusion-4-5-curated" => "location, masterpiece, no text, -0.8::feet::, rating:general",
+                    "nai-diffusion-4-curated" or "nai-diffusion-4-curated-preview" => "rating:general, amazing quality, very aesthetic, absurdres",
+                    _ => "",
+                };
+                if (!TryStripPromptPreset(prompt, historicalPreset, out strippedPrompt))
                     continue;
                 tagCount--;
             }
@@ -228,7 +240,7 @@ public sealed partial class MainWindow
                 int tagCount = SplitPromptPresetTags(presetText).Count;
                 if (tagCount == 0)
                     continue;
-                if (!TryStripPromptPreset(prompt, presetText, out string strippedPrompt))
+                if (!TryStripPromptPreset(prompt, presetText, out string strippedPrompt, prefix: true))
                     continue;
 
                 var match = new PromptPresetCandidateMatch
@@ -282,38 +294,35 @@ public sealed partial class MainWindow
         return false;
     }
 
-    private static bool TryStripPromptPreset(string prompt, string presetText, out string strippedPrompt)
+    private static bool TryStripPromptPreset(string prompt, string presetText, out string strippedPrompt, bool prefix = false, bool preserveWeight = false)
     {
         strippedPrompt = prompt;
-
-        var promptTags = SplitPromptPresetTags(prompt);
-        var presetTags = SplitPromptPresetTags(presetText);
-        if (promptTags.Count == 0 || presetTags.Count == 0)
-            return false;
-
-        var consumed = new bool[promptTags.Count];
-        foreach (var presetTag in presetTags)
+        if (presetText.Length == 0) return false;
+        if (preserveWeight && prompt.Contains('|'))
         {
-            string normalizedPresetTag = NormalizePromptTagForComparison(presetTag);
-            int matchIndex = -1;
-            for (int i = 0; i < promptTags.Count; i++)
-            {
-                if (consumed[i])
-                    continue;
-                if (!string.Equals(NormalizePromptTagForComparison(promptTags[i]), normalizedPresetTag, StringComparison.Ordinal))
-                    continue;
-
-                matchIndex = i;
-                break;
-            }
-
-            if (matchIndex < 0)
-                return false;
-
-            consumed[matchIndex] = true;
+            var segments = prompt.Split('|');
+            for (int i = 0; i < segments.Length; i++)
+                if (!TryStripPromptPreset(segments[i], presetText, out segments[i], prefix, preserveWeight: true))
+                    return false;
+            strippedPrompt = string.Join("|", segments);
+            return true;
         }
-
-        strippedPrompt = string.Join(", ", promptTags.Where((_, index) => !consumed[index]));
+        var weight = preserveWeight ? Regex.Match(prompt, @":[\d.]+$") : Match.Empty;
+        if (weight.Success) prompt = prompt[..weight.Index];
+        var mix = NovelAiPromptPresets.SplitPromptMix(prompt);
+        var marker = NovelAiPromptPresets.TextMarker.Match(mix[0]);
+        string body = marker.Success ? mix[0][..marker.Index] : mix[0];
+        string remainder = marker.Success ? mix[0][marker.Index..] : "";
+        string legacyDelimiter = marker.Success && body.EndsWith(",", StringComparison.Ordinal) ? "," : "";
+        if (legacyDelimiter.Length > 0) body = body[..^1];
+        if (body == presetText) body = "";
+        else if (prefix && body.StartsWith(presetText + ", ", StringComparison.Ordinal))
+            body = body[(presetText.Length + 2)..];
+        else if (!prefix && body.EndsWith(", " + presetText, StringComparison.Ordinal))
+            body = body[..^(presetText.Length + 2)];
+        else return false;
+        mix[0] = body + legacyDelimiter + remainder;
+        strippedPrompt = string.Join("|", mix) + weight.Value;
         return true;
     }
 
@@ -324,13 +333,6 @@ public sealed partial class MainWindow
             .Select(tag => tag.Trim())
             .Where(tag => !string.IsNullOrWhiteSpace(tag))
             .ToList();
-
-    private static string NormalizePromptTagForComparison(string tag)
-    {
-        string normalized = (tag ?? "").Replace('，', ',').Trim();
-        normalized = Regex.Replace(normalized, @"\s+", " ");
-        return normalized.ToLowerInvariant();
-    }
 
     private string GetUcPresetDisplayName(int ucPreset) => ucPreset switch
     {
@@ -484,7 +486,8 @@ public sealed partial class MainWindow
 
     private string ExpandPromptFeatures(string text, WildcardExpandContext context, bool isNegativeText = false)
     {
-        string expanded = ExpandPromptShortcuts(text);
+        // Serialize editor line boundaries like the website, without rewriting imported metadata or raw API input.
+        string expanded = ExpandPromptShortcuts(text.Replace("\r\n", "\n").Replace('\r', '\n'));
         if (!_settings.Settings.WildcardsEnabled)
             return expanded;
 

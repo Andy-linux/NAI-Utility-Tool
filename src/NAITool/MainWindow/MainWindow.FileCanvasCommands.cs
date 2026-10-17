@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
@@ -61,13 +61,22 @@ public sealed partial class MainWindow
         if (HasPngSignature(imageBytes))
             return imageBytes;
 
-        using var bitmap = SKBitmap.Decode(imageBytes);
-        if (bitmap == null)
-            return imageBytes;
-
+        using var stream = new SKMemoryStream(imageBytes);
+        using var codec = SKCodec.Create(stream);
+        if (codec == null) return imageBytes;
+        var info = new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+        using var bitmap = new SKBitmap(info);
+        if (codec.GetPixels(info, bitmap.GetPixels()) != SKCodecResult.Success) return imageBytes;
         using var image = SKImage.FromBitmap(bitmap);
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-        return data?.ToArray() ?? imageBytes;
+        if (data == null) return imageBytes;
+        // The website's WebP-to-PNG download copies only its six text fields,
+        // keeping the signed Comment and alpha bits without normalizing metadata.
+        var source = ImageMetadataService.ReadGenerationTextChunks(imageBytes);
+        var saved = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var key in new[] { "Title", "Description", "Software", "Source", "Generation time", "Comment" })
+            if (source.TryGetValue(key, out string? value)) saved[key] = value;
+        return ImageMetadataService.ReplacePngTextChunks(data.ToArray(), saved);
     }
 
     private bool ShouldStripSavedImageMetadata(bool stripMetadata) =>

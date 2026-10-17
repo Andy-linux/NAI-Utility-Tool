@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
@@ -187,7 +187,7 @@ public sealed partial class MainWindow
                     _ = ShowGenPreviewAsync(bytes, w, h, () => previewsOpen && !ct.IsCancellationRequested);
                 })
                 : null;
-            var requestDraft = CaptureClientParameterDraft(p);
+            diagnostic.Stage("preprocessing_complete", new { w, h, prompt, negPrompt, chars, vibes, preciseReferences, actualSeed });
             var (imageBytes, error) = await _naiService.GenerateAsync(
                 w, h, prompt, negPrompt,
                 chars, vibes, preciseReferences, progress, ct);
@@ -213,7 +213,7 @@ public sealed partial class MainWindow
                 return false;
             }
 
-            imageBytes = AddClientParameterDraftMetadata(imageBytes, requestDraft);
+            LogBusinessMetadata("returned_original_info", imageBytes);
             byte[] finalBytes = imageBytes;
             string? originalSavedPath = await SaveToOutputAsync(imageBytes);
             string? finalSavedPath = originalSavedPath;
@@ -734,21 +734,23 @@ public sealed partial class MainWindow
         var p = _settings.Settings.GenParameters;
         ApplyImportedImageModel(meta, p, GenerationModels);
 
-        var presetMatch = ExtractImportedPromptPresetMatch(meta.PositivePrompt, meta.NegativePrompt, p.Model);
+        string importedPositivePrompt = meta.PositivePrompt;
+        if (meta.IsNaiParsed && NovelAIService.IsV5Model(p.Model))
+            importedPositivePrompt = NovelAiPromptPresets.StripAutoText(importedPositivePrompt, meta);
+        var presetMatch = ExtractImportedPromptPresetMatch(importedPositivePrompt, meta.NegativePrompt, p.Model, meta.TagHintTransparentBackground == true, meta.UcPresetId == "none", meta.QualityToggle == false);
         string positivePrompt = presetMatch.PositivePrompt;
         string negativePrompt = presetMatch.NegativePrompt;
 
         _genPositivePrompt = positivePrompt;
-        if (meta.HighNegativePrompt != null || !ModelCapabilities.IsMedium(p)) _genNegativePrompt = meta.HighNegativePrompt ?? negativePrompt;
-        RestoreImportedHighDraft(meta, p);
+        if (!ModelCapabilities.IsMedium(p)) _genNegativePrompt = negativePrompt;
         _genStylePrompt = "";
 
         p.QualityToggle = meta.QualityToggle ?? presetMatch.QualityMatched;
         p.QualityPreset = meta.QualityPreset ?? presetMatch.QualityPreset;
         if (!ModelCapabilities.IsMedium(p))
         {
-            p.UcPreset = meta.UcPreset ?? presetMatch.UcPresetMatched ?? 2;
-            p.UcPresetId = meta.UcPresetId ?? presetMatch.UcPresetId ?? (p.UcPreset == 0 ? "heavy" : p.UcPreset == 1 ? "light" : "none");
+            p.UcPreset = presetMatch.UcPresetMatched ?? 2;
+            p.UcPresetId = presetMatch.UcPresetId ?? "none";
         }
 
         if (meta.Steps > 0 && !ModelCapabilities.IsMedium(p))
@@ -785,14 +787,10 @@ public sealed partial class MainWindow
         if (!skipSeed) NbSeed.Value = p.Seed;
         ChkVariety.IsChecked = p.Variety;
 
-        var characterNegativeDrafts = meta.HighCharacterNegativePrompts?.ToArray() ?? _genCharacters.Select(entry => entry.NegativePrompt).ToArray();
         if (meta.CharacterPrompts.Count > 0)
             SetGenCharactersFromMetadata(meta);
         else
             _genCharacters.Clear();
-        if (ModelCapabilities.IsMedium(p))
-            for (int i = 0; i < _genCharacters.Count; i++)
-                _genCharacters[i].NegativePrompt = i < characterNegativeDrafts.Length ? characterNegativeDrafts[i] : "";
         ApplyReferenceDataFromMetadata(meta);
         RefreshCharacterPanel();
 

@@ -446,7 +446,6 @@ public sealed partial class MainWindow
             if (!_settings.Settings.PrivacyMode)
                 pendingHistoryId = AddPendingHistoryItem();
             DebugLog($"[Enhance] Start | Request={requestWidth}x{requestHeight} | Expected={width}x{height} | Model={enhanceParams.Model} | Seed={actualSeed} | Strength={options.Strength:0.00} | Noise={options.Noise:0.00} | Max={options.UseMaxUpscale}");
-            var requestDraft = CaptureClientParameterDraft(enhanceParams);
             var (imageBytes, error) = await _naiService.ImageToImageAsync(
                 imageBase64,
                 requestWidth, requestHeight,
@@ -475,7 +474,6 @@ public sealed partial class MainWindow
                 return false;
             }
 
-            imageBytes = AddClientParameterDraftMetadata(imageBytes, requestDraft);
             string? savedPath = await SaveToOutputAsync(imageBytes, "enhance");
             finalAccepted = true;
             _currentGenImageBytes = imageBytes;

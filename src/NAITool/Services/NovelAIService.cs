@@ -388,65 +388,9 @@ public partial class NovelAIService : IDisposable
     private static bool SupportsPreciseReferenceModel(string model) =>
         IsV45Model(model);
 
-    private static string NormalizeModelKey(string model) =>
-        model.EndsWith("-inpainting", StringComparison.Ordinal)
-            ? model[..^"-inpainting".Length]
-            : model;
-
-    internal static string GetQualityTagSuffix(string model) => NormalizeModelKey(model) switch
-    {
-        "nai-diffusion-4-5-full" => "very aesthetic, masterpiece, no text",
-        "nai-diffusion-4-5-curated" => "masterpiece, no text, -0.8::feet::, rating:general",
-        "nai-diffusion-4-full" => "no text, best quality, very aesthetic, absurdres",
-        "nai-diffusion-4-curated" => "rating:general, amazing quality, very aesthetic, absurdres",
-        "nai-diffusion-4-curated-preview" => "rating:general, amazing quality, very aesthetic, absurdres",
-        "nai-diffusion-3" => "best quality, amazing quality, very aesthetic, absurdres",
-        "nai-diffusion-furry-3" => "{best quality}, {amazing quality}",
-        _ => "",
-    };
-
-    internal static string GetUcPresetText(string model, int ucPreset) => (NormalizeModelKey(model), ucPreset) switch
-    {
-        (_, 2) => "",
-        ("nai-diffusion-4-5-full", 0) => "lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page",
-        ("nai-diffusion-4-5-full", 1) => "lowres, artistic error, scan artifacts, worst quality, bad quality, jpeg artifacts, multiple views, very displeasing, too many watermarks, negative space, blank page",
-        ("nai-diffusion-4-5-curated", 0) => "blurry, lowres, upscaled, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, halftone, multiple views, logo, too many watermarks, negative space, blank page",
-        ("nai-diffusion-4-5-curated", 1) => "blurry, lowres, upscaled, artistic error, scan artifacts, jpeg artifacts, logo, too many watermarks, negative space, blank page",
-        ("nai-diffusion-4-full", 0) => "blurry, lowres, error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, multiple views, logo, too many watermarks",
-        ("nai-diffusion-4-full", 1) => "blurry, lowres, error, worst quality, bad quality, jpeg artifacts, very displeasing",
-        ("nai-diffusion-4-curated", 0) => "blurry, lowres, error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, logo, dated, signature, multiple views, gigantic breasts",
-        ("nai-diffusion-4-curated", 1) => "blurry, lowres, error, worst quality, bad quality, jpeg artifacts, very displeasing, logo, dated, signature",
-        ("nai-diffusion-4-curated-preview", 0) => "blurry, lowres, error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, logo, dated, signature, multiple views, gigantic breasts",
-        ("nai-diffusion-4-curated-preview", 1) => "blurry, lowres, error, worst quality, bad quality, jpeg artifacts, very displeasing, logo, dated, signature",
-        ("nai-diffusion-3", 0) => "lowres, {bad}, error, fewer, extra, missing, worst quality, jpeg artifacts, bad quality, watermark, unfinished, displeasing, chromatic aberration, signature, extra digits, artistic error, username, scan, [abstract]",
-        ("nai-diffusion-3", 1) => "lowres, jpeg artifacts, worst quality, watermark, blurry, very displeasing",
-        ("nai-diffusion-furry-3", 0) => "{{worst quality}}, [displeasing], {unusual pupils}, guide lines, {{unfinished}}, {bad}, url, artist name, {{tall image}}, mosaic, {sketch page}, comic panel, impact (font), [dated], {logo}, ych, {what}, {where is your god now}, {distorted text}, repeated text, {floating head}, {1994}, {widescreen}, absolutely everyone, sequence, {compression artifacts}, hard translated, {cropped}, {commissioner name}, unknown text, high contrast",
-        ("nai-diffusion-furry-3", 1) => "{worst quality}, guide lines, unfinished, bad, url, tall image, widescreen, compression artifacts, unknown text",
-        _ => "",
-    };
-
-    private static string MergePromptSegments(params string[] segments)
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var merged = new List<string>();
-
-        foreach (var segment in segments)
-        {
-            if (string.IsNullOrWhiteSpace(segment)) continue;
-            foreach (var part in segment.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
-            {
-                if (seen.Add(part))
-                    merged.Add(part);
-            }
-        }
-
-        return string.Join(", ", merged);
-    }
-
     private static string ApplyQualityTags(string prompt, NAIParameters parameters)
     {
-        if (!parameters.QualityToggle || parameters.QualityPresetId == "none") return prompt;
-        return MergePromptSegments(prompt, NovelAiPromptPresets.QualityTags(parameters.Model, parameters.QualityPresetId ?? "standard"));
+        return NovelAiPromptPresets.AddQuality(prompt, parameters);
     }
 
     private static void ApplyVerifiedModelParameters(Dictionary<string, object?> parameters, NAIParameters p, int width, int height)
@@ -471,19 +415,6 @@ public partial class NovelAIService : IDisposable
             parameters.Remove("sm"); parameters.Remove("sm_dyn");
             parameters["noise_schedule"] = "karras";
         }
-    }
-
-    private static string ApplyQualityTags(string prompt, string model, bool enabled)
-    {
-        if (!enabled) return prompt;
-        string suffix = GetQualityTagSuffix(model);
-        return string.IsNullOrWhiteSpace(suffix) ? prompt : MergePromptSegments(prompt, suffix);
-    }
-
-    private static string ApplyUcPreset(string negativePrompt, string model, int ucPreset)
-    {
-        string preset = GetUcPresetText(model, ucPreset);
-        return string.IsNullOrWhiteSpace(preset) ? negativePrompt : MergePromptSegments(negativePrompt, preset);
     }
 
     private static string ToApiPreciseReferenceType(PreciseReferenceType type) => type switch
@@ -690,7 +621,9 @@ public partial class NovelAIService : IDisposable
         bool isV4Plus = IsV4PlusModel(naiParams.Model);
         bool isV45 = IsV45Model(naiParams.Model);
         string effectivePrompt = ApplyQualityTags(prompt, naiParams);
-        string effectiveNegativePrompt = NovelAiPromptPresets.ResolveUc(naiParams.Model, NovelAiPromptPresets.ResolveUcId(naiParams), prompt, ModelCapabilities.IsMedium(naiParams) ? "" : negativePrompt);
+        string effectiveNegativePrompt = NovelAiPromptPresets.ResolveUc(naiParams.Model, NovelAiPromptPresets.ResolveUcId(naiParams), effectivePrompt, ModelCapabilities.IsMedium(naiParams) ? "" : negativePrompt);
+
+        if (IsV5Model(naiParams.Model)) effectivePrompt = NovelAiPromptPresets.AddAutoText(effectivePrompt, characters);
 
         var parameters = new Dictionary<string, object?>
         {
@@ -949,7 +882,9 @@ public partial class NovelAIService : IDisposable
         string effectivePrompt = ApplyQualityTags(prompt, naiParams);
         if (isEnhance && !upscaledEnhance && (isV45 || IsV5Model(naiParams.Model)))
             effectivePrompt = AddEnhancePromptHint(effectivePrompt);
-        string effectiveNegativePrompt = NovelAiPromptPresets.ResolveUc(naiParams.Model, NovelAiPromptPresets.ResolveUcId(naiParams), prompt, ModelCapabilities.IsMedium(naiParams) ? "" : negativePrompt);
+        string effectiveNegativePrompt = NovelAiPromptPresets.ResolveUc(naiParams.Model, NovelAiPromptPresets.ResolveUcId(naiParams), effectivePrompt, ModelCapabilities.IsMedium(naiParams) ? "" : negativePrompt);
+
+        if (IsV5Model(naiParams.Model)) effectivePrompt = NovelAiPromptPresets.AddAutoText(effectivePrompt, characters);
 
         var parameters = new Dictionary<string, object?>
         {
@@ -1175,7 +1110,9 @@ public partial class NovelAIService : IDisposable
         bool isV4Plus = IsV4PlusModel(model);
         bool isV45 = IsV45Model(model);
         string effectivePrompt = ApplyQualityTags(prompt, naiParams);
-        string effectiveNegativePrompt = NovelAiPromptPresets.ResolveUc(model, NovelAiPromptPresets.ResolveUcId(naiParams), prompt, ModelCapabilities.IsMedium(naiParams) ? "" : negativePrompt);
+        string effectiveNegativePrompt = NovelAiPromptPresets.ResolveUc(model, NovelAiPromptPresets.ResolveUcId(naiParams), effectivePrompt, ModelCapabilities.IsMedium(naiParams) ? "" : negativePrompt);
+
+        if (IsV5Model(naiParams.Model)) effectivePrompt = NovelAiPromptPresets.AddAutoText(effectivePrompt, characters);
 
         var parameters = new Dictionary<string, object?>
         {
