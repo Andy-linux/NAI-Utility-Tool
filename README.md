@@ -6,7 +6,38 @@ Language: English | [简体中文](README-CN.md)
 
 NAI Utility Tool is a Windows desktop client for NovelAI image workflows. It is built with .NET 9, WinUI 3, Windows App SDK, Win2D, SkiaSharp, and ONNX Runtime. It is not intended to replace the official NovelAI website; instead, it brings day-to-day local workflows into one tool: generation, image-to-image editing, mask editing, prompt management, reference-image workflows, batch automation, post-processing, upscaling, metadata inspection, and local reverse tagging.
 
-The current project version is `1.3.0`. The project is still evolving quickly, and this document follows the current `main` branch source layout.
+The fork version remains `1.3.0_fork.1`. This document describes the **dev stage**, not a new official release.
+
+## Dev goal and status (2026-10-17)
+
+**The dev branch aims to align original-client interactions, effective generation requests, generated results and original-image Info reproduction with the NovelAI website, while retaining local extensions.** This stage uses the captured website build `78a367e` as its reference. Completing this cleanup does not establish identical behavior for every model, input and backend result.
+
+### Stage changelog
+
+- Official hash/effort and Info import without embedded local drafts or sidecars; in-session High/Medium drafts and adjustable Medium CFG Scale remain.
+- Complete Quality/UC presets and reversible Text/automatic dialogue, mix and LF handling across editing, import and requests; unused legacy preset code removed.
+- Simple/Debug business diagnostics with credential redaction and safe startup ordering. Simple keeps at most seven UTC dates and 8 MiB; Debug records input, effective requests, responses and parse/save stages, without equating HTTP success with saved output.
+- Original output bytes retained separately from temporary WebP-to-PNG display conversion; monthly folders and creation-time history, independent of previous-image/send-to navigation and prompt/seed naming.
+- Model defaults, legal schedules, independent advanced settings, effective duplicate protection and character action/filter/coordinate handling.
+- I2I/Inpaint seed behavior, full-size API masks, feathered composition and raw/derived candidates; selected-source Enhance bytes; aspect-aware Precise Lanczos resizing and stealth cleanup.
+
+### Confirmed fixes and confidence
+
+- **Verified on bounded captured samples:** non-zoom Inpaint API-mask RGBA and composed RGB match; opaque same-source Precise pixels and real stealth cleanup; WebP response and offline display paths. These do not prove every transparency, size or mode.
+- **Implemented / method-level checked, not fully live-validated:** Medium hash restoration, preset/Text direct reuse and selective import, LF, Enhance source bytes, defaults/schedules, duplicate guards and character actions. Info reproduction is not signature verification; modified pixels or Info must not be presented as verified signed originals.
+
+### Confirmed unresolved
+
+Disabled characters are still filtered before the website-style state rewrite. Some recorded same-condition generation comparisons still differ; the cause has not been fully isolated, so they are not attributed to prompt handling or a different checkpoint without evidence.
+
+### Not deeply investigated / next TODO
+
+- Character/Text/history: provide model/effort, enabled states, exact action order and one shareable minimal prompt with expected/actual results.
+- Remaining generation differences: provide the same source image, seed, dimensions, model/effort, effective parameters and both original outputs.
+- Brush/ROI: provide source dimensions, canvas zoom, brush value, ROI rectangle, character coordinates and expected final image.
+- Transparency/reference/role-count boundaries: provide one minimal original sample, model, relevant settings/count and observed failure. Full transparency and website role-limit disagreements remain insufficiently investigated.
+
+Website mask units have been measured, but their mapping to the client brush UI needs confirmation. Focused-region sampling/cropping, character reprojection and final placement, plus some Text/history combinations, have not completed full live verification. Reuse existing evidence before collecting only the missing conditions. Website-only PixelSnap/3D capabilities are not automatically in scope. Debug records never include API keys, but business records can contain prompts, images and paths: sanitize reports again and share only the minimal reproduction, not private logs, HARs or credentials.
 
 <img width="1455" height="940" alt="Preview" src="https://github.com/user-attachments/assets/88c9a0d3-5fcb-464f-80bf-98075fc9f3f6" />
 
@@ -14,7 +45,7 @@ The current project version is `1.3.0`. The project is still evolving quickly, a
 
 ### Image Generation
 
-- Supports NovelAI Diffusion 4.5, 4, and 3 model families.
+- Supports NovelAI Diffusion 5, 4.5, 4, and 3 model families.
 - Supports common samplers and schedulers, with incompatible options filtered according to the selected model.
 - Supports separate positive, negative, and style prompt inputs.
 - Supports NAI v4+ character prompts, character negative prompts, and character positions: up to 22 characters for V5 and 6 for V4/V4.5.
@@ -320,7 +351,7 @@ This project is licensed under GPL-3.0. See `LICENSE` for the full license text.
 
 ## Fork: 1.3.0_fork.1
 
-Modified from [Aeka0/NAI-Utility-Tool](https://github.com/Aeka0/NAI-Utility-Tool) **Release 1.3.0**. The upstream README above is preserved.
+Modified from [Aeka0/NAI-Utility-Tool](https://github.com/Aeka0/NAI-Utility-Tool) **Release 1.3.0**. Upstream feature and usage references are retained; the current dev goal and stage status are documented above.
 
 ### Updates
 - V5 High/Medium support, with Medium's fixed sampling parameters and restoration of High settings.

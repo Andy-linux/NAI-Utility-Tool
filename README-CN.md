@@ -6,7 +6,43 @@
 
 NAI Utility Tool 是一个面向 NovelAI 图像工作流的 Windows 桌面客户端。它基于 .NET 9、WinUI 3、Windows App SDK、Win2D、SkiaSharp 和 ONNX Runtime 构建，目标不是替代 NovelAI 官方站点，而是把日常高频操作整合到一个本地工具里：生成、重绘、遮罩编辑、提示词管理、参考图工作流、批量自动化、后期处理、超分、元数据检视和本地反推。
 
-项目当前版本为 `1.3.0`，仍在快速迭代。本文档以当前 `main` 分支源码结构为准。
+当前 Fork 版本保持 `1.3.0_fork.1`；本文描述 **dev 阶段**，不是新的正式发布。
+
+## dev 目标与进度（2026-10-17）
+
+**dev 分支目标：对齐原客户端与 NovelAI 官网的交互、有效生成请求、生成结果和原图 Info 复现，同时保留本地扩展。** 本阶段以已取证的官网构建 `78a367e` 为参照；阶段整理完成不等于所有模型、输入和后端结果已经完全一致。
+
+### 本阶段更新
+
+- 官方 hash/effort 与 Info 导入；不再把本地隐藏草稿写入图片或 sidecar。High/Medium 会话草稿仍保留，Medium 的 CFG Scale 仍可调。
+- Quality/UC 完整预设、Text/自动对白、mix 与换行的编辑—导入—请求链；保留用户原文，移除无调用的旧预设实现。
+- Simple/Debug 两档业务日志、结构化脱敏和启动顺序修复。Simple 仅保留最近 7 个 UTC 日期且总量不超过 8 MiB；Debug 记录输入、有效请求、返回及解析/保存阶段，不把 HTTP 成功等同保存成功。
+- 原始输出 bytes 与显示转换分离：WebP 临时转 PNG 预览，保存仍为原格式；月目录、创建时间历史及提示词/seed 命名不改变上一张与发送到工作区的语义。
+- 合法模型默认值与 schedule、独立高级参数、有效参数重复保护、角色过滤/坐标及行动时正文写回。
+- I2I/Inpaint 的 seed、全尺寸 API 蒙版、羽化合成与 raw/derived 候选；Enhance 使用选中源 bytes；Precise 使用比例选择、精确 Lanczos 与 stealth 清理。
+
+### 已修复与验证范围
+
+- **限定样本已实证**：无 zoom Inpaint 的 API 蒙版 RGBA 和最终合成 RGB 与捕获样本一致；Precise 不透明同源样本像素一致、真实 stealth 清理；WebP 返回及离线显示路径已验证。这不是所有透明度/尺寸/模式的证明。
+- **实现及方法级检查，未充分实网验收**：官方 Medium hash 恢复、预设/Text 直接复用与选择导入、LF、Enhance 原 bytes、默认参数/schedule、重复保护及角色行动行为。原图 Info 复现不等于签名验证；修改像素或 Info 的输出不能冒充已验证签名原图。
+
+### 已确认未解决
+
+- 禁用角色在官网先参与页面状态重写，客户端仍先过滤，顺序不一致。
+- 已记录的部分同条件生成对照仍有结果差异，具体差异来源尚未完全定位；不直接归因于提示词或模型 checkpoint。
+
+### 未深入调查与下一步
+
+| 下一项 | 最少需要的信息 |
+| --- | --- |
+| 禁用角色与 Text/history 复现 | 模型/effort、角色启用状态、操作顺序、期望与实际结果；一个可公开的最小提示词样例 |
+| 同条件生成的剩余差异 | 同一源图、seed、尺寸、模型/effort、有效请求参数及两端原始输出 |
+| 画笔单位与 ROI | 原图尺寸、画布缩放、笔刷数值、ROI 矩形、角色坐标及预期最终图 |
+| 透明/参考图/角色数量边界 | 一个最小原始样本、模型、透明度或参考设置、角色数量和错误表现 |
+
+官网遮罩尺寸单位已测量，客户端画笔交互的对应关系仍需确认；局部重绘区域（ROI）的采样、裁切、角色坐标重映射和最终回贴尚未完成完整实网验证。部分 Text 导入/历史复用组合、全透明、参考图边界及角色数量上限也未充分调查。优先复用已有证据，仅补采缺失条件；官网专属 PixelSnap/3D 等不自动纳入本客户端范围。
+
+Debug 记录不包含 API key；但业务记录仍可能含提示词、图片及路径。提交报告前请再次脱敏，只提供最小复现，不公开私有日志、HAR 或凭据。
 
 <img width="1455" height="940" alt="Preview" src="https://github.com/user-attachments/assets/88c9a0d3-5fcb-464f-80bf-98075fc9f3f6" />
 
@@ -314,7 +350,7 @@ publish/NAI Utility Tool/
 
 ## 派生版本：1.3.0_fork.1
 
-基于 [Aeka0/NAI-Utility-Tool](https://github.com/Aeka0/NAI-Utility-Tool) 原版 **Release 1.3.0** 修改，上方原版 README 内容保持不变。
+基于 [Aeka0/NAI-Utility-Tool](https://github.com/Aeka0/NAI-Utility-Tool) 原版 **Release 1.3.0** 修改，保留上游功能参考与使用说明；本 dev 分支的阶段目标和最新进展见上方对应章节。
 
 ### 新增与调整
 - V5 High/Medium：Medium 固定采样参数，切回 High 恢复原设置。
