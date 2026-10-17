@@ -98,7 +98,12 @@ public sealed partial class MainWindow
         string? pendingHistoryId = null;
         bool previewsOpen = true;
         bool finalAccepted = false;
+        bool responseReceived = false;
+        string localProcessingStage = "response";
+        string? savedOutputPath = null;
         var previousPreviewSource = GenPreviewImage.Source;
+        var previousImageBytes = _currentGenImageBytes;
+        var previousImagePath = _currentGenImagePath;
         double previousPreviewWidth = GenPreviewImage.Width;
         double previousPreviewHeight = GenPreviewImage.Height;
 
@@ -213,38 +218,55 @@ public sealed partial class MainWindow
                 return false;
             }
 
+            responseReceived = true;
             LogBusinessMetadata("returned_original_info", imageBytes);
             byte[] finalBytes = imageBytes;
-            string? originalSavedPath = await SaveToOutputAsync(imageBytes);
+            localProcessingStage = "save_original";
+            string? originalSavedPath = await SaveToOutputAsync(imageBytes, resolvedPrompt: prompt, sampleSeed: actualSeed);
+            savedOutputPath = originalSavedPath;
             string? finalSavedPath = originalSavedPath;
             string postSummary = "";
 
             if (_autoGenRunning && _activeAutomationSettings?.Effects.Enabled == true)
             {
+                localProcessingStage = "automation_effects";
                 var postResult = await RunAutomationEffectsProcessAsync(imageBytes, _activeAutomationSettings.Effects, ct);
                 finalBytes = postResult.Bytes;
-                finalSavedPath = await SaveToOutputAsync(finalBytes, "auto");
+                if (!ReferenceEquals(finalBytes, imageBytes))
+                    finalBytes = ImageMetadataService.ReapplyNovelAiMetadata(finalBytes, ImageMetadataService.ReadGenerationTextChunks(imageBytes));
+                localProcessingStage = "save_effect_result";
+                finalSavedPath = await SaveToOutputAsync(finalBytes, "auto", prompt, actualSeed);
+                savedOutputPath = finalSavedPath ?? originalSavedPath;
                 postSummary = postResult.Summary;
             }
 
-            finalAccepted = true;
             _currentGenImageBytes = finalBytes;
             _currentGenImagePath = finalSavedPath;
-            ArmNewImageDeleteProtection(finalSavedPath);
 
-            await ShowGenPreviewAsync(finalBytes, w, h);
-
+            // The saved result belongs in history even if the WinUI preview decoder fails.
+            localProcessingStage = "history_update";
             if (finalSavedPath != null)
             {
                 if (pendingHistoryId != null)
+                {
                     ResolvePendingHistoryItem(pendingHistoryId, finalSavedPath);
+                    pendingHistoryId = null;
+                }
                 else
                     AddHistoryItem(finalSavedPath);
             }
             else if (pendingHistoryId != null)
             {
                 RemovePendingHistoryItem(pendingHistoryId);
+                pendingHistoryId = null;
             }
+
+            localProcessingStage = "ui_preview";
+            diagnostic.Stage("ui_preview_start", new { format = ImageOutputNaming.Extension(finalBytes) });
+            await ShowGenPreviewAsync(finalBytes, w, h);
+            diagnostic.Stage("ui_preview_complete", new { format = ImageOutputNaming.Extension(finalBytes) });
+            finalAccepted = true;
+            ArmNewImageDeleteProtection(finalSavedPath);
 
             if (!_autoGenRunning)
                 SetGenResultBarRequested(true, resetPosition: true);
@@ -269,7 +291,16 @@ public sealed partial class MainWindow
         {
             if (pendingHistoryId != null)
                 RemovePendingHistoryItem(pendingHistoryId);
-            DebugLog($"[Generate] Failed: {ex.GetType().Name}");
+            if (responseReceived)
+            {
+                diagnostic.Stage("local_processing_failed", new { stage = localProcessingStage, exception = ex.GetType().Name, hresult = ex.HResult, stack = ex.StackTrace, saved = savedOutputPath != null });
+                DebugLog($"[Generate] Post-response local failure at {localProcessingStage}: {ex.GetType().Name} (0x{ex.HResult:X8})");
+                TxtStatus.Text = savedOutputPath != null
+                    ? Lf("generate.warning.saved_ui_failed", savedOutputPath)
+                    : L("generate.warning.generated_local_failed");
+                return true;
+            }
+            DebugLog($"[Generate] Failed before response: {ex.GetType().Name}");
             TxtStatus.Text = L(NovelAIRequestPolicy.ExceptionKey(ex));
             return false;
         }
@@ -278,6 +309,8 @@ public sealed partial class MainWindow
             previewsOpen = false;
             if (!finalAccepted)
             {
+                _currentGenImageBytes = previousImageBytes;
+                _currentGenImagePath = previousImagePath;
                 GenPreviewImage.Source = previousPreviewSource;
                 GenPreviewImage.Width = previousPreviewWidth;
                 GenPreviewImage.Height = previousPreviewHeight;
@@ -289,12 +322,22 @@ public sealed partial class MainWindow
         }
     }
 
+    private static byte[] GetWinUiDisplayBytes(byte[] imageBytes)
+    {
+        // WinUI BitmapImage does not decode WebP; the saved response must stay untouched.
+        if (ImageOutputNaming.Extension(imageBytes) != ".webp") return imageBytes;
+        using var bitmap = SKBitmap.Decode(imageBytes) ?? throw new InvalidDataException("Cannot decode WebP preview");
+        using var image = SKImage.FromBitmap(bitmap);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        return encoded.ToArray();
+    }
+
     private async Task ShowGenPreviewAsync(byte[] imageBytes, int targetW = 0, int targetH = 0, Func<bool>? acceptPreview = null)
     {
         var bitmapImage = new BitmapImage();
         using var ms = new Windows.Storage.Streams.InMemoryRandomAccessStream();
         using var writer = new Windows.Storage.Streams.DataWriter(ms);
-        writer.WriteBytes(imageBytes);
+        writer.WriteBytes(GetWinUiDisplayBytes(imageBytes));
         await writer.StoreAsync();
         writer.DetachStream();
         ms.Seek(0);

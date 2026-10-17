@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
@@ -40,7 +40,7 @@ public sealed partial class MainWindow
     {
         try
         {
-            var bytes = await Task.Run(() => File.ReadAllBytes(filePath));
+            var bytes = await File.ReadAllBytesAsync(filePath);
             _inspectImageBytes = bytes;
             _inspectImagePath = filePath;
             _inspectRawModified = false;
@@ -48,7 +48,7 @@ public sealed partial class MainWindow
             var bitmapImage = new BitmapImage();
             using var ms = new Windows.Storage.Streams.InMemoryRandomAccessStream();
             using var writer = new Windows.Storage.Streams.DataWriter(ms);
-            writer.WriteBytes(bytes);
+            writer.WriteBytes(GetWinUiDisplayBytes(bytes));
             await writer.StoreAsync();
             writer.DetachStream();
             ms.Seek(0);
@@ -90,7 +90,7 @@ public sealed partial class MainWindow
             var bitmapImage = new BitmapImage();
             using var ms = new Windows.Storage.Streams.InMemoryRandomAccessStream();
             using var writer = new Windows.Storage.Streams.DataWriter(ms);
-            writer.WriteBytes(bytes);
+            writer.WriteBytes(GetWinUiDisplayBytes(bytes));
             await writer.StoreAsync();
             writer.DetachStream();
             ms.Seek(0);

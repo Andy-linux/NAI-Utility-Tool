@@ -458,6 +458,8 @@
     "generate.error.empty_result":  "API 返回了空结果。",
     "generate.status.completed_post_saved":  "生成完成，已执行 {0}，保存到: {1}",
     "generate.status.completed_saved":  "生成完成，已保存到: {0}",
+    "generate.warning.saved_ui_failed":  "图像生成成功并已保存到: {0}；后续客户端处理未完成。请查看 Debug 日志。",
+    "generate.warning.generated_local_failed":  "服务器已返回图像，但客户端处理失败；本次请求不应视为 API 请求失败。详情见 Debug 日志。",
     "generate.status.completed_unsaved_privacy":  "生成完成。隐私模式已开启，结果未自动保存；请手动保存需要保留的图像。",
     "generate.status.generating":  "正在生成...",
     "generate.duplicate_guard.title":  "重复参数提醒",

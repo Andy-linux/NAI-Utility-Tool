@@ -458,6 +458,8 @@
   "generate.error.empty_result": "The API returned an empty result.",
   "generate.status.completed_post_saved": "Generation complete. Applied {0} and saved to: {1}",
   "generate.status.completed_saved": "Generation complete. Saved to: {0}",
+  "generate.warning.saved_ui_failed": "Generation succeeded and was saved to: {0}; subsequent client processing did not complete. See Debug logs.",
+  "generate.warning.generated_local_failed": "The server returned an image, but local processing failed. This was not an API request failure. See Debug logs.",
   "generate.status.completed_unsaved_privacy": "Generation complete. Privacy mode is enabled, so the result was not saved automatically. Save it manually if you want to keep it.",
   "generate.status.generating": "Generating...",
   "generate.duplicate_guard.title": "Duplicate Parameters",

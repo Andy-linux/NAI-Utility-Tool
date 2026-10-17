@@ -106,24 +106,47 @@ public sealed partial class MainWindow
         UpdateI2IResultNavigator();
     }
 
+    private static async Task<CanvasBitmap> LoadI2IDisplayBitmapAsync(CanvasDevice device, byte[] imageBytes)
+    {
+        using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+        using var writer = new Windows.Storage.Streams.DataWriter(stream);
+        writer.WriteBytes(GetWinUiDisplayBytes(imageBytes));
+        await writer.StoreAsync();
+        writer.DetachStream();
+        stream.Seek(0);
+        return await CanvasBitmap.LoadAsync(device, stream, 96f);
+    }
+
     private async Task RegisterI2IResultCandidateAsync(
         byte[] imageBytes,
         Dictionary<string, string>? textChunks,
-        CanvasBitmap bitmap,
+        CanvasDevice device,
         bool resetCandidates)
     {
         if (resetCandidates)
             ResetI2IResultSession();
 
         Directory.CreateDirectory(I2ITempDir);
-        string cachePath = Path.Combine(I2ITempDir, $"i2i_{_i2iResultSessionId}_{++_i2iResultSequence}.png");
-        await File.WriteAllBytesAsync(cachePath, imageBytes);
+        string cachePath = Path.Combine(I2ITempDir, $"i2i_{_i2iResultSessionId}_{++_i2iResultSequence}{ImageOutputNaming.Extension(imageBytes)}");
+        BusinessLog.Current?.Stage("save_start", new { destination = "i2i_candidate_cache", result_path = cachePath });
+        try
+        {
+            await File.WriteAllBytesAsync(cachePath, imageBytes);
+            LogBusinessMetadata("post_save_metadata", imageBytes);
+            BusinessLog.Current?.Stage("save_result", new { save_outcome = "success", destination = "i2i_candidate_cache", result_path = cachePath });
+        }
+        catch (Exception ex)
+        {
+            BusinessLog.Current?.Stage("save_result", new { save_outcome = "failed", exception = ex.ToString() });
+            throw;
+        }
 
         _i2iResultCandidates.Add(new I2IResultCandidate
         {
             FilePath = cachePath,
             TextChunks = CloneTextChunks(textChunks),
         });
+        var bitmap = await LoadI2IDisplayBitmapAsync(device, imageBytes);
         _i2iResultIndex = _i2iResultCandidates.Count - 1;
         SetPendingI2IResult(bitmap, imageBytes, textChunks);
     }
@@ -145,16 +168,7 @@ public sealed partial class MainWindow
             return false;
 
         byte[] imageBytes = await File.ReadAllBytesAsync(candidate.FilePath);
-        CanvasBitmap bitmap;
-        using (var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream())
-        {
-            using var writer = new Windows.Storage.Streams.DataWriter(stream);
-            writer.WriteBytes(imageBytes);
-            await writer.StoreAsync();
-            writer.DetachStream();
-            stream.Seek(0);
-            bitmap = await CanvasBitmap.LoadAsync(device, stream, 96f);
-        }
+        var bitmap = await LoadI2IDisplayBitmapAsync(device, imageBytes);
 
         if ((_i2iResultApplying && !allowDuringApply) ||
             selectionVersion != _i2iResultSelectionVersion ||
@@ -263,16 +277,7 @@ public sealed partial class MainWindow
 
             var device = MaskCanvas.GetDevice() ?? CanvasDevice.GetSharedDevice();
 
-            CanvasBitmap bitmap;
-            using (var ms = new Windows.Storage.Streams.InMemoryRandomAccessStream())
-            {
-                using var writer = new Windows.Storage.Streams.DataWriter(ms);
-                writer.WriteBytes(imageBytes);
-                await writer.StoreAsync();
-                writer.DetachStream();
-                ms.Seek(0);
-                bitmap = await CanvasBitmap.LoadAsync(device, ms, 96f);
-            }
+            var bitmap = await LoadI2IDisplayBitmapAsync(device, imageBytes);
 
             int imgW = (int)bitmap.SizeInPixels.Width;
             int imgH = (int)bitmap.SizeInPixels.Height;
@@ -489,13 +494,7 @@ public sealed partial class MainWindow
                 int myVer = ++streamPreviewVer;
                 try
                 {
-                    using var ms = new Windows.Storage.Streams.InMemoryRandomAccessStream();
-                    using var w = new Windows.Storage.Streams.DataWriter(ms);
-                    w.WriteBytes(bytes);
-                    await w.StoreAsync();
-                    w.DetachStream();
-                    ms.Seek(0);
-                    var bmp = await CanvasBitmap.LoadAsync(device, ms, 96f);
+                    var bmp = await LoadI2IDisplayBitmapAsync(device, bytes);
                     if (!acceptStreamPreview || myVer != streamPreviewVer) { bmp.Dispose(); return; }
                     streamPreviewBmp = bmp;
                     SetTransientI2IPreview(bmp);
@@ -538,16 +537,21 @@ public sealed partial class MainWindow
             return null;
         }
 
-        var textChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(imageBytes));
-
-        using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
-        using var writer = new Windows.Storage.Streams.DataWriter(stream);
-        writer.WriteBytes(imageBytes);
-        await writer.StoreAsync();
-        stream.Seek(0);
-        var resultBitmap = await CanvasBitmap.LoadAsync(device, stream, 96f);
-        await RegisterI2IResultCandidateAsync(imageBytes, textChunks, resultBitmap, resetResultCandidates);
-        return _pendingResultBitmap;
+        try
+        {
+            LogBusinessMetadata("returned_original_info", imageBytes);
+            var originalChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(imageBytes));
+            // Keep the signed API response selectable; the derived composite is selected last.
+            await RegisterI2IResultCandidateAsync(imageBytes, originalChunks, device, resetResultCandidates);
+            return _pendingResultBitmap;
+        }
+        catch (Exception ex)
+        {
+            BusinessLog.Current?.Stage("local_processing_failed", new { stage = "i2i_result", exception = ex.GetType().Name, hresult = ex.HResult, stack = ex.StackTrace });
+            DebugLog($"[I2I] Post-response local failure: {ex.GetType().Name} (0x{ex.HResult:X8})");
+            TxtStatus.Text = L("generate.warning.generated_local_failed");
+            return null;
+        }
     }
 
     private async Task<bool> DoDenoiseGenerateAsync(bool forceRandomSeed = false)
@@ -707,13 +711,7 @@ public sealed partial class MainWindow
                 int myVer = ++streamPreviewVer;
                 try
                 {
-                    using var ms = new Windows.Storage.Streams.InMemoryRandomAccessStream();
-                    using var w = new Windows.Storage.Streams.DataWriter(ms);
-                    w.WriteBytes(bytes);
-                    await w.StoreAsync();
-                    w.DetachStream();
-                    ms.Seek(0);
-                    var bmp = await CanvasBitmap.LoadAsync(device, ms, 96f);
+                    var bmp = await LoadI2IDisplayBitmapAsync(device, bytes);
                     if (!acceptStreamPreview || myVer != streamPreviewVer) { bmp.Dispose(); return; }
                     streamPreviewBmp = bmp;
                     SetTransientI2IPreview(bmp);
@@ -756,16 +754,20 @@ public sealed partial class MainWindow
             return null;
         }
 
-        var textChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(imageBytes));
-
-        using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
-        using var writer = new Windows.Storage.Streams.DataWriter(stream);
-        writer.WriteBytes(imageBytes);
-        await writer.StoreAsync();
-        stream.Seek(0);
-        var resultBitmap = await CanvasBitmap.LoadAsync(device, stream, 96f);
-        await RegisterI2IResultCandidateAsync(imageBytes, textChunks, resultBitmap, resetResultCandidates);
-        return _pendingResultBitmap;
+        try
+        {
+            LogBusinessMetadata("returned_original_info", imageBytes);
+            var textChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(imageBytes));
+            await RegisterI2IResultCandidateAsync(imageBytes, textChunks, device, resetResultCandidates);
+            return _pendingResultBitmap;
+        }
+        catch (Exception ex)
+        {
+            BusinessLog.Current?.Stage("local_processing_failed", new { stage = "i2i_result", exception = ex.GetType().Name, hresult = ex.HResult, stack = ex.StackTrace });
+            DebugLog($"[I2I] Post-response local failure: {ex.GetType().Name} (0x{ex.HResult:X8})");
+            TxtStatus.Text = L("generate.warning.generated_local_failed");
+            return null;
+        }
     }
 
     // ═══════════════════════════════════════════════════════════
