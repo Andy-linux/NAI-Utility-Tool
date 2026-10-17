@@ -37,8 +37,10 @@ public static class ImportedImageModel
         const string inpainting = "-inpainting";
         if (model.EndsWith(inpainting, StringComparison.Ordinal)) model = model[..^inpainting.Length];
         if (model == "nai-diffusion-4-curated-preview") model = "nai-diffusion-4-curated";
-        // Generation and inpainting have different IDs. Never fall back to a
-        // different version/edition when the requested variant is unavailable.
+        if (model == "nai-diffusion-5-curated" && availableModels.Contains("nai-diffusion-4-5-curated-inpainting"))
+            return "nai-diffusion-4-5-curated-inpainting";
+        // Apart from the verified Curated Inpaint mapping above, keep the requested
+        // version/edition when resolving generation and inpainting IDs.
         return availableModels.FirstOrDefault(x =>
             x.Equals(model, StringComparison.OrdinalIgnoreCase) ||
             x.Equals(model + inpainting, StringComparison.OrdinalIgnoreCase) ||

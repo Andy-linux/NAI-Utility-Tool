@@ -617,7 +617,8 @@ public partial class NovelAIService : IDisposable
             return (null, Lf("api.error.generation_cost_limit", NovelAiAnlasCalculator.MaxBaseCost));
         }
 
-        object seed = SeedValue.ToRequestValue(SeedValue.Resolve(naiParams.Seed));
+        string resolvedSeed = SeedValue.Resolve(naiParams.Seed);
+        object seed = SeedValue.ToRequestValue(resolvedSeed);
         bool isV4Plus = IsV4PlusModel(naiParams.Model);
         bool isV45 = IsV45Model(naiParams.Model);
         string effectivePrompt = ApplyQualityTags(prompt, naiParams);
@@ -627,7 +628,7 @@ public partial class NovelAIService : IDisposable
 
         var parameters = new Dictionary<string, object?>
         {
-            ["params_version"] = 3,
+            ["params_version"] = 4,
             ["width"] = width,
             ["height"] = height,
             ["scale"] = naiParams.Scale,
@@ -636,7 +637,8 @@ public partial class NovelAIService : IDisposable
             ["n_samples"] = 1,
             ["seed"] = seed,
             ["image"] = imageBase64,
-            ["mask"] = maskBase64,
+            // The reduced mask is for feathering; transport uses full-size nearest-expanded black/white pixels.
+            ["mask"] = InpaintImageProcessing.PrepareApiMask(maskBase64, width, height),
             ["noise_schedule"] = naiParams.Schedule,
             ["uc"] = effectiveNegativePrompt,
             ["negative_prompt"] = effectiveNegativePrompt,
@@ -648,11 +650,21 @@ public partial class NovelAIService : IDisposable
             ["legacy_v3_extend"] = false,
             ["dynamic_thresholding"] = naiParams.DynamicThresholding,
             ["skip_cfg_above_sigma"] = null,
-            ["strength"] = isV4Plus ? Math.Clamp(naiParams.InpaintStrength, 0, 1) : 1.0,
-            ["noise"] = isV4Plus ? Math.Clamp(naiParams.InpaintNoise, 0, 1) : 0.0,
+            ["strength"] = Math.Clamp(naiParams.DenoiseStrength, 0, 1),
+            ["noise"] = Math.Clamp(naiParams.DenoiseNoise, 0, 1),
             ["qualityToggle"] = naiParams.QualityToggle,
             ["quality_toggle"] = naiParams.QualityToggle,
         };
+        if (BigInteger.TryParse(resolvedSeed, NumberStyles.AllowLeadingSign,
+            CultureInfo.InvariantCulture, out var numericSeed))
+            parameters["extra_noise_seed"] = SeedValue.ToRequestValue(
+                (numericSeed - 1).ToString(CultureInfo.InvariantCulture));
+        if (isV4Plus && naiParams.InpaintStrength != 1)
+            parameters["img2img"] = new Dictionary<string, object>
+            {
+                ["strength"] = Math.Clamp(naiParams.InpaintStrength, 0, 1),
+                ["color_correct"] = true,
+            };
         if (IsV5Model(naiParams.Model))
         {
             parameters["tag_hint_transparent_background"] = naiParams.TagHintTransparentBackground;
@@ -730,10 +742,8 @@ public partial class NovelAIService : IDisposable
 
         if (preciseReferences is { Count: > 0 } && SupportsPreciseReferenceModel(naiParams.Model))
             ApplyPreciseReferenceParameters(parameters, preciseReferences);
-        else if (vibeTransfers is { Count: > 0 } && SupportsVibeTransferModel(naiParams.Model))
+        else if (vibeTransfers is { Count: > 0 } && SupportsVibeTransferModel(naiParams.Model) && !isV4Plus)
         {
-            if (IsV4PlusModel(naiParams.Model))
-                await EncodeUnencodedVibesAsync(vibeTransfers, naiParams.Model, ct);
             ApplyVibeTransferParameters(parameters, vibeTransfers);
         }
 
@@ -892,7 +902,7 @@ public partial class NovelAIService : IDisposable
 
         var parameters = new Dictionary<string, object?>
         {
-            ["params_version"] = 3,
+            ["params_version"] = 4,
             ["width"] = width,
             ["height"] = height,
             ["scale"] = naiParams.Scale,
@@ -916,6 +926,12 @@ public partial class NovelAIService : IDisposable
             ["qualityToggle"] = naiParams.QualityToggle,
             ["quality_toggle"] = naiParams.QualityToggle,
         };
+        parameters["sm"] = false;
+        parameters["sm_dyn"] = false;
+        if (BigInteger.TryParse(resolvedSeed, NumberStyles.AllowLeadingSign,
+            CultureInfo.InvariantCulture, out var numericSeed))
+            parameters["extra_noise_seed"] = SeedValue.ToRequestValue(
+                (numericSeed - 1).ToString(CultureInfo.InvariantCulture));
         if (isEnhance)
         {
             parameters["params_version"] = 4;
@@ -923,10 +939,6 @@ public partial class NovelAIService : IDisposable
             parameters["color_correct"] = false;
             parameters["sm"] = false;
             parameters["sm_dyn"] = false;
-            if (BigInteger.TryParse(resolvedSeed, NumberStyles.AllowLeadingSign,
-                CultureInfo.InvariantCulture, out var numericSeed))
-                parameters["extra_noise_seed"] = SeedValue.ToRequestValue(
-                    (numericSeed - 1).ToString(CultureInfo.InvariantCulture));
             if (upscaledEnhance) parameters["upscaled_enhance"] = true;
         }
         if (IsV5Model(naiParams.Model))
@@ -1124,7 +1136,7 @@ public partial class NovelAIService : IDisposable
 
         var parameters = new Dictionary<string, object?>
         {
-            ["params_version"] = 3,
+            ["params_version"] = 4,
             ["width"] = width,
             ["height"] = height,
             ["scale"] = naiParams.Scale,
@@ -1304,10 +1316,7 @@ public partial class NovelAIService : IDisposable
     }
 
     /// <summary>
-    /// 将 Win2D RenderTarget 编码为 base64 WEBP。
-    /// - 原图：无损 WEBP（Lossless），保证反复迭代零质量损失
-    /// - 遮罩：有损 WEBP quality=50，遮罩仅为区域标记，容忍度极高，最小化体积
-    /// API 通信始终使用 WEBP 格式（PNG 导致 NovelAI API 灰色异常）。
+    /// Encode source pixels losslessly; masks use an eighth-resolution intermediate PNG, expanded before sending.
     /// </summary>
     public static Task<string> EncodeRenderTargetAsync(CanvasRenderTarget target, bool isMask = false)
     {
@@ -1321,9 +1330,7 @@ public partial class NovelAIService : IDisposable
         byte[] encoded;
         if (isMask)
         {
-            using var image = SKImage.FromBitmap(skBitmap);
-            using var data = image.Encode(SKEncodedImageFormat.Webp, 50);
-            encoded = data.ToArray();
+            encoded = InpaintImageProcessing.EncodeMask(skBitmap);
         }
         else
         {

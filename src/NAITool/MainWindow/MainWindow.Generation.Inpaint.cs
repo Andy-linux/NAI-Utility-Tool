@@ -542,6 +542,9 @@ public sealed partial class MainWindow
             var originalChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(imageBytes));
             // Keep the signed API response selectable; the derived composite is selected last.
             await RegisterI2IResultCandidateAsync(imageBytes, originalChunks, device, resetResultCandidates);
+            var compositedBytes = await Task.Run(() => InpaintImageProcessing.Composite(imageBytes, imageBase64, maskBase64), ct);
+            var textChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(compositedBytes));
+            await RegisterI2IResultCandidateAsync(compositedBytes, textChunks, device, resetCandidates: false);
             return _pendingResultBitmap;
         }
         catch (Exception ex)
