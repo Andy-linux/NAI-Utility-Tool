@@ -266,8 +266,8 @@ public sealed partial class MainWindow
 
     private void ApplyReferenceDataFromMetadata(ImageMetadata? meta, AppMode? targetMode = null)
     {
-        if (meta == null || !meta.VibeTransfers.Any(x => !string.IsNullOrWhiteSpace(x.ImageBase64)) &&
-            !meta.PreciseReferences.Any(x => !string.IsNullOrWhiteSpace(x.ImageBase64))) return;
+        if (meta == null || !meta.IsNaiParsed && meta.VibeTransfers.Count == 0 &&
+            meta.PreciseReferences.Count == 0) return;
         // Validate before replacing either list; malformed metadata must not erase attachments.
         foreach (var item in meta.VibeTransfers) Convert.FromBase64String(item.ImageBase64);
         foreach (var item in meta.PreciseReferences) Convert.FromBase64String(item.ImageBase64);
@@ -276,7 +276,6 @@ public sealed partial class MainWindow
             : _settings.Settings.GenParameters.Model;
         var targetVibes = GetVibeTransferFamily(targetModel);
         targetVibes.Clear();
-        _genPreciseReferences.Clear();
 
         if (meta.VibeTransfers.Count > 0)
         {
@@ -308,6 +307,7 @@ public sealed partial class MainWindow
 
         if (meta.PreciseReferences.Count > 0)
         {
+            _genPreciseReferences.Clear();
             foreach (var reference in meta.PreciseReferences.Take(MaxPreciseReferences))
             {
                 if (string.IsNullOrWhiteSpace(reference.ImageBase64))

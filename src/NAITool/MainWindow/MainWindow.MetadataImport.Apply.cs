@@ -30,6 +30,7 @@ public sealed partial class MainWindow
         }
 
         var p = _settings.Settings.GenParameters;
+        bool legacyUc = ModelCapabilities.SupportsLegacyUc(p.Model) && p.LegacyUc;
         if (options.Model) ApplyImportedImageModel(meta, p, GenerationModels);
         if (options.Settings && ModelCapabilities.SupportsEffort(p.Model))
             p.Effort = meta.Effort ?? (meta.ModelDisplayName.Contains("-medium", System.StringComparison.Ordinal) ? "medium" : "high");
@@ -40,16 +41,23 @@ public sealed partial class MainWindow
             negativePrompt = presetMatch.NegativePrompt;
         }
 
-        if (options.Prompt && (meta.HasPositivePrompt || options.ActualPrompt && meta.ActualPositivePrompt != null))
+        if (options.Prompt && (meta.IsNaiParsed || meta.HasPositivePrompt || options.ActualPrompt && meta.ActualPositivePrompt != null))
         {
             _genPositivePrompt = positivePrompt;
             _genStylePrompt = "";
         }
-        if (options.NegativePrompt && (meta.HasNegativePrompt || options.ActualPrompt && meta.ActualNegativePrompt != null))
+        if (options.NegativePrompt && (meta.IsNaiParsed || meta.HasNegativePrompt || options.ActualPrompt && meta.ActualNegativePrompt != null))
             _genNegativePrompt = negativePrompt;
 
         if (options.Settings)
         {
+            var defaults = new NAIParameters { Model = p.Model };
+            if (meta.IsNaiParsed)
+            {
+                p.DenoiseStrength = meta.Strength ?? defaults.DenoiseStrength;
+                p.DenoiseNoise = meta.Noise ?? defaults.DenoiseNoise;
+                p.InpaintStrength = defaults.InpaintStrength;
+            }
             p.QualityToggle = meta.QualityToggle ?? presetMatch.QualityMatched;
             p.QualityPreset = meta.QualityPreset ?? presetMatch.QualityPreset;
             if (!ModelCapabilities.IsMedium(p))
@@ -58,27 +66,30 @@ public sealed partial class MainWindow
                 p.UcPresetId = meta.UcPresetId == "none" ? "none" : presetMatch.UcPresetId ?? "none";
             }
 
-            if (meta.Steps > 0 && !ModelCapabilities.IsMedium(p))
+            int steps = meta.HasSteps ? meta.Steps : defaults.Steps;
+            if ((meta.HasSteps || meta.IsNaiParsed) && !ModelCapabilities.IsMedium(p))
             {
-                if (blockOversizedSteps && meta.Steps > 28)
-                    skipped.Add(Lf("metadata.skipped.steps", meta.Steps));
+                if (blockOversizedSteps && steps > 28)
+                    skipped.Add(Lf("metadata.skipped.steps", steps));
                 else
-                    p.Steps = meta.Steps;
+                    p.Steps = steps;
             }
-            if (meta.Scale > 0) p.Scale = meta.Scale;
+            if (meta.HasScale) p.Scale = meta.Scale;
+            else if (meta.IsNaiParsed) p.Scale = defaults.Scale;
             if (!meta.IsSdFormat)
             {
                 if (!ModelCapabilities.IsMedium(p)) p.CfgRescale = meta.CfgRescale;
             }
-            if (!ModelCapabilities.IsMedium(p) && !string.IsNullOrEmpty(meta.Sampler)) p.Sampler = NormalizeSamplerForModel(meta.Sampler, p.Model);
-            if (!string.IsNullOrEmpty(meta.NoiseSchedule)) p.Schedule = NormalizeScheduleForModel(meta.NoiseSchedule, p.Model, p.Schedule, p.Sampler);
+            if (!ModelCapabilities.IsMedium(p) && (meta.IsNaiParsed || !string.IsNullOrEmpty(meta.Sampler)))
+                p.Sampler = NormalizeSamplerForModel(string.IsNullOrEmpty(meta.Sampler) ? defaults.Sampler : meta.Sampler, p.Model);
+            if (meta.IsNaiParsed || !string.IsNullOrEmpty(meta.NoiseSchedule))
+                p.Schedule = NormalizeScheduleForModel(string.IsNullOrEmpty(meta.NoiseSchedule) ? defaults.Schedule : meta.NoiseSchedule, p.Model, sampler: p.Sampler);
             if (!meta.IsSdFormat)
             {
                 p.TagHintTransparentBackground = meta.TagHintTransparentBackground ?? false;
-                if (meta.StraightAlpha.HasValue) p.StraightAlpha = meta.StraightAlpha.Value;
                 p.DynamicThresholding = meta.DynamicThresholding;
-                p.LegacyUc = meta.LegacyUc ?? false;
-                p.Sm = meta.Sm;
+                p.LegacyUc = legacyUc;
+                p.Sm = meta.Sm || meta.SmDyn;
                 p.SmDyn = meta.SmDyn;
                 p.Variety = meta.Variety;
             }
@@ -147,6 +158,7 @@ public sealed partial class MainWindow
         }
 
         var p = ImageRequestParameters;
+        bool legacyUc = ModelCapabilities.SupportsLegacyUc(p.Model) && p.LegacyUc;
         if (options.Model) ApplyImportedImageModel(meta, p, _i2iEditMode == I2IEditMode.Denoise ? GenerationModels : I2IModels);
         if (options.Settings && ModelCapabilities.SupportsEffort(p.Model))
             p.Effort = meta.Effort ?? (meta.ModelDisplayName.Contains("-medium", System.StringComparison.Ordinal) ? "medium" : "high");
@@ -157,16 +169,23 @@ public sealed partial class MainWindow
             negativePrompt = presetMatch.NegativePrompt;
         }
 
-        if (options.Prompt && (meta.HasPositivePrompt || options.ActualPrompt && meta.ActualPositivePrompt != null))
+        if (options.Prompt && (meta.IsNaiParsed || meta.HasPositivePrompt || options.ActualPrompt && meta.ActualPositivePrompt != null))
         {
             _i2iPositivePrompt = positivePrompt;
             _i2iStylePrompt = "";
         }
-        if (options.NegativePrompt && (meta.HasNegativePrompt || options.ActualPrompt && meta.ActualNegativePrompt != null))
+        if (options.NegativePrompt && (meta.IsNaiParsed || meta.HasNegativePrompt || options.ActualPrompt && meta.ActualNegativePrompt != null))
             _i2iNegativePrompt = negativePrompt;
 
         if (options.Settings)
         {
+            var defaults = new NAIParameters { Model = p.Model };
+            if (meta.IsNaiParsed)
+            {
+                p.DenoiseStrength = meta.Strength ?? defaults.DenoiseStrength;
+                p.DenoiseNoise = meta.Noise ?? defaults.DenoiseNoise;
+                p.InpaintStrength = defaults.InpaintStrength;
+            }
             p.QualityToggle = meta.QualityToggle ?? presetMatch.QualityMatched;
             p.QualityPreset = meta.QualityPreset ?? presetMatch.QualityPreset;
             if (!ModelCapabilities.IsMedium(p))
@@ -175,24 +194,27 @@ public sealed partial class MainWindow
                 p.UcPresetId = meta.UcPresetId == "none" ? "none" : presetMatch.UcPresetId ?? "none";
             }
 
-            if (meta.Steps > 0 && !ModelCapabilities.IsMedium(p))
+            int steps = meta.HasSteps ? meta.Steps : defaults.Steps;
+            if ((meta.HasSteps || meta.IsNaiParsed) && !ModelCapabilities.IsMedium(p))
             {
-                if (blockOversizedSteps && meta.Steps > 28)
-                    skipped.Add(Lf("metadata.skipped.steps", meta.Steps));
+                if (blockOversizedSteps && steps > 28)
+                    skipped.Add(Lf("metadata.skipped.steps", steps));
                 else
-                    p.Steps = meta.Steps;
+                    p.Steps = steps;
             }
-            if (meta.Scale > 0) p.Scale = meta.Scale;
+            if (meta.HasScale) p.Scale = meta.Scale;
+            else if (meta.IsNaiParsed) p.Scale = defaults.Scale;
             if (!meta.IsSdFormat && !ModelCapabilities.IsMedium(p)) p.CfgRescale = meta.CfgRescale;
-            if (!ModelCapabilities.IsMedium(p) && !string.IsNullOrEmpty(meta.Sampler)) p.Sampler = NormalizeSamplerForModel(meta.Sampler, p.Model);
-            if (!string.IsNullOrEmpty(meta.NoiseSchedule)) p.Schedule = NormalizeScheduleForModel(meta.NoiseSchedule, p.Model, p.Schedule, p.Sampler);
+            if (!ModelCapabilities.IsMedium(p) && (meta.IsNaiParsed || !string.IsNullOrEmpty(meta.Sampler)))
+                p.Sampler = NormalizeSamplerForModel(string.IsNullOrEmpty(meta.Sampler) ? defaults.Sampler : meta.Sampler, p.Model);
+            if (meta.IsNaiParsed || !string.IsNullOrEmpty(meta.NoiseSchedule))
+                p.Schedule = NormalizeScheduleForModel(string.IsNullOrEmpty(meta.NoiseSchedule) ? defaults.Schedule : meta.NoiseSchedule, p.Model, sampler: p.Sampler);
             if (!meta.IsSdFormat)
             {
                 p.TagHintTransparentBackground = meta.TagHintTransparentBackground ?? false;
-                if (meta.StraightAlpha.HasValue) p.StraightAlpha = meta.StraightAlpha.Value;
                 p.DynamicThresholding = meta.DynamicThresholding;
-                p.LegacyUc = meta.LegacyUc ?? false;
-                p.Sm = meta.Sm;
+                p.LegacyUc = legacyUc;
+                p.Sm = meta.Sm || meta.SmDyn;
                 p.SmDyn = meta.SmDyn;
                 p.Variety = meta.Variety;
             }

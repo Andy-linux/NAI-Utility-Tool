@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -31,8 +31,13 @@ public class ImageMetadata
     public List<VibeTransferInfo> VibeTransfers { get; set; } = new();
     public List<PreciseReferenceInfo> PreciseReferences { get; set; } = new();
     public int Width { get; set; }
+    public bool HasWidth { get; set; }
     public int Height { get; set; }
+    public bool HasHeight { get; set; }
     public int Steps { get; set; }
+    public bool HasSteps { get; set; }
+    public double? Strength { get; set; }
+    public double? Noise { get; set; }
     public double Scale { get; set; }
     public bool HasScale { get; set; }
     public double CfgRescale { get; set; }
@@ -88,6 +93,16 @@ public static class ImageMetadataService
             if (meta != null)
             {
                 ApplyMetadataContext(meta, textChunks);
+                if (!meta.HasWidth || !meta.HasHeight)
+                {
+                    using var stream = new MemoryStream(data, writable: false);
+                    using var codec = SKCodec.Create(stream);
+                    if (codec != null)
+                    {
+                        if (!meta.HasWidth) meta.Width = codec.Info.Width;
+                        if (!meta.HasHeight) meta.Height = codec.Info.Height;
+                    }
+                }
                 return meta;
             }
         }
@@ -355,6 +370,7 @@ public static class ImageMetadataService
         string paramsLine = text[paramsLineIdx..].Trim();
         meta.Model = ExtractSdString(paramsLine, @"(?:^|,\s*)Model:\s*([^,\r\n]+)");
         meta.Steps = ExtractSdInt(paramsLine, @"Steps:\s*(\d+)");
+        meta.HasSteps = System.Text.RegularExpressions.Regex.IsMatch(paramsLine, @"Steps:\s*(\d+)");
         meta.Seed = ExtractSdString(paramsLine, @"(?:^|,\s*)Seed:\s*([^,\r\n]+)");
         meta.Scale = ExtractSdDouble(paramsLine, @"CFG scale:\s*([\d.]+)");
         meta.HasScale = System.Text.RegularExpressions.Regex.IsMatch(paramsLine, @"CFG scale:\s*([\d.]+)");
@@ -438,6 +454,7 @@ public static class ImageMetadataService
     private static void ApplyMetadataContext(ImageMetadata meta, Dictionary<string, string> textChunks)
     {
         meta.IsNaiParsed = true;
+        meta.PositivePrompt = textChunks.GetValueOrDefault("Description") ?? "";
         meta.Software = textChunks.GetValueOrDefault("Software");
         meta.Source = textChunks.GetValueOrDefault("Source") ?? meta.Source;
         string hash = meta.ModelHash;
@@ -772,18 +789,31 @@ public static class ImageMetadataService
                 meta.HasNegativePrompt = true;
                 meta.NegativePrompt = uc.GetString() ?? "";
             }
-            if (root.TryGetProperty("width", out var w))
+            if (root.TryGetProperty("width", out var w) && w.ValueKind == JsonValueKind.Number)
+            {
                 meta.Width = w.GetInt32();
-            if (root.TryGetProperty("height", out var h))
+                meta.HasWidth = true;
+            }
+            if (root.TryGetProperty("height", out var h) && h.ValueKind == JsonValueKind.Number)
+            {
                 meta.Height = h.GetInt32();
-            if (root.TryGetProperty("steps", out var steps))
+                meta.HasHeight = true;
+            }
+            if (root.TryGetProperty("steps", out var steps) && steps.ValueKind == JsonValueKind.Number)
+            {
                 meta.Steps = steps.GetInt32();
-            if (root.TryGetProperty("scale", out var scale))
+                meta.HasSteps = true;
+            }
+            if (root.TryGetProperty("strength", out var strength) && strength.ValueKind == JsonValueKind.Number)
+                meta.Strength = strength.GetDouble();
+            if (root.TryGetProperty("noise", out var noise) && noise.ValueKind == JsonValueKind.Number)
+                meta.Noise = noise.GetDouble();
+            if (root.TryGetProperty("scale", out var scale) && scale.ValueKind == JsonValueKind.Number)
             {
                 meta.Scale = scale.GetDouble();
                 meta.HasScale = true;
             }
-            if (root.TryGetProperty("cfg_rescale", out var cfgRescale))
+            if (root.TryGetProperty("cfg_rescale", out var cfgRescale) && cfgRescale.ValueKind == JsonValueKind.Number)
             {
                 meta.CfgRescale = cfgRescale.GetDouble();
                 meta.HasCfgRescale = true;
@@ -797,13 +827,16 @@ public static class ImageMetadataService
                 meta.Sampler = sampler.GetString() ?? "";
             if (root.TryGetProperty("noise_schedule", out var schedule))
                 meta.NoiseSchedule = schedule.GetString() ?? "";
-            if (root.TryGetProperty("sm", out var sm))
+            if (root.TryGetProperty("sm", out var sm) &&
+                sm.ValueKind is JsonValueKind.True or JsonValueKind.False)
                 meta.Sm = sm.GetBoolean();
-            if (root.TryGetProperty("sm_dyn", out var smDyn))
+            if (root.TryGetProperty("sm_dyn", out var smDyn) &&
+                smDyn.ValueKind is JsonValueKind.True or JsonValueKind.False)
                 meta.SmDyn = smDyn.GetBoolean();
             if (root.TryGetProperty("skip_cfg_above_sigma", out var skipCfg) && skipCfg.ValueKind == JsonValueKind.Number)
                 meta.SkipCfgAboveSigma = skipCfg.GetDouble();
-            if (root.TryGetProperty("quality_toggle", out var qt))
+            if (root.TryGetProperty("quality_toggle", out var qt) &&
+                qt.ValueKind is JsonValueKind.True or JsonValueKind.False)
                 meta.QualityToggle = qt.GetBoolean();
             if (root.TryGetProperty("tag_hint_uc_preset", out var ucHint) && ucHint.ValueKind == JsonValueKind.Number)
                 meta.UcPresetId = ucHint.GetInt32() switch { 2 => "heavy", 3 => "light", 4 => "humanFocus", 5 => "furryFocus", 0 => "none", _ => null };
@@ -812,7 +845,7 @@ public static class ImageMetadataService
                 meta.QualityPreset = qtHint.GetInt32() == 3 ? "light" : "standard";
                 meta.QualityToggle = qtHint.GetInt32() != 0;
             }
-            if (root.TryGetProperty("ucPreset", out var ucPreset))
+            if (root.TryGetProperty("ucPreset", out var ucPreset) && ucPreset.ValueKind == JsonValueKind.Number)
                 meta.UcPreset = ucPreset.GetInt32();
             if (root.TryGetProperty("tag_hint_transparent_background", out var transparent) &&
                 transparent.ValueKind is JsonValueKind.True or JsonValueKind.False)
