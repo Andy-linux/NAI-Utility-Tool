@@ -77,6 +77,7 @@ public sealed partial class MainWindow
                 p.TagHintTransparentBackground = meta.TagHintTransparentBackground ?? false;
                 if (meta.StraightAlpha.HasValue) p.StraightAlpha = meta.StraightAlpha.Value;
                 p.DynamicThresholding = meta.DynamicThresholding;
+                p.LegacyUc = meta.LegacyUc ?? false;
                 p.Sm = meta.Sm;
                 p.SmDyn = meta.SmDyn;
                 p.Variety = meta.Variety;
@@ -190,6 +191,7 @@ public sealed partial class MainWindow
                 p.TagHintTransparentBackground = meta.TagHintTransparentBackground ?? false;
                 if (meta.StraightAlpha.HasValue) p.StraightAlpha = meta.StraightAlpha.Value;
                 p.DynamicThresholding = meta.DynamicThresholding;
+                p.LegacyUc = meta.LegacyUc ?? false;
                 p.Sm = meta.Sm;
                 p.SmDyn = meta.SmDyn;
                 p.Variety = meta.Variety;

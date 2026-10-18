@@ -32,6 +32,7 @@ public class NAIParameters
     }
     public double CfgRescale { get; set; } = 0;
     public bool DynamicThresholding { get; set; } = false;
+    public bool LegacyUc { get; set; }
     public bool Sm { get; set; }
     public bool SmDyn { get; set; }
     // Effort is a client-side choice; wire representation is resolved by ModelCapabilities.

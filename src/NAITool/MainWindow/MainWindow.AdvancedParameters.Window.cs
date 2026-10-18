@@ -73,6 +73,7 @@ public sealed partial class MainWindow
         _advChkTransparentBackground.IsChecked = p.TagHintTransparentBackground;
         _advChkStraightAlpha.IsChecked = p.StraightAlpha;
         _advChkDecrisper.IsChecked = p.DynamicThresholding;
+        _advChkLegacyUc.IsChecked = p.LegacyUc;
         _advCboQuality.SelectedIndex = !p.QualityToggle ? 2 : p.QualityPreset == "light" && NovelAiPromptPresets.SupportsLightQuality(p.Model) ? 1 : 0;
         RefreshUcPresetOptions(p);
         _isSyncingSidebarAdv = false;
@@ -178,6 +179,12 @@ public sealed partial class MainWindow
             Content = "Decrisper", IsChecked = p.DynamicThresholding,
             Visibility = IsV3ModelKey(p.Model) ? Visibility.Visible : Visibility.Collapsed,
         };
+        _advChkLegacyUc = new CheckBox
+        {
+            Content = L("dialog.advanced.legacy_uc"), IsChecked = p.LegacyUc,
+            Visibility = ModelCapabilities.SupportsLegacyUc(p.Model) ? Visibility.Visible : Visibility.Collapsed,
+        };
+        _advChkSmea.IsEnabled = _advChkSmeaDyn.IsEnabled = ModelCapabilities.SupportsSmeaSampler(p.Sampler);
         _advNbSeed.ValueChanged += (_, _) =>
         {
             if (_isSyncingSidebarAdv) return;
@@ -250,6 +257,7 @@ public sealed partial class MainWindow
             _advCboSchedule.SelectedIndex = Array.IndexOf(schedules,
                 NormalizeScheduleForModel(schedule, current.Model, sampler: sampler));
             _advCboSchedule.IsEnabled = schedules.Length > 1;
+            _advChkSmea.IsEnabled = _advChkSmeaDyn.IsEnabled = ModelCapabilities.SupportsSmeaSampler(sampler);
         };
 
         SuppressNumberBoxClearButton(_advNbSteps);
@@ -368,6 +376,9 @@ public sealed partial class MainWindow
         Grid.SetRow(_advChkDecrisper, 7);
         Grid.SetColumn(_advChkDecrisper, 0);
         paramsGrid.Children.Add(_advChkDecrisper);
+        Grid.SetRow(_advChkLegacyUc, 7);
+        Grid.SetColumn(_advChkLegacyUc, 0);
+        paramsGrid.Children.Add(_advChkLegacyUc);
 
         var rootPanel = new StackPanel
         {
@@ -471,6 +482,7 @@ public sealed partial class MainWindow
         p.TagHintTransparentBackground = _advChkTransparentBackground.IsChecked == true;
         p.StraightAlpha = _advChkStraightAlpha.IsChecked == true;
         p.DynamicThresholding = _advChkDecrisper.IsChecked == true;
+        if (ModelCapabilities.SupportsLegacyUc(p.Model)) p.LegacyUc = _advChkLegacyUc.IsChecked == true;
 
         NbSeed.Value = p.Seed;
         ChkVariety.IsChecked = p.Variety;

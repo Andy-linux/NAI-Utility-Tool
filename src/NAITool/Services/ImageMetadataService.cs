@@ -36,6 +36,7 @@ public class ImageMetadata
     public double Scale { get; set; }
     public double CfgRescale { get; set; }
     public bool DynamicThresholding { get; set; }
+    public bool? LegacyUc { get; set; }
     public string? Seed { get; set; }
     public string Sampler { get; set; } = "";
     public string NoiseSchedule { get; set; } = "";
@@ -780,8 +781,16 @@ public static class ImageMetadataService
                 ReadCharacterCaptions(v4p, meta.CharacterPrompts, meta.CharacterCenters);
             }
 
-            if (root.TryGetProperty("v4_negative_prompt", out var v4np))
+            if (root.TryGetProperty("legacy_uc", out var legacyUc) &&
+                legacyUc.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                meta.LegacyUc = legacyUc.GetBoolean();
+            if (root.TryGetProperty("v4_negative_prompt", out var v4np) && v4np.ValueKind == JsonValueKind.Object)
+            {
                 ReadCharacterCaptions(v4np, meta.CharacterNegativePrompts);
+                if (v4np.TryGetProperty("legacy_uc", out var negativeLegacyUc) &&
+                    negativeLegacyUc.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                    meta.LegacyUc = negativeLegacyUc.GetBoolean();
+            }
 
             ParseVibeTransfers(root, meta);
             ParsePreciseReferences(root, meta);

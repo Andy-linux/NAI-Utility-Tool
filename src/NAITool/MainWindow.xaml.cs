@@ -148,6 +148,7 @@ public sealed partial class MainWindow : Window
     private CheckBox _advChkTransparentBackground = null!;
     private CheckBox _advChkStraightAlpha = null!;
     private CheckBox _advChkDecrisper = null!;
+    private CheckBox _advChkLegacyUc = null!;
     private NumberBox _advNbMaxWidth = null!;
     private NumberBox _advNbMaxHeight = null!;
     private Grid _advMaxSizePanel = null!;

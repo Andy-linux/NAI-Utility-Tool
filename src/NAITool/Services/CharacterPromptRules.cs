@@ -5,7 +5,7 @@ namespace NAITool.Services;
 internal static class CharacterPromptRules
 {
     // Retain V5 entries even while a model with a lower request limit is selected.
-    internal const int MaxRetainedCount = 22;
+    internal const int MaxRetainedCount = 32;
 
     internal static int MaxForModel(string model) =>
         NovelAiAnlasCalculator.IsV5Model(model) ? MaxRetainedCount : 6;

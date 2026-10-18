@@ -77,7 +77,10 @@ public sealed partial class MainWindow
         }
         _currentMode = mode;
         if (IsPromptMode(mode))
-        SyncParamsToUI();
+        {
+            PopulateModelList();
+            SyncParamsToUI();
+        }
 
         if (IsPromptMode(mode))
         {
@@ -138,7 +141,6 @@ public sealed partial class MainWindow
 
         UpdateWorkspaceModeButton();
 
-        if (IsPromptMode(mode)) PopulateModelList();
         if (isUpscale) PopulateUpscaleModelList();
         ReplaceEditMenu();
         ReplaceToolMenu();

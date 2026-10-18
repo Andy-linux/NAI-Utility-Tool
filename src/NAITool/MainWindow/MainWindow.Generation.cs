@@ -828,6 +828,7 @@ public sealed partial class MainWindow
         if (!ModelCapabilities.IsMedium(p) && !string.IsNullOrEmpty(meta.Sampler)) p.Sampler = meta.Sampler;
         if (!string.IsNullOrEmpty(meta.NoiseSchedule)) p.Schedule = meta.NoiseSchedule;
         p.DynamicThresholding = meta.DynamicThresholding;
+        p.LegacyUc = meta.LegacyUc ?? false;
         p.Sm = meta.Sm;
         p.SmDyn = meta.SmDyn;
         p.Variety = meta.Variety;

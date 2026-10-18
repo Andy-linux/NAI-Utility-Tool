@@ -25,6 +25,10 @@ internal static class ModelCapabilities
             result.CfgRescale = 0;
             result.UcPresetId = "heavy";
         }
+        // The website resolves legacy inpaint DDIM to Euler before applying capabilities.
+        if (result.Model.EndsWith("-inpainting", System.StringComparison.Ordinal) &&
+            SupportsSmea(result.Model) && result.Sampler is ("ddim" or "ddim_v3"))
+            result.Sampler = "k_euler_ancestral";
         if (NovelAiAnlasCalculator.IsV5Model(result.Model)) result.Schedule = "karras";
         else
         {
@@ -47,7 +51,7 @@ internal static class ModelCapabilities
             result.QualityPreset = "standard";
         if (!NovelAiPromptPresets.SupportsLightQuality(result.Model) && result.QualityPreset == "light")
             result.QualityPreset = "standard";
-        if (!SupportsSmea(result.Model)) { result.Sm = false; result.SmDyn = false; }
+        if (!SupportsSmea(result.Model) || !SupportsSmeaSampler(result.Sampler)) { result.Sm = false; result.SmDyn = false; }
         if (!SupportsVariety(result.Model)) result.Variety = false;
         return result;
     }
@@ -61,6 +65,12 @@ internal static class ModelCapabilities
 
     internal static bool SupportsSmea(string model) => BaseModel(model) is
         "nai-diffusion-3" or "nai-diffusion-furry-3";
+
+    internal static bool SupportsLegacyUc(string model) => BaseModel(model) is
+        "nai-diffusion-4-full" or "nai-diffusion-4-curated" or "nai-diffusion-4-curated-preview";
+
+    internal static bool SupportsSmeaSampler(string sampler) => sampler is not
+        ("ddim" or "plms" or "k_lms" or "nai_smea" or "nai_smea_dyn" or "ddim_v3");
 
     // V5 explicitly does not support Variety+. Exact request scaling is resolved
     // separately from the verified official request implementation.

@@ -546,6 +546,7 @@ public sealed partial class MainWindow
         Scale = source.Scale,
         CfgRescale = source.CfgRescale,
         DynamicThresholding = source.DynamicThresholding,
+        LegacyUc = source.LegacyUc,
         TagHintTransparentBackground = source.TagHintTransparentBackground,
         StraightAlpha = source.StraightAlpha,
         Sm = source.Sm,

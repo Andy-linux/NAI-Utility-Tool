@@ -783,6 +783,7 @@ public sealed partial class MainWindow
                 _settings.Settings.InpaintParameters = CreateDefaultInpaintParameters();
         }
         _settings.Save();
+        PopulateModelList();
         SyncParamsToUI();
         UpdateModelDependentUI();
         TxtStatus.Text = L("status.generation_params_reset");

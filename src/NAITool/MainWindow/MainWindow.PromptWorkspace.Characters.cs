@@ -569,7 +569,6 @@ public sealed partial class MainWindow
         SaveAllCharacterPrompts();
         foreach (var entry in CurrentCharacterEntries)
         {
-            if (entry.IsDisabled) continue;
             entry.PositivePrompt = StripCharCountPrefix(entry.PositivePrompt);
             if (entry.PromptBox != null)
             {

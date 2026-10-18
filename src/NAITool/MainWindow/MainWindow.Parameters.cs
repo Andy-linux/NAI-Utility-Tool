@@ -91,13 +91,13 @@ public sealed partial class MainWindow
             .Where(x =>
             {
                 if (isV3)
-                    return !string.Equals(x, "ddim", StringComparison.Ordinal) &&
-                           !string.Equals(x, "k_dpmpp_2m_sde", StringComparison.Ordinal);
+                    return x is not ("ddim" or "k_dpm_2" or "k_dpm_fast");
 
                 if (isV4Plus)
                     return !string.Equals(x, "ddim", StringComparison.Ordinal) &&
                            !string.Equals(x, "ddim_v3", StringComparison.Ordinal) &&
-                           !string.Equals(x, "k_dpm_fast", StringComparison.Ordinal);
+                           !string.Equals(x, "k_dpm_fast", StringComparison.Ordinal) &&
+                           !string.Equals(x, "k_dpm_2", StringComparison.Ordinal);
 
                 return !string.Equals(x, "ddim_v3", StringComparison.Ordinal) &&
                        !string.Equals(x, "k_dpmpp_2m_sde", StringComparison.Ordinal);
@@ -400,6 +400,8 @@ public sealed partial class MainWindow
                 _advChkStraightAlpha.Visibility = IsV5ModelKey(GetCurrentModelKey()) ? Visibility.Visible : Visibility.Collapsed;
             if (_advChkDecrisper != null)
                 _advChkDecrisper.Visibility = IsV3ModelKey(GetCurrentModelKey()) ? Visibility.Visible : Visibility.Collapsed;
+            if (_advChkLegacyUc != null)
+                _advChkLegacyUc.Visibility = ModelCapabilities.SupportsLegacyUc(GetCurrentModelKey()) ? Visibility.Visible : Visibility.Collapsed;
             RefreshAdvancedSamplerOptions();
         }
 

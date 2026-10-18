@@ -415,6 +415,8 @@ public partial class NovelAIService : IDisposable
             parameters.Remove("sm"); parameters.Remove("sm_dyn");
             parameters["noise_schedule"] = "karras";
         }
+        else if (p.Sampler is "ddim" or "plms" or "k_lms" or "nai_smea" or "nai_smea_dyn" or "ddim_v3" or "k_dpm_fast")
+            parameters.Remove("noise_schedule");
     }
 
     private static string ToApiPreciseReferenceType(PreciseReferenceType type) => type switch
@@ -617,8 +619,8 @@ public partial class NovelAIService : IDisposable
             diagnostic.Stage("request_rejected", new { reason = "missing_api_token" });
             return (null, L("api.error.token_missing_network"));
         }
-        bool streamGeneration = _settings.Settings.StreamGeneration;
         var naiParams = ModelCapabilities.CreateRequestSnapshot(_settings.Settings.InpaintParameters);
+        bool streamGeneration = _settings.Settings.StreamGeneration && IsV4PlusModel(naiParams.Model);
         if (!_settings.Settings.UsesCustomApiBaseUrl &&
             NovelAiAnlasCalculator.PaidBaseCost(naiParams.Model, width, height, naiParams.Steps,
                 sm: false, strength: IsV4PlusModel(naiParams.Model) ? naiParams.InpaintStrength : 1) > NovelAiAnlasCalculator.MaxBaseCost)
@@ -740,7 +742,7 @@ public partial class NovelAIService : IDisposable
                 },
                 ["use_coords"] = useCoords,
                 ["use_order"] = false,
-                ["legacy_uc"] = !isV45 && !IsV5Model(naiParams.Model),
+                ["legacy_uc"] = naiParams.LegacyUc && ModelCapabilities.SupportsLegacyUc(naiParams.Model),
             };
         }
         else
@@ -868,8 +870,8 @@ public partial class NovelAIService : IDisposable
             diagnostic.Stage("request_rejected", new { reason = "missing_api_token" });
             return (null, L("api.error.token_missing_network"));
         }
-        bool streamGeneration = _settings.Settings.StreamGeneration;
         var naiParams = ModelCapabilities.CreateRequestSnapshot(parametersOverride ?? _settings.Settings.I2IDenoiseParameters);
+        bool streamGeneration = _settings.Settings.StreamGeneration && IsV4PlusModel(naiParams.Model);
         if ((isEnhance && (width <= 0 || height <= 0 || (long)width * height > EnhanceRules.MaxPixels)) ||
             (upscaledEnhance && (!isEnhance || !EnhanceRules.CanUseMax(naiParams.Model, width, height))))
         {
@@ -1005,7 +1007,7 @@ public partial class NovelAIService : IDisposable
                 },
                 ["use_coords"] = useCoords,
                 ["use_order"] = false,
-                ["legacy_uc"] = !isV45 && !IsV5Model(naiParams.Model),
+                ["legacy_uc"] = naiParams.LegacyUc && ModelCapabilities.SupportsLegacyUc(naiParams.Model),
             };
         }
         else
@@ -1114,8 +1116,8 @@ public partial class NovelAIService : IDisposable
             diagnostic.Stage("request_rejected", new { reason = "missing_api_token" });
             return (null, L("api.error.token_missing_network_api"));
         }
-        bool streamGeneration = _settings.Settings.StreamGeneration;
         var naiParams = ModelCapabilities.CreateRequestSnapshot(_settings.Settings.GenParameters);
+        bool streamGeneration = _settings.Settings.StreamGeneration && IsV4PlusModel(naiParams.Model);
         string model = naiParams.Model;
         if (!_settings.Settings.UsesCustomApiBaseUrl &&
             NovelAiAnlasCalculator.PaidBaseCost(naiParams.Model, width, height, naiParams.Steps,
@@ -1221,7 +1223,7 @@ public partial class NovelAIService : IDisposable
                 },
                 ["use_coords"] = useCoords,
                 ["use_order"] = false,
-                ["legacy_uc"] = !isV45 && !IsV5Model(naiParams.Model),
+                ["legacy_uc"] = naiParams.LegacyUc && ModelCapabilities.SupportsLegacyUc(naiParams.Model),
             };
         }
         else
