@@ -249,6 +249,24 @@ public sealed partial class MainWindow
                             _settings.Settings.WildcardsRequireExplicitSyntax);
                     })),
                 CreateSettingsHubLayer(
+                    "\uE91B",
+                    L("settings.hub.local_storage.generated_format"),
+                    L("settings.hub.local_storage.generated_format.description"),
+                    CreateSettingsHubComboBox(
+                        new[]
+                        {
+                            new SettingsHubComboOption(L("settings.hub.local_storage.generated_format.original"), "original"),
+                            new SettingsHubComboOption("PNG", "png"),
+                        },
+                        _settings.Settings.SaveGeneratedImagesAsPng ? "png" : "original",
+                        value =>
+                        {
+                            _settings.Settings.SaveGeneratedImagesAsPng = value == "png";
+                            _settings.Save();
+                            TxtStatus.Text = L("settings.local_storage.saved");
+                        },
+                        260)),
+                CreateSettingsHubLayer(
                     "\uE74D",
                     L("settings.hub.local_storage.delete_behavior"),
                     L("settings.hub.local_storage.delete_behavior_hint"),

@@ -82,12 +82,14 @@ public sealed partial class MainWindow
     private bool ShouldStripSavedImageMetadata(bool stripMetadata) =>
         stripMetadata || _settings.Settings.StripSavedImageMetadata;
 
-    private async Task<byte[]> PrepareImageBytesForSaveAsync(byte[] imageBytes, bool stripMetadata)
+    private async Task<byte[]> PrepareImageBytesForSaveAsync(byte[] imageBytes, bool stripMetadata, bool forcePng = false)
     {
-        if (!ShouldStripSavedImageMetadata(stripMetadata))
-            return imageBytes;
-
-        return await Task.Run(() => ImageMetadataService.StripPngMetadata(EnsurePngEncoded(imageBytes)));
+        bool strip = ShouldStripSavedImageMetadata(stripMetadata);
+        if (!forcePng && !strip) return imageBytes;
+        var pngBytes = await Task.Run(() => EnsurePngEncoded(imageBytes));
+        if (!HasPngSignature(pngBytes))
+            throw new InvalidDataException(L("file.error.png_conversion_failed"));
+        return strip ? await Task.Run(() => ImageMetadataService.StripPngMetadata(pngBytes)) : pngBytes;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -226,12 +228,10 @@ public sealed partial class MainWindow
         if (bytesToSave == null || bytesToSave.Length == 0)
         { TxtStatus.Text = L("file.error.no_image_content_to_save"); return; }
 
-        bytesToSave = await PrepareImageBytesForSaveAsync(bytesToSave, stripMetadata: false);
-        if (redirectedToPng)
-            bytesToSave = await Task.Run(() => EnsurePngEncoded(bytesToSave));
-
         try
         {
+            bytesToSave = await PrepareImageBytesForSaveAsync(
+                bytesToSave, stripMetadata: false, forcePng: IsPngFilePath(savePath));
             await File.WriteAllBytesAsync(savePath, bytesToSave);
             if (redirectedToPng)
                 MaskCanvas.SetLoadedFilePath(savePath);
@@ -311,8 +311,12 @@ public sealed partial class MainWindow
         }
 
         var picker = new FileSavePicker();
-        string extension = ShouldStripSavedImageMetadata(stripMetadata) ? ".png" : ImageOutputNaming.Extension(imageBytes);
-        picker.FileTypeChoices.Add(extension == ".webp" ? "WebP" : L("file.png_image"), new List<string> { extension });
+        bool canKeepWebp = !ShouldStripSavedImageMetadata(stripMetadata) && ImageOutputNaming.Extension(imageBytes) == ".webp";
+        if (canKeepWebp && !_settings.Settings.SaveGeneratedImagesAsPng)
+            picker.FileTypeChoices.Add("WebP", new List<string> { ".webp" });
+        picker.FileTypeChoices.Add(L("file.png_image"), new List<string> { ".png" });
+        if (canKeepWebp && _settings.Settings.SaveGeneratedImagesAsPng)
+            picker.FileTypeChoices.Add("WebP", new List<string> { ".webp" });
         picker.SuggestedFileName = GetSuggestedSaveFileName(sourcePath);
         InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
 
@@ -320,16 +324,10 @@ public sealed partial class MainWindow
         if (file == null)
             return;
 
-        var bytesToSave = await PrepareImageBytesForSaveAsync(imageBytes, stripMetadata);
-
-        if (bytesToSave == null || bytesToSave.Length == 0)
-        {
-            TxtStatus.Text = L("file.error.no_image_to_save");
-            return;
-        }
-
         try
         {
+            var bytesToSave = await PrepareImageBytesForSaveAsync(
+                imageBytes, stripMetadata, forcePng: IsPngFilePath(file.Path));
             await Windows.Storage.FileIO.WriteBytesAsync(file, bytesToSave);
             TxtStatus.Text = ShouldStripSavedImageMetadata(stripMetadata)
                 ? Lf("file.saved_path_stripped", file.Path)
@@ -397,11 +395,9 @@ public sealed partial class MainWindow
             if (bytesToSave == null || bytesToSave.Length == 0)
             { TxtStatus.Text = L("file.error.no_image_to_save"); return; }
 
-            bytesToSave = await PrepareImageBytesForSaveAsync(bytesToSave, stripMetadata);
-            bytesToSave = await Task.Run(() => EnsurePngEncoded(bytesToSave));
-
             try
             {
+                bytesToSave = await PrepareImageBytesForSaveAsync(bytesToSave, stripMetadata, forcePng: true);
                 await Windows.Storage.FileIO.WriteBytesAsync(file, bytesToSave);
                 if (_currentMode == AppMode.I2I)
                     MarkI2IWorkspaceClean();

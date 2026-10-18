@@ -399,6 +399,9 @@
   "settings.hub.local_storage.title": "Local storage",
   "settings.hub.local_storage.remember_prompt": "Remember the last prompt and parameters",
   "settings.hub.local_storage.remember_prompt.description": "Write prompt and parameter state locally so the last-used prompts and parameters are restored on the next launch.",
+  "settings.hub.local_storage.generated_format": "Auto-save format for generated images",
+  "settings.hub.local_storage.generated_format.description": "Original format keeps the returned file, usually WebP. PNG converts losslessly and retains generation metadata. Applies to new generations and Enhance results.",
+  "settings.hub.local_storage.generated_format.original": "Original format (default)",
   "settings.hub.local_storage.delete_behavior": "Delete behavior",
   "settings.hub.local_storage.delete_behavior.recycle_bin": "Move to Recycle Bin",
   "settings.hub.local_storage.delete_behavior.permanent": "Permanently delete",
@@ -1211,5 +1214,6 @@
   "help.highlights.multi_api.title": "Multiple API support",
   "help.highlights.multi_api.body": "Add multiple API tokens in Settings, share one request Base URL, and test all accounts together.\n\nChoose round robin, most quota, least quota, or random routing. Accounts are selected according to the V5 allowance or Anlas the request consumes; free requests use round robin. The main view shows combined quotas, and Quota Management lets you inspect each API number. Duplicate tokens do not gain extra calls or inflate totals.",
   "dialog.advanced.legacy_uc": "Legacy negative prompt (V4)",
+  "file.error.png_conversion_failed": "Unable to encode the image as PNG.",
   "references.error.encode_inputs_changed": "Reference inputs changed during encoding. The completed encoding is cached; review the inputs and generate again."
 }

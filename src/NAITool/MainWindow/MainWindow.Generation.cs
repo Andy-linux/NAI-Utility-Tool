@@ -390,7 +390,8 @@ public sealed partial class MainWindow
             var dateDir = Path.Combine(OutputBaseDir, DateTime.Now.ToString("yyyy-MM"));
             var meta = ImageMetadataService.ReadFromBytes(imageBytes);
             var stem = ImageOutputNaming.Stem(meta?.PositivePrompt ?? resolvedPrompt ?? "", meta?.Seed ?? sampleSeed ?? "unknown");
-            var bytesToSave = await PrepareImageBytesForSaveAsync(imageBytes, stripMetadata: false);
+            var bytesToSave = await PrepareImageBytesForSaveAsync(imageBytes, stripMetadata: false,
+                forcePng: _settings.Settings.SaveGeneratedImagesAsPng);
             var filePath = await ImageOutputNaming.SaveAsync(dateDir, stem, bytesToSave);
             LogBusinessMetadata("post_save_metadata", bytesToSave);
             BusinessLog.Current?.Stage("save_result", new { save_outcome = "success", result_path = filePath });

@@ -355,6 +355,9 @@
     "settings.hub.local_storage.title":  "本地储存",
     "settings.hub.local_storage.remember_prompt":  "记住上次的提示词和参数",
     "settings.hub.local_storage.remember_prompt.description":  "将提示词和参数状态写入本地，在下次启动时自动恢复上次使用的提示词和参数。",
+    "settings.hub.local_storage.generated_format":  "生成图像自动保存格式",
+    "settings.hub.local_storage.generated_format.description":  "原始格式通常为 WebP，直接保留返回文件；PNG 使用无损转换并保留生成参数。用于新生成和增强结果。",
+    "settings.hub.local_storage.generated_format.original":  "原始格式（默认）",
     "settings.hub.local_storage.delete_behavior":  "删除行为",
     "settings.hub.local_storage.delete_behavior.recycle_bin":  "放入系统回收站",
     "settings.hub.local_storage.delete_behavior.permanent":  "永久删除",
@@ -1211,5 +1214,6 @@
     "help.highlights.multi_api.title": "多 API 支持",
     "help.highlights.multi_api.body": "支持在设置中添加多个 API Token，共用一个请求 Base URL，并一并测试所有账号。\n\n可选择轮询、最多额度、最少额度或随机调用，根据请求消耗的 V5 额度或 Anlas 自动分配账号；不消耗额度时使用轮询。主界面显示额度总和，额度管理可按 API 编号查看各账号，重复 Token 不会重复调用或累计额度。",
   "dialog.advanced.legacy_uc": "旧版负面提示词（V4）",
+  "file.error.png_conversion_failed": "无法将图像编码为 PNG。",
   "references.error.encode_inputs_changed": "编码期间参考图设置已改变。已完成的编码已缓存，请核对设置后重新生成。"
 }

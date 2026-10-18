@@ -359,7 +359,7 @@ public class AppSettings
     public bool AccountAssetProtectionDisablePaidFeatures { get; set; } = true;
     public bool UseProxy { get; set; }
     public string ProxyPort { get; set; } = "10808";
-    public bool UseWebp { get; set; }
+    public bool SaveGeneratedImagesAsPng { get; set; }
     public string ImageDeleteBehavior { get; set; } = "RecycleBin";
     public bool PrivacyMode { get; set; }
     public bool StripSavedImageMetadata { get; set; }
