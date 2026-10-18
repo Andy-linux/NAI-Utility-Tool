@@ -82,9 +82,11 @@ public sealed partial class MainWindow
     private bool ShouldStripSavedImageMetadata(bool stripMetadata) =>
         stripMetadata || _settings.Settings.StripSavedImageMetadata;
 
-    private async Task<byte[]> PrepareImageBytesForSaveAsync(byte[] imageBytes, bool stripMetadata, bool forcePng = false)
+    private Task<byte[]> PrepareImageBytesForSaveAsync(byte[] imageBytes, bool stripMetadata, bool forcePng = false) =>
+        EncodeImageForSaveAsync(imageBytes, ShouldStripSavedImageMetadata(stripMetadata), forcePng);
+
+    private async Task<byte[]> EncodeImageForSaveAsync(byte[] imageBytes, bool strip, bool forcePng)
     {
-        bool strip = ShouldStripSavedImageMetadata(stripMetadata);
         if (!forcePng && !strip) return imageBytes;
         var pngBytes = await Task.Run(() => EnsurePngEncoded(imageBytes));
         if (!HasPngSignature(pngBytes))
@@ -177,11 +179,11 @@ public sealed partial class MainWindow
         if (string.IsNullOrEmpty(filePath))
         { TxtStatus.Text = L("inpaint.error.no_image_to_save"); return; }
 
-        byte[]? previewBytes;
-        try { previewBytes = await BuildI2IRawSaveBytesAsync(); }
+        WorkspaceSaveSnapshot? snapshot;
+        try { snapshot = await CaptureWorkspaceSaveAsync(stripMetadata: false); }
         catch (Exception ex) { TxtStatus.Text = Lf("inpaint.error.compose_preview_failed", ex.Message); return; }
 
-        if (previewBytes == null || previewBytes.Length == 0)
+        if (snapshot == null)
         { TxtStatus.Text = L("file.error.no_image_content_to_save"); return; }
 
         var savePath = ResolveOverwriteSavePath(filePath, out bool redirectedToPng);
@@ -198,7 +200,7 @@ public sealed partial class MainWindow
                     using var skBmp = SkiaSharp.SKBitmap.Decode(origStream);
                     if (skBmp != null)
                     {
-                        using var newStream = new MemoryStream(previewBytes);
+                        using var newStream = new MemoryStream(snapshot.Bytes);
                         using var newBmp = SkiaSharp.SKBitmap.Decode(newStream);
                         if (newBmp != null && (skBmp.Width != newBmp.Width || skBmp.Height != newBmp.Height))
                             sizeWarning = Lf("file.confirm_save.size_warning", skBmp.Width, skBmp.Height, newBmp.Width, newBmp.Height);
@@ -221,22 +223,11 @@ public sealed partial class MainWindow
             if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         }
 
-        byte[]? bytesToSave;
-        try { bytesToSave = await BuildI2ISaveBytesAsync(stripMetadata: false); }
-        catch (Exception ex) { TxtStatus.Text = Lf("inpaint.error.compose_preview_failed", ex.Message); return; }
-
-        if (bytesToSave == null || bytesToSave.Length == 0)
-        { TxtStatus.Text = L("file.error.no_image_content_to_save"); return; }
-
         try
         {
-            bytesToSave = await PrepareImageBytesForSaveAsync(
-                bytesToSave, stripMetadata: false, forcePng: IsPngFilePath(savePath));
-            await File.WriteAllBytesAsync(savePath, bytesToSave);
-            if (redirectedToPng)
-                MaskCanvas.SetLoadedFilePath(savePath);
-            MarkI2IWorkspaceClean();
-            TxtStatus.Text = ShouldStripSavedImageMetadata(false)
+            await File.WriteAllBytesAsync(savePath, snapshot.Bytes);
+            CompleteWorkspaceSave(snapshot, savePath, updateI2IPath: redirectedToPng);
+            TxtStatus.Text = snapshot.StripMetadata
                 ? Lf("file.saved_path_stripped", savePath)
                 : Lf("file.saved_path", savePath);
         }
@@ -310,8 +301,9 @@ public sealed partial class MainWindow
             return;
         }
 
+        bool strip = ShouldStripSavedImageMetadata(stripMetadata);
         var picker = new FileSavePicker();
-        bool canKeepWebp = !ShouldStripSavedImageMetadata(stripMetadata) && ImageOutputNaming.Extension(imageBytes) == ".webp";
+        bool canKeepWebp = !strip && ImageOutputNaming.Extension(imageBytes) == ".webp";
         if (canKeepWebp && !_settings.Settings.SaveGeneratedImagesAsPng)
             picker.FileTypeChoices.Add("WebP", new List<string> { ".webp" });
         picker.FileTypeChoices.Add(L("file.png_image"), new List<string> { ".png" });
@@ -326,16 +318,108 @@ public sealed partial class MainWindow
 
         try
         {
-            var bytesToSave = await PrepareImageBytesForSaveAsync(
-                imageBytes, stripMetadata, forcePng: IsPngFilePath(file.Path));
+            var bytesToSave = await EncodeImageForSaveAsync(
+                imageBytes, strip, forcePng: IsPngFilePath(file.Path));
             await Windows.Storage.FileIO.WriteBytesAsync(file, bytesToSave);
-            TxtStatus.Text = ShouldStripSavedImageMetadata(stripMetadata)
+            TxtStatus.Text = strip
                 ? Lf("file.saved_path_stripped", file.Path)
                 : Lf("file.saved_path", file.Path);
         }
         catch (Exception ex)
         {
             TxtStatus.Text = Lf("common.save_failed", ex.Message);
+        }
+    }
+
+    private sealed record WorkspaceSaveSnapshot(
+        AppMode Mode, byte[] Bytes, bool StripMetadata, Func<bool> IsCurrent);
+
+    private Func<bool> CaptureWorkspaceSaveOwnership(AppMode mode)
+    {
+        Func<bool> ownsImage;
+        if (mode == AppMode.I2I)
+        {
+            int version = MaskCanvas.WorkspaceVersion;
+            var original = MaskCanvas.Document.OriginalImage;
+            var pending = _pendingResultBytes;
+            bool preview = MaskCanvas.IsInPreviewMode;
+            var offset = MaskCanvas.Document.ImageOffset;
+            int width = MaskCanvas.CanvasW, height = MaskCanvas.CanvasH;
+            var region = MaskCanvas.Document.InpaintRegion;
+            double context = MaskCanvas.MinimumContextArea;
+            var mask = MaskCanvas.Document.GetMaskSnapshot();
+            ownsImage = () => version == MaskCanvas.WorkspaceVersion &&
+                ReferenceEquals(original, MaskCanvas.Document.OriginalImage) &&
+                ReferenceEquals(pending, _pendingResultBytes) && preview == MaskCanvas.IsInPreviewMode &&
+                offset == MaskCanvas.Document.ImageOffset &&
+                width == MaskCanvas.CanvasW && height == MaskCanvas.CanvasH &&
+                region == MaskCanvas.Document.InpaintRegion && context == MaskCanvas.MinimumContextArea &&
+                (mask ?? Array.Empty<byte>()).AsSpan().SequenceEqual(MaskCanvas.Document.GetMaskSnapshot());
+        }
+        else if (mode == AppMode.Effects)
+        {
+            var source = _effectsImageBytes;
+            var effects = JsonSerializer.Serialize(_effects);
+            ownsImage = () => ReferenceEquals(source, _effectsImageBytes) &&
+                effects == JsonSerializer.Serialize(_effects);
+        }
+        else if (mode == AppMode.Upscale)
+        {
+            var source = _upscaleInputImageBytes;
+            ownsImage = () => ReferenceEquals(source, _upscaleInputImageBytes);
+        }
+        else if (mode == AppMode.Inspect)
+        {
+            var source = _inspectImageBytes;
+            var comment = _inspectMetadata?.RawJson;
+            bool modified = _inspectRawModified;
+            ownsImage = () => ReferenceEquals(source, _inspectImageBytes) &&
+                comment == _inspectMetadata?.RawJson && modified == _inspectRawModified;
+        }
+        else
+        {
+            var source = _currentGenImageBytes;
+            ownsImage = () => ReferenceEquals(source, _currentGenImageBytes);
+        }
+        return () => _currentMode == mode && ownsImage();
+    }
+
+    private async Task<WorkspaceSaveSnapshot?> CaptureWorkspaceSaveAsync(bool stripMetadata)
+    {
+        var mode = _currentMode;
+        var isCurrent = CaptureWorkspaceSaveOwnership(mode);
+        bool strip = ShouldStripSavedImageMetadata(stripMetadata);
+        byte[]? bytes = mode switch
+        {
+            AppMode.Inspect => await GetInspectSaveBytesAsync(strip),
+            AppMode.Effects => await GetEffectsSaveBytesAsync(),
+            AppMode.I2I => await BuildI2ISaveBytesAsync(strip),
+            AppMode.Upscale => _upscaleInputImageBytes,
+            _ => _currentGenImageBytes,
+        };
+        if (bytes == null || bytes.Length == 0) return null;
+        bytes = await EncodeImageForSaveAsync(bytes, strip, forcePng: true);
+        return new WorkspaceSaveSnapshot(mode, bytes, strip, isCurrent);
+    }
+
+    private void CompleteWorkspaceSave(WorkspaceSaveSnapshot snapshot, string path, bool updateI2IPath = false)
+    {
+        if (!snapshot.IsCurrent()) return;
+        if (snapshot.Mode == AppMode.I2I)
+        {
+            if (updateI2IPath) MaskCanvas.SetLoadedFilePath(path);
+            MarkI2IWorkspaceClean();
+        }
+        else if (snapshot.Mode == AppMode.Upscale)
+        {
+            _upscaleImagePath = path;
+            MarkUpscaleWorkspaceClean();
+        }
+        else if (snapshot.Mode == AppMode.Effects)
+        {
+            _effectsImagePath = path;
+            MarkEffectsWorkspaceClean();
+            RefreshEffectsPanel();
         }
     }
 
@@ -346,78 +430,27 @@ public sealed partial class MainWindow
             await SaveImageBytesAsAsync(_currentGenImageBytes, stripMetadata, _currentGenImagePath);
             return;
         }
-        byte[]? bytesToSave = null;
 
-        bool hasImageToSave = _currentMode switch
+        try
         {
-            AppMode.Inspect => _inspectImageBytes != null,
-            AppMode.Effects => _effectsImageBytes != null,
-            AppMode.I2I => MaskCanvas.Document.OriginalImage != null ||
-                           (MaskCanvas.IsInPreviewMode && (_pendingResultBitmap != null || _i2iResultCandidates.Count > 0)),
-            AppMode.Upscale => _upscaleInputImageBytes != null,
-            _ => _currentGenImageBytes != null,
-        };
-
-        if (!hasImageToSave)
-        { TxtStatus.Text = L("file.error.no_image_to_save"); return; }
-
-        var picker = new FileSavePicker();
-        picker.FileTypeChoices.Add(L("file.png_image"), new List<string> { ".png" });
-        picker.SuggestedFileName = $"nai_{DateTime.Now:yyyyMMdd_HHmmss}";
-        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
-        var file = await picker.PickSaveFileAsync();
-        if (file != null)
-        {
-            if (_currentMode == AppMode.Inspect)
-            {
-                bytesToSave = await GetInspectSaveBytesAsync(stripMetadata);
-            }
-            else if (_currentMode == AppMode.Effects)
-            {
-                bytesToSave = await GetEffectsSaveBytesAsync();
-            }
-            else if (_currentMode == AppMode.I2I)
-            {
-                try { bytesToSave = await BuildI2ISaveBytesAsync(stripMetadata); }
-                catch (Exception ex) { TxtStatus.Text = Lf("inpaint.error.compose_preview_failed", ex.Message); return; }
-            }
-            else if (_currentMode == AppMode.Upscale)
-            {
-                bytesToSave = _upscaleInputImageBytes;
-            }
-            else
-            {
-                bytesToSave = stripMetadata && _currentGenImageBytes != null
-                    ? await Task.Run(() => ImageMetadataService.StripPngMetadata(_currentGenImageBytes))
-                    : _currentGenImageBytes;
-            }
-
-            if (bytesToSave == null || bytesToSave.Length == 0)
+            var snapshot = await CaptureWorkspaceSaveAsync(stripMetadata);
+            if (snapshot == null)
             { TxtStatus.Text = L("file.error.no_image_to_save"); return; }
 
-            try
-            {
-                bytesToSave = await PrepareImageBytesForSaveAsync(bytesToSave, stripMetadata, forcePng: true);
-                await Windows.Storage.FileIO.WriteBytesAsync(file, bytesToSave);
-                if (_currentMode == AppMode.I2I)
-                    MarkI2IWorkspaceClean();
-                else if (_currentMode == AppMode.Upscale)
-                {
-                    _upscaleImagePath = file.Path;
-                    MarkUpscaleWorkspaceClean();
-                }
-                else if (_currentMode == AppMode.Effects)
-                {
-                    _effectsImagePath = file.Path;
-                    MarkEffectsWorkspaceClean();
-                    RefreshEffectsPanel();
-                }
-                TxtStatus.Text = ShouldStripSavedImageMetadata(stripMetadata)
-                    ? Lf("file.saved_path_stripped", file.Path)
-                    : Lf("file.saved_path", file.Path);
-            }
-            catch (Exception ex) { TxtStatus.Text = Lf("common.save_failed", ex.Message); }
+            var picker = new FileSavePicker();
+            picker.FileTypeChoices.Add(L("file.png_image"), new List<string> { ".png" });
+            picker.SuggestedFileName = $"nai_{DateTime.Now:yyyyMMdd_HHmmss}";
+            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
+            var file = await picker.PickSaveFileAsync();
+            if (file == null) return;
+
+            await Windows.Storage.FileIO.WriteBytesAsync(file, snapshot.Bytes);
+            CompleteWorkspaceSave(snapshot, file.Path);
+            TxtStatus.Text = snapshot.StripMetadata
+                ? Lf("file.saved_path_stripped", file.Path)
+                : Lf("file.saved_path", file.Path);
         }
+        catch (Exception ex) { TxtStatus.Text = Lf("common.save_failed", ex.Message); }
     }
 
     private async void OnExportCanvasMask(object sender, RoutedEventArgs e)
@@ -516,17 +549,6 @@ public sealed partial class MainWindow
         return await Task.Run(() => metadataSource != null
             ? ImageMetadataService.ReapplyNovelAiMetadata(bytes, EnsurePngEncoded(metadataSource), canvasW, canvasH)
             : ImageMetadataService.ReapplyNovelAiMetadata(bytes, textChunks));
-    }
-
-    private async Task<byte[]?> BuildI2IRawSaveBytesAsync()
-    {
-        if (MaskCanvas.IsInPreviewMode && _pendingResultBitmap != null)
-            return await CreatePreviewCompositeBytes();
-
-        if (CanSaveCurrentI2IImageFromRawBytes())
-            return _lastGeneratedImageBytes;
-
-        return await CreateCurrentFullImageBytes();
     }
 
     private bool CanSaveCurrentI2IImageFromRawBytes()

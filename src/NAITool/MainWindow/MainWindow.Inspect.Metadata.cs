@@ -303,26 +303,16 @@ public sealed partial class MainWindow
 
     private async Task<byte[]?> GetInspectSaveBytesAsync(bool stripMetadata, bool forcePng = false)
     {
-        if (_inspectImageBytes == null) return null;
+        var imageBytes = _inspectImageBytes;
+        var comment = _inspectRawModified ? _inspectMetadata?.RawJson : null;
+        if (imageBytes == null) return null;
 
-        var imageBytes = forcePng && !HasPngSignature(_inspectImageBytes)
-            ? await Task.Run(() => EnsurePngEncoded(_inspectImageBytes))
-            : _inspectImageBytes;
-
+        if ((forcePng || stripMetadata || comment != null) && !HasPngSignature(imageBytes))
+            imageBytes = await Task.Run(() => EnsurePngEncoded(imageBytes));
         if (stripMetadata)
-        {
-            if (!HasPngSignature(imageBytes))
-                imageBytes = await Task.Run(() => EnsurePngEncoded(imageBytes));
             return await Task.Run(() => ImageMetadataService.StripPngMetadata(imageBytes));
-        }
-
-        if (_inspectRawModified && _inspectMetadata != null)
-        {
-            if (!HasPngSignature(imageBytes))
-                imageBytes = await Task.Run(() => EnsurePngEncoded(imageBytes));
-            return await Task.Run(() => ImageMetadataService.ReplacePngComment(imageBytes, _inspectMetadata.RawJson));
-        }
-
+        if (comment != null)
+            return await Task.Run(() => ImageMetadataService.ReplacePngComment(imageBytes, comment));
         return imageBytes;
     }
 
@@ -333,23 +323,25 @@ public sealed partial class MainWindow
 
         if (!string.IsNullOrEmpty(_inspectImagePath) && File.Exists(_inspectImagePath))
         {
-            var savePath = ResolveOverwriteSavePath(_inspectImagePath, out bool redirectedToPng);
-            var bytesToSave = await GetInspectSaveBytesAsync(stripMetadata: false, forcePng: redirectedToPng);
-            if (bytesToSave == null)
-            { TxtStatus.Text = L("file.error.no_image_to_save"); return; }
-            bytesToSave = await PrepareImageBytesForSaveAsync(bytesToSave, stripMetadata: false);
-
+            var savePath = ResolveOverwriteSavePath(_inspectImagePath, out _);
             try
             {
-                await File.WriteAllBytesAsync(savePath, bytesToSave);
-                _inspectImageBytes = bytesToSave;
-                _inspectImagePath = savePath;
-                _inspectRawModified = false;
-                _inspectMetadata = await Task.Run(() => ImageMetadataService.ReadFromBytes(bytesToSave));
-                DisplayInspectMetadata(_inspectMetadata);
-                UpdateInspectSaveState();
-                ReplaceEditMenu();
-                TxtStatus.Text = ShouldStripSavedImageMetadata(false)
+                var snapshot = await CaptureWorkspaceSaveAsync(stripMetadata: false);
+                if (snapshot == null)
+                { TxtStatus.Text = L("file.error.no_image_to_save"); return; }
+                var metadata = await Task.Run(() => ImageMetadataService.ReadFromBytes(snapshot.Bytes));
+                await File.WriteAllBytesAsync(savePath, snapshot.Bytes);
+                if (snapshot.IsCurrent())
+                {
+                    _inspectImageBytes = snapshot.Bytes;
+                    _inspectImagePath = savePath;
+                    _inspectRawModified = false;
+                    _inspectMetadata = metadata;
+                    DisplayInspectMetadata(_inspectMetadata);
+                    UpdateInspectSaveState();
+                    ReplaceEditMenu();
+                }
+                TxtStatus.Text = snapshot.StripMetadata
                     ? Lf("file.saved_path_stripped", savePath)
                     : Lf("file.saved_path", savePath);
             }
@@ -363,40 +355,27 @@ public sealed partial class MainWindow
 
     private async Task SaveEffectsOverwriteAsync()
     {
-        var bytesToSave = await GetEffectsSaveBytesAsync();
-        if (bytesToSave == null)
+        var sourcePath = _effectsImagePath;
+        if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
         {
-            TxtStatus.Text = L("file.error.no_image_to_save");
+            await SaveAsInternal(stripMetadata: false);
             return;
         }
 
-        if (!string.IsNullOrEmpty(_effectsImagePath) && File.Exists(_effectsImagePath))
+        try
         {
-            var savePath = ResolveOverwriteSavePath(_effectsImagePath, out bool redirectedToPng);
-            if (redirectedToPng)
-                bytesToSave = await Task.Run(() => EnsurePngEncoded(bytesToSave));
-            bytesToSave = await PrepareImageBytesForSaveAsync(bytesToSave, stripMetadata: false);
-
-            try
-            {
-                await File.WriteAllBytesAsync(savePath, bytesToSave);
-                _effectsImagePath = savePath;
-                MarkEffectsWorkspaceClean();
-                RefreshEffectsPanel();
-                UpdateFileMenuState();
-                TxtStatus.Text = ShouldStripSavedImageMetadata(false)
-                    ? Lf("file.saved_path_stripped", savePath)
-                    : Lf("file.saved_path", savePath);
-            }
-            catch (Exception ex)
-            {
-                TxtStatus.Text = Lf("common.save_failed", ex.Message);
-            }
+            var snapshot = await CaptureWorkspaceSaveAsync(stripMetadata: false);
+            if (snapshot == null)
+            { TxtStatus.Text = L("file.error.no_image_to_save"); return; }
+            var savePath = ResolveOverwriteSavePath(sourcePath, out _);
+            await File.WriteAllBytesAsync(savePath, snapshot.Bytes);
+            CompleteWorkspaceSave(snapshot, savePath);
+            UpdateFileMenuState();
+            TxtStatus.Text = snapshot.StripMetadata
+                ? Lf("file.saved_path_stripped", savePath)
+                : Lf("file.saved_path", savePath);
         }
-        else
-        {
-            await SaveAsInternal(stripMetadata: false);
-        }
+        catch (Exception ex) { TxtStatus.Text = Lf("common.save_failed", ex.Message); }
     }
 
     private void FitInspectPreviewToScreen()
