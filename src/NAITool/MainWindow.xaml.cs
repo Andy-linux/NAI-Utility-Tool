@@ -59,7 +59,6 @@ public sealed partial class MainWindow : Window
     private readonly ReverseImageTaggerService _reverseTaggerService = new();
     private readonly WildcardService _wildcardService = new();
     private readonly EffectsRenderService _effectsRenderService = new();
-    private readonly bool _showOobeOnStartup;
     private bool _oobeDialogOpen;
 
     private const string MenuCommandNormalizePrompts = "normalize_prompts";
@@ -339,9 +338,8 @@ public sealed partial class MainWindow : Window
     //  构造
     // ═══════════════════════════════════════════════════════════
 
-    public MainWindow(bool showOobeOnStartup = false)
+    public MainWindow()
     {
-        _showOobeOnStartup = showOobeOnStartup;
         System.Diagnostics.Debug.WriteLine($"[Startup] App root: {AppRootDir}");
         System.Diagnostics.Debug.WriteLine($"[Startup] BaseDirectory: {AppContext.BaseDirectory}");
 
@@ -515,7 +513,6 @@ public sealed partial class MainWindow : Window
         RefreshHistoryDatePickerRange();
         _ = LoadHistoryFavoritesAsync();
         LoadHistoryAsync();
-        QueueStartupOobe();
     }
 
     private string L(string key) => _loc.GetString(key);

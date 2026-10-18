@@ -30,20 +30,8 @@ public sealed partial class MainWindow
     private const double OobeVisualColumnWidth = 306;
     private static readonly Dictionary<string, BitmapImage> OobeImageCache = new();
 
-    private void QueueStartupOobe()
-    {
-        if (!_showOobeOnStartup)
-            return;
-
-        DispatcherQueue.TryEnqueue(async () =>
-        {
-            await Task.Delay(250);
-            await ShowOobeDialogAsync(isStartup: true);
-        });
-    }
-
     private async void OnQuickTour(object sender, RoutedEventArgs e)
-        => await ShowOobeDialogAsync(isStartup: false);
+        => await ShowOobeDialogAsync();
 
     private static async Task LoadEmbeddedOobeImageAsync(Image target, string imageName)
     {
@@ -83,7 +71,7 @@ public sealed partial class MainWindow
         target.Source = bitmap;
     }
 
-    private async Task ShowOobeDialogAsync(bool isStartup)
+    private async Task ShowOobeDialogAsync()
     {
         if (_oobeDialogOpen || this.Content?.XamlRoot == null)
             return;
@@ -118,7 +106,7 @@ public sealed partial class MainWindow
             Button nextButton = null!;
 
             string GetDialogDisplayTitle()
-                => isStartup ? L("oobe.dialog.title") : L("oobe.dialog.quick_tour_title");
+                => L("oobe.dialog.quick_tour_title");
 
             bool isDarkTheme() => root.ActualTheme == ElementTheme.Dark;
 

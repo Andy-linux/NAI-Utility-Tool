@@ -37,8 +37,7 @@ public partial class App : Application
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
-        bool isFirstRun = !SettingsService.SettingsFileExists;
-        InitializeLocalization(persistDetectedLanguage: !isFirstRun);
+        InitializeLocalization(persistDetectedLanguage: true);
 
         _splashWindow = new SplashWindow();
         _splashWindow.Activate();
@@ -47,7 +46,7 @@ public partial class App : Application
         var minDisplayTask = Task.Delay(2500);
         await Task.WhenAll(preloadTask, minDisplayTask);
 
-        _window = new MainWindow(isFirstRun);
+        _window = new MainWindow();
         _window.Activate();
 
         _splashWindow.Close();
