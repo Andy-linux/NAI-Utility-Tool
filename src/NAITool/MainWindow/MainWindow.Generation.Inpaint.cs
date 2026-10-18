@@ -244,7 +244,7 @@ public sealed partial class MainWindow
         TextChunks = CloneTextChunks(_i2iImageTextChunks),
     };
 
-    private async Task RestoreI2IApplyWorkspaceStateAsync(I2IApplyWorkspaceState state)
+    private async Task<bool> RestoreI2IApplyWorkspaceStateAsync(I2IApplyWorkspaceState state)
     {
         var oldPreview = MaskCanvas.ClearPreview();
         if (oldPreview != null && !ReferenceEquals(oldPreview, _pendingResultBitmap))
@@ -256,12 +256,13 @@ public sealed partial class MainWindow
         _i2iPreviewDirty = false;
         ClearI2IResultCandidates();
 
-        await MaskCanvas.RestoreWorkspaceSnapshotAsync(state.Canvas);
+        if (!await MaskCanvas.RestoreWorkspaceSnapshotAsync(state.Canvas)) return false;
         _lastGeneratedImageBytes = state.LastGeneratedImageBytes;
         _i2iImageTextChunks = CloneTextChunks(state.TextChunks);
         BtnGenerate.IsEnabled = true;
         UpdateFloatingResultBarsVisibility();
         UpdateDynamicMenuStates();
+        return true;
     }
 
     private async void SendImageToI2I(byte[] imageBytes, string? sourcePath = null)

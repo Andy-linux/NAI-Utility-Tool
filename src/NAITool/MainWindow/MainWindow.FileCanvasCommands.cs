@@ -661,6 +661,7 @@ public sealed partial class MainWindow
     {
         if (_currentMode == AppMode.I2I && !MaskCanvas.IsInPreviewMode)
         {
+            if (_generateRequestRunning || _i2iResultApplying) return;
             if (_i2iEditMode == I2IEditMode.Inpaint && MaskCanvas.UndoMgr.CanUndo)
             {
                 MaskCanvas.PerformUndo();
@@ -669,10 +670,7 @@ public sealed partial class MainWindow
 
             if (_i2iApplyUndoStack.Count > 0)
             {
-                _i2iApplyRedoStack.Push(await CaptureI2IApplyWorkspaceStateAsync());
-                var state = _i2iApplyUndoStack.Pop();
-                await RestoreI2IApplyWorkspaceStateAsync(state);
-                TxtStatus.Text = L("post.status.undo");
+                await RestoreI2IHistoryAsync(redo: false);
                 return;
             }
         }
@@ -690,6 +688,7 @@ public sealed partial class MainWindow
     {
         if (_currentMode == AppMode.I2I && !MaskCanvas.IsInPreviewMode)
         {
+            if (_generateRequestRunning || _i2iResultApplying) return;
             if (_i2iEditMode == I2IEditMode.Inpaint && MaskCanvas.UndoMgr.CanRedo)
             {
                 MaskCanvas.PerformRedo();
@@ -698,10 +697,7 @@ public sealed partial class MainWindow
 
             if (_i2iApplyRedoStack.Count > 0)
             {
-                _i2iApplyUndoStack.Push(await CaptureI2IApplyWorkspaceStateAsync());
-                var state = _i2iApplyRedoStack.Pop();
-                await RestoreI2IApplyWorkspaceStateAsync(state);
-                TxtStatus.Text = L("post.status.redo");
+                await RestoreI2IHistoryAsync(redo: true);
                 return;
             }
         }
@@ -712,6 +708,32 @@ public sealed partial class MainWindow
             var state = _effectsRedoStack.Pop();
             await RestoreEffectsWorkspaceStateAsync(state);
             TxtStatus.Text = L("post.status.redo");
+        }
+    }
+
+    private async Task RestoreI2IHistoryAsync(bool redo)
+    {
+        var source = redo ? _i2iApplyRedoStack : _i2iApplyUndoStack;
+        var target = redo ? _i2iApplyUndoStack : _i2iApplyRedoStack;
+        var state = source.Peek();
+        int workspaceVersion = MaskCanvas.WorkspaceVersion;
+        _i2iResultApplying = true;
+        UpdateI2IResultNavigator();
+        try
+        {
+            var current = await CaptureI2IApplyWorkspaceStateAsync();
+            if (workspaceVersion != MaskCanvas.WorkspaceVersion ||
+                source.Count == 0 || !ReferenceEquals(source.Peek(), state)) return;
+            if (!await RestoreI2IApplyWorkspaceStateAsync(state)) return;
+            source.Pop();
+            target.Push(current);
+            TxtStatus.Text = L(redo ? "post.status.redo" : "post.status.undo");
+        }
+        finally
+        {
+            _i2iResultApplying = false;
+            UpdateI2IResultNavigator();
+            UpdateDynamicMenuStates();
         }
     }
 

@@ -956,11 +956,11 @@ public sealed partial class MaskCanvasControl : UserControl
             _document.InpaintRegion);
     }
 
-    public async Task RestoreWorkspaceSnapshotAsync(WorkspaceSnapshot snapshot)
+    public async Task<bool> RestoreWorkspaceSnapshotAsync(WorkspaceSnapshot snapshot)
     {
         int loadVersion = BeginWorkspaceReplacement();
         CancelMaskMove();
-        if (_device == null) return;
+        if (_device == null) return false;
 
         _resourcesReady = false;
         var oldPreview = _previewBitmap;
@@ -985,7 +985,7 @@ public sealed partial class MaskCanvasControl : UserControl
         {
             restoredImage?.Dispose();
             oldPreview?.Dispose();
-            return;
+            return false;
         }
 
         BeginWorkspaceReplacement();
@@ -1011,6 +1011,7 @@ public sealed partial class MaskCanvasControl : UserControl
         RegenerateCheckerboard();
         _resourcesReady = true;
         ContentChanged?.Invoke();
+        return true;
     }
 
     public void RefreshToolCursor()
