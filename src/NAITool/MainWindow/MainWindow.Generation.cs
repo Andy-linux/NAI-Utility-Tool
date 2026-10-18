@@ -779,98 +779,15 @@ public sealed partial class MainWindow
             return;
         }
 
-        bool blockOversizedSteps = IsAssetProtectionStepLimitEnabled();
-        bool blockOversizedDimensions = IsAssetProtectionSizeLimitEnabled();
-        var skipped = new List<string>();
-        var notes = new List<string>();
-        SaveCurrentPromptToBuffer();
-        SaveAllCharacterPrompts();
-        var p = _settings.Settings.GenParameters;
-        ApplyImportedImageModel(meta, p, GenerationModels);
-
-        string importedPositivePrompt = meta.PositivePrompt;
-        if (meta.IsNaiParsed && NovelAIService.IsV5Model(p.Model))
-            importedPositivePrompt = NovelAiPromptPresets.StripAutoText(importedPositivePrompt, meta);
-        var presetMatch = ExtractImportedPromptPresetMatch(importedPositivePrompt, meta.NegativePrompt, p.Model, meta.TagHintTransparentBackground == true, meta.UcPresetId == "none", meta.QualityToggle == false);
-        string positivePrompt = presetMatch.PositivePrompt;
-        string negativePrompt = presetMatch.NegativePrompt;
-
-        if (meta.HasPositivePrompt)
+        var selection = new MetadataImportSelection
         {
-            _genPositivePrompt = positivePrompt;
-            _genStylePrompt = "";
-        }
-        if (meta.HasNegativePrompt) _genNegativePrompt = negativePrompt;
-
-        p.QualityToggle = meta.QualityToggle ?? presetMatch.QualityMatched;
-        p.QualityPreset = meta.QualityPreset ?? presetMatch.QualityPreset;
-        if (!ModelCapabilities.IsMedium(p))
-        {
-            p.UcPreset = presetMatch.UcPresetMatched ?? 2;
-            p.UcPresetId = presetMatch.UcPresetId ?? "none";
-        }
-
-        if (meta.Steps > 0 && !ModelCapabilities.IsMedium(p))
-        {
-            if (blockOversizedSteps && meta.Steps > 28)
-                skipped.Add(Lf("metadata.skipped.steps", meta.Steps));
-            else
-                p.Steps = meta.Steps;
-        }
-        if (!skipSeed && !string.IsNullOrEmpty(meta.Seed)) p.Seed = meta.Seed;
-        if (meta.Scale > 0) p.Scale = meta.Scale;
-        if (!ModelCapabilities.IsMedium(p)) p.CfgRescale = meta.CfgRescale;
-        p.TagHintTransparentBackground = meta.TagHintTransparentBackground ?? false;
-        if (meta.StraightAlpha.HasValue) p.StraightAlpha = meta.StraightAlpha.Value;
-        if (!ModelCapabilities.IsMedium(p) && !string.IsNullOrEmpty(meta.Sampler)) p.Sampler = meta.Sampler;
-        if (!string.IsNullOrEmpty(meta.NoiseSchedule)) p.Schedule = meta.NoiseSchedule;
-        p.DynamicThresholding = meta.DynamicThresholding;
-        p.LegacyUc = meta.LegacyUc ?? false;
-        p.Sm = meta.Sm;
-        p.SmDyn = meta.SmDyn;
-        p.Variety = meta.Variety;
-
-        if (meta.Width > 0 && meta.Height > 0)
-        {
-            if (blockOversizedDimensions && (long)meta.Width * meta.Height > 1024L * 1024)
-                skipped.Add(Lf("metadata.skipped.size", meta.Width, meta.Height));
-            else
-            {
-                _customWidth = meta.Width;
-                _customHeight = meta.Height;
-            }
-        }
-
-        SetSizeInputsSilently(_customWidth, _customHeight);
-        if (!skipSeed) NbSeed.Value = p.Seed;
-        ChkVariety.IsChecked = p.Variety;
-
-        if (meta.HasCharacterPrompts)
-            SetGenCharactersFromMetadata(meta);
-        ApplyReferenceDataFromMetadata(meta);
-        RefreshCharacterPanel();
-
-        LoadPromptFromBuffer();
-        UpdateSplitVisibility();
-        UpdateSizeWarningVisuals();
-
-        if (IsAdvancedWindowOpen) SyncSidebarToAdvanced();
-        UpdateEffortUI();
-
-        if (presetMatch.QualityMatched) notes.Add(L("metadata.note.quality_extracted"));
-        if (presetMatch.UcPresetMatched.HasValue)
-            notes.Add(Lf("metadata.note.negative_quality_extracted", GetUcPresetDisplayName(presetMatch.UcPresetMatched.Value)));
-        if (skipSeed) notes.Add(L("metadata.note.seed_skipped"));
-        if (skipped.Count > 0) notes.Add(Lf("metadata.note.skipped", string.Join(", ", skipped)));
-        AppendReferenceImportNotes(meta, notes);
-
-        RememberBusinessImport("generation", diagnostic, meta, fileName, new
-        { Prompt = true, NegativePrompt = true, Characters = true, Model = true, Settings = true,
-            Size = true, Seed = !skipSeed, References = true, ActualPrompt = false, skipped = skipped.ToArray() });
+            Seed = !skipSeed,
+            References = meta.VibeTransfers.Count > 0 || meta.PreciseReferences.Count > 0,
+        };
+        ApplyMetadataToGeneration(meta, selection);
+        if (skipSeed) TxtStatus.Text += "; " + L("metadata.note.seed_skipped");
+        RememberBusinessImport("generation", diagnostic, meta, fileName, selection);
         diagnostic.Stage("import_applied", CaptureBusinessInputs());
-        TxtStatus.Text = notes.Count > 0
-            ? Lf("metadata.applied_with_notes", fileName, string.Join("; ", notes))
-            : Lf("metadata.applied", fileName);
     }
 
     private async Task ApplyImageSeedToGenerationAsync(byte[] bytes, string fileName)
