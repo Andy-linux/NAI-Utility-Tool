@@ -148,7 +148,7 @@ internal static class InpaintImageProcessing
         output.Pixels = pixels;
         using var image = SKImage.FromBitmap(output);
         using var png = image.Encode(SKEncodedImageFormat.Png, 100);
-        // Pixel edits invalidate the raw result's signed_hash; the existing edited-image writer marks it unofficial.
+        // Pixel edits invalidate the raw result's signed_hash; the edited-image writer omits it.
         return ImageMetadataService.ReapplyNovelAiMetadata(png.ToArray(), generated, width, height);
     }
 }

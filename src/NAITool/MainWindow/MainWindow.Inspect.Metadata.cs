@@ -207,8 +207,8 @@ public sealed partial class MainWindow
         TxtInspectSteps.Text = meta.Steps > 0 ? meta.Steps.ToString() : "-";
         TxtInspectSampler.Text = FormatInspectValue(meta.Sampler);
         TxtInspectSchedule.Text = FormatInspectValue(meta.NoiseSchedule);
-        TxtInspectScale.Text = FormatInspectNumber(meta.Scale);
-        TxtInspectCfgRescale.Text = meta.IsSdFormat || meta.IsModelInference ? "-" : FormatInspectNumber(meta.CfgRescale);
+        TxtInspectScale.Text = meta.HasScale ? FormatInspectNumber(meta.Scale) : "-";
+        TxtInspectCfgRescale.Text = meta.IsSdFormat || meta.IsModelInference || !meta.HasCfgRescale ? "-" : FormatInspectNumber(meta.CfgRescale);
         TxtInspectSeed.Text = !string.IsNullOrEmpty(meta.Seed) ? meta.Seed : "-";
         TxtInspectVariety.Text = meta.IsSdFormat || meta.IsModelInference ? "-" : ((meta.SmDyn || meta.Sm) ? L("common.yes") : L("common.no"));
         UpdateDynamicMenuStates();
@@ -275,7 +275,7 @@ public sealed partial class MainWindow
             string compactJson = ImageMetadataService.CompactJson(textBox.Text);
             if (compactJson == ImageMetadataService.CompactJson(_inspectMetadata.RawJson)) return;
 
-            var newMeta = ImageMetadataService.TryParseJson(compactJson);
+            var newMeta = ImageMetadataService.TryParseJson(compactJson, _inspectMetadata.TextChunks);
             if (newMeta != null)
             {
                 newMeta.IsNaiParsed = true;
@@ -345,7 +345,10 @@ public sealed partial class MainWindow
                 _inspectImageBytes = bytesToSave;
                 _inspectImagePath = savePath;
                 _inspectRawModified = false;
+                _inspectMetadata = await Task.Run(() => ImageMetadataService.ReadFromBytes(bytesToSave));
+                DisplayInspectMetadata(_inspectMetadata);
                 UpdateInspectSaveState();
+                ReplaceEditMenu();
                 TxtStatus.Text = ShouldStripSavedImageMetadata(false)
                     ? Lf("file.saved_path_stripped", savePath)
                     : Lf("file.saved_path", savePath);

@@ -56,7 +56,7 @@ public sealed partial class MainWindow
         => string.IsNullOrWhiteSpace(value) ? "-" : value;
 
     private static string FormatInspectNumber(double value)
-        => value > 0 ? value.ToString("G") : "-";
+        => value.ToString("G");
 
     private async Task<byte[]?> CreateCurrentCanvasImageBytesAsync()
     {

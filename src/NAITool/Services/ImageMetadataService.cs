@@ -34,7 +34,9 @@ public class ImageMetadata
     public int Height { get; set; }
     public int Steps { get; set; }
     public double Scale { get; set; }
+    public bool HasScale { get; set; }
     public double CfgRescale { get; set; }
+    public bool HasCfgRescale { get; set; }
     public bool DynamicThresholding { get; set; }
     public bool? LegacyUc { get; set; }
     public string? Seed { get; set; }
@@ -65,7 +67,6 @@ public static class ImageMetadataService
     private static readonly byte[] PngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
     private const string StealthMagicCompressed = "stealth_pngcomp";
     private const string StealthMagicPlain = "stealth_pnginfo";
-    private const string UnofficialSignedHash = "Unofficial - Not Signed - Created using NAI Utility Tool";
 
     public static ImageMetadata? ReadFromFile(string filePath)
     {
@@ -86,37 +87,7 @@ public static class ImageMetadataService
             var meta = ParseMetadataJson(json);
             if (meta != null)
             {
-                meta.IsNaiParsed = true;
-                meta.Software = textChunks.GetValueOrDefault("Software");
-                meta.Source = textChunks.GetValueOrDefault("Source") ?? meta.Source;
-                string hash = meta.ModelHash;
-                if (string.IsNullOrEmpty(hash) &&
-                    ImportedImageModel.ResolveForTarget(meta.Source, new[] { "nai-diffusion-5-full", "nai-diffusion-5-curated" }) != null)
-                    hash = meta.Source!.Split(' ')[^1];
-                switch (hash.ToUpperInvariant())
-                {
-                    // Official V5 image import maps these hashes to their model variants.
-                    case "70AB5786":
-                    case "93F4BD30":
-                        meta.Model = "nai-diffusion-5-full";
-                        meta.Effort = "medium";
-                        break;
-                    case "0ADF9AB7":
-                    case "657484A5":
-                        meta.Model = "nai-diffusion-5-full";
-                        meta.Effort = "high";
-                        break;
-                    case "DB276663":
-                        meta.Model = "nai-diffusion-5-curated";
-                        meta.Effort = "high";
-                        break;
-                }
-                foreach (var vibe in meta.VibeTransfers)
-                {
-                    vibe.EncodingModel = VibeTransferInfo.EncodingFamily(meta.ModelDisplayName);
-                    vibe.IsEncoded = NovelAIService.IsV4PlusModel(vibe.EncodingModel);
-                }
-                meta.TextChunks = new Dictionary<string, string>(textChunks, StringComparer.Ordinal);
+                ApplyMetadataContext(meta, textChunks);
                 return meta;
             }
         }
@@ -331,6 +302,7 @@ public static class ImageMetadataService
         meta.Steps = ExtractSdInt(paramsLine, @"Steps:\s*(\d+)");
         meta.Seed = ExtractSdString(paramsLine, @"(?:^|,\s*)Seed:\s*([^,\r\n]+)");
         meta.Scale = ExtractSdDouble(paramsLine, @"CFG scale:\s*([\d.]+)");
+        meta.HasScale = System.Text.RegularExpressions.Regex.IsMatch(paramsLine, @"CFG scale:\s*([\d.]+)");
 
         var sizeMatch = System.Text.RegularExpressions.Regex.Match(paramsLine, @"Size:\s*(\d+)x(\d+)");
         if (sizeMatch.Success)
@@ -400,7 +372,49 @@ public static class ImageMetadataService
         return result.Trim();
     }
 
-    public static ImageMetadata? TryParseJson(string json) => ParseMetadataJson(json);
+    public static ImageMetadata? TryParseJson(string json, Dictionary<string, string>? textChunks = null)
+    {
+        var meta = ParseMetadataJson(json);
+        if (meta != null && textChunks != null)
+            ApplyMetadataContext(meta, textChunks);
+        return meta;
+    }
+
+    private static void ApplyMetadataContext(ImageMetadata meta, Dictionary<string, string> textChunks)
+    {
+        meta.IsNaiParsed = true;
+        meta.Software = textChunks.GetValueOrDefault("Software");
+        meta.Source = textChunks.GetValueOrDefault("Source") ?? meta.Source;
+        string hash = meta.ModelHash;
+        if (string.IsNullOrEmpty(hash) &&
+            ImportedImageModel.ResolveForTarget(meta.Source, new[] { "nai-diffusion-5-full", "nai-diffusion-5-curated" }) != null)
+            hash = meta.Source!.Split(' ')[^1];
+        switch (hash.ToUpperInvariant())
+        {
+            // Official V5 image import maps these hashes to their model variants.
+            case "70AB5786":
+            case "93F4BD30":
+                meta.Model = "nai-diffusion-5-full";
+                meta.Effort = "medium";
+                break;
+            case "0ADF9AB7":
+            case "657484A5":
+                meta.Model = "nai-diffusion-5-full";
+                meta.Effort = "high";
+                break;
+            case "DB276663":
+                meta.Model = "nai-diffusion-5-curated";
+                meta.Effort = "high";
+                break;
+        }
+        foreach (var vibe in meta.VibeTransfers)
+        {
+            vibe.EncodingModel = VibeTransferInfo.EncodingFamily(meta.ModelDisplayName);
+            vibe.IsEncoded = NovelAIService.IsV4PlusModel(vibe.EncodingModel);
+        }
+        meta.TextChunks = new Dictionary<string, string>(textChunks, StringComparer.Ordinal);
+        meta.TextChunks["Comment"] = meta.RawJson;
+    }
 
     public static string PrettyPrintJson(string json)
     {
@@ -493,7 +507,8 @@ public static class ImageMetadataService
 
             if (!isTextChunk)
             {
-                if (type == "IEND" && !wroteText && textChunks != null && textChunks.Count > 0)
+                // Match official PNG exports: expose Info before the first image-data chunk.
+                if (type is "IDAT" or "IEND" && !wroteText && textChunks != null && textChunks.Count > 0)
                 {
                     foreach (var kvp in textChunks)
                         WriteTextChunk(output, kvp.Key, kvp.Value);
@@ -592,6 +607,9 @@ public static class ImageMetadataService
 
     private static byte[] RemoveNovelAiStealthMetadata(byte[] pngData)
     {
+        if (TryExtractStealthJsonText(pngData) == null)
+            return pngData;
+
         try
         {
             using var bitmap = DecodeRgbaUnpremulBitmap(pngData);
@@ -725,9 +743,15 @@ public static class ImageMetadataService
             if (root.TryGetProperty("steps", out var steps))
                 meta.Steps = steps.GetInt32();
             if (root.TryGetProperty("scale", out var scale))
+            {
                 meta.Scale = scale.GetDouble();
+                meta.HasScale = true;
+            }
             if (root.TryGetProperty("cfg_rescale", out var cfgRescale))
+            {
                 meta.CfgRescale = cfgRescale.GetDouble();
+                meta.HasCfgRescale = true;
+            }
             if (root.TryGetProperty("dynamic_thresholding", out var dynamicThresholding) &&
                 dynamicThresholding.ValueKind is JsonValueKind.True or JsonValueKind.False)
                 meta.DynamicThresholding = dynamicThresholding.GetBoolean();
@@ -1003,11 +1027,10 @@ public static class ImageMetadataService
         var normalized = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var kvp in sourceChunks)
         {
+            if (kvp.Key == "signed_hash") continue;
             string value = kvp.Key == "Comment"
                 ? NormalizeCommentJsonForSavedImage(kvp.Value, imageWidth, imageHeight)
-                : kvp.Key == "signed_hash"
-                    ? UnofficialSignedHash
-                    : kvp.Value;
+                : kvp.Value;
             normalized[kvp.Key] = value;
         }
 
@@ -1039,42 +1062,25 @@ public static class ImageMetadataService
             }))
             {
                 writer.WriteStartObject();
-                bool wroteWidth = false;
-                bool wroteHeight = false;
-                bool wroteSignedHash = false;
-
                 foreach (var prop in doc.RootElement.EnumerateObject())
                 {
                     if (prop.NameEquals("width"))
                     {
                         writer.WriteNumber("width", imageWidth);
-                        wroteWidth = true;
                         continue;
                     }
 
                     if (prop.NameEquals("height"))
                     {
                         writer.WriteNumber("height", imageHeight);
-                        wroteHeight = true;
                         continue;
                     }
 
-                    if (prop.NameEquals("signed_hash"))
-                    {
-                        writer.WriteString("signed_hash", UnofficialSignedHash);
-                        wroteSignedHash = true;
-                        continue;
-                    }
+                    // Edits invalidate the original signature; omit it instead of inventing a marker.
+                    if (prop.NameEquals("signed_hash")) continue;
 
                     prop.WriteTo(writer);
                 }
-
-                if (!wroteWidth)
-                    writer.WriteNumber("width", imageWidth);
-                if (!wroteHeight)
-                    writer.WriteNumber("height", imageHeight);
-                if (!wroteSignedHash)
-                    writer.WriteString("signed_hash", UnofficialSignedHash);
 
                 writer.WriteEndObject();
             }
