@@ -1,4 +1,10 @@
 using Microsoft.UI.Xaml;
+using NAITool.Services;
+using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading;
+using System.Threading.Tasks;
+using Windows.Foundation;
+using Windows.Graphics.Imaging;
 using System;
 using System.IO;
 using System.Security.Cryptography;
@@ -11,6 +17,7 @@ namespace NAITool;
 public sealed partial class MainWindow
 {
     private bool _imageFileDragInProgress;
+    private SoftwareBitmap? _imageFileDragPreview;
 
     private static bool IsImageDragModifierDown(VirtualKey key) =>
         Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(key)
@@ -30,19 +37,22 @@ public sealed partial class MainWindow
         {
             StopPreviewDrag();
             string? path = null;
+            string fileName = "image";
             byte[]? bytes = null;
             if (sender is FrameworkElement { Tag: string historyPath })
                 path = historyPath;
             else if (ReferenceEquals(sender, GenPreviewImage))
             {
-                path = _currentGenImagePath;
+                fileName = Path.GetFileNameWithoutExtension(_currentGenImagePath) ?? "image";
                 bytes = _currentGenImageBytes;
+                if (bytes != null && IsPngFilePath(_currentGenImagePath ?? ""))
+                    bytes = await Task.Run(() => EnsurePngEncoded(bytes));
+                if (bytes == null) path = _currentGenImagePath;
             }
             else if (ReferenceEquals(sender, InspectPreviewImage))
             {
-                path = _inspectRawModified ? null : _inspectImagePath;
-                if (path == null || !File.Exists(path))
-                    bytes = await GetInspectSaveBytesAsync(stripMetadata: false);
+                fileName = Path.GetFileNameWithoutExtension(_inspectImagePath) ?? "image";
+                bytes = await GetInspectSaveBytesAsync(stripMetadata: false);
             }
 
             if (path == null || !File.Exists(path))
@@ -53,7 +63,8 @@ public sealed partial class MainWindow
                     return;
                 }
 
-                // A byte snapshot also covers unsaved Info edits, without overwriting the source.
+                // Drag the displayed image snapshot with its Info, including unsaved edits.
+                // Its saved path may have been overwritten or saved with metadata stripped.
                 string directory = Path.Combine(AppRootDir, "temp", "drag",
                     Convert.ToHexString(SHA256.HashData(bytes)));
                 Directory.CreateDirectory(directory);
@@ -67,13 +78,17 @@ public sealed partial class MainWindow
                     SkiaSharp.SKEncodedImageFormat.Gif => ".gif",
                     _ => throw new InvalidDataException(L("common.unsupported_file_format_inspect")),
                 };
-                path = Path.Combine(directory, "image" + extension);
+                path = Path.Combine(directory, fileName + extension);
                 if (!File.Exists(path))
                     await File.WriteAllBytesAsync(path, bytes);
             }
 
             var file = await StorageFile.GetFileFromPathAsync(Path.GetFullPath(path));
             args.Data.SetStorageItems(new[] { file }, readOnly: true);
+            var pixels = await HistoryThumbnailService.DecodeAsync(path, 160, 160, CancellationToken.None);
+            _imageFileDragPreview = SoftwareBitmap.CreateCopyFromBuffer(pixels.Pixels.AsBuffer(),
+                BitmapPixelFormat.Bgra8, pixels.Width, pixels.Height, BitmapAlphaMode.Premultiplied);
+            args.DragUI.SetContentFromSoftwareBitmap(_imageFileDragPreview, new Point(12, 12));
             args.Data.RequestedOperation = DataPackageOperation.Copy;
             args.AllowedOperations = DataPackageOperation.Copy;
             _imageFileDragInProgress = true;
@@ -81,6 +96,8 @@ public sealed partial class MainWindow
         catch (Exception ex)
         {
             args.Cancel = true;
+            _imageFileDragPreview?.Dispose();
+            _imageFileDragPreview = null;
             TxtStatus.Text = Lf("image.drag.failed", ex.Message);
         }
         finally
@@ -89,6 +106,10 @@ public sealed partial class MainWindow
         }
     }
 
-    private void OnImageFileDropCompleted(UIElement sender, DropCompletedEventArgs args) =>
+    private void OnImageFileDropCompleted(UIElement sender, DropCompletedEventArgs args)
+    {
         _imageFileDragInProgress = false;
+        _imageFileDragPreview?.Dispose();
+        _imageFileDragPreview = null;
+    }
 }
