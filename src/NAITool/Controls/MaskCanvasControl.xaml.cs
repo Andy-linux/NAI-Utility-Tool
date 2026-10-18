@@ -215,7 +215,7 @@ public sealed partial class MaskCanvasControl : UserControl
     public event Action<float>? ZoomChanged;
     public event Action? ContentChanged;
     public event Action<string>? StatusMessage;
-    public event Action<string>? ImageFileLoaded;
+    public event Action<string, byte[]>? ImageFileLoaded;
 
     public static (int W, int H) ResolveImportCanvasSize(int imageWidth, int imageHeight, bool assetProtectionMode)
     {
@@ -560,13 +560,26 @@ public sealed partial class MaskCanvasControl : UserControl
         return true;
     }
 
+    private async Task<(CanvasBitmap Bitmap, byte[] Bytes)> ReadImageFileSnapshotAsync(StorageFile file)
+    {
+        var buffer = await FileIO.ReadBufferAsync(file);
+        byte[] bytes = new byte[buffer.Length];
+        using (var reader = DataReader.FromBuffer(buffer)) reader.ReadBytes(bytes);
+        using var stream = new InMemoryRandomAccessStream();
+        using var writer = new DataWriter(stream);
+        writer.WriteBytes(bytes);
+        await writer.StoreAsync();
+        writer.DetachStream();
+        stream.Seek(0);
+        return (await CanvasBitmap.LoadAsync(_device, stream, 96f), bytes);
+    }
+
     public async Task LoadImageAsync(StorageFile file)
     {
         if (_device == null || _canvas == null) return;
         try
         {
-            using var stream = await file.OpenReadAsync();
-            var bitmap = await CanvasBitmap.LoadAsync(_device, stream, 96f);
+            var (bitmap, bytes) = await ReadImageFileSnapshotAsync(file);
 
             uint imgW = bitmap.SizeInPixels.Width;
             uint imgH = bitmap.SizeInPixels.Height;
@@ -588,7 +601,7 @@ public sealed partial class MaskCanvasControl : UserControl
             if (sizeChanged)
                 msg += " " + LocalizationService.Instance.Format("mask_canvas.canvas_auto_matched", _canvasWidth, _canvasHeight);
             StatusMessage?.Invoke(msg);
-            ImageFileLoaded?.Invoke(file.Path);
+            ImageFileLoaded?.Invoke(file.Path, bytes);
         }
         catch (Exception ex)
         {
@@ -621,14 +634,13 @@ public sealed partial class MaskCanvasControl : UserControl
         StatusMessage?.Invoke(msg);
     }
 
-    public async Task ReloadImagePreservingWorkspaceAsync(string filePath)
+    public async Task<byte[]?> ReloadImagePreservingWorkspaceAsync(string filePath)
     {
-        if (_device == null || _canvas == null) return;
+        if (_device == null || _canvas == null) return null;
         try
         {
             var file = await StorageFile.GetFileFromPathAsync(filePath);
-            using var stream = await file.OpenReadAsync();
-            var bitmap = await CanvasBitmap.LoadAsync(_device, stream, 96f);
+            var (bitmap, bytes) = await ReadImageFileSnapshotAsync(file);
 
             uint imgW = bitmap.SizeInPixels.Width;
             uint imgH = bitmap.SizeInPixels.Height;
@@ -644,10 +656,12 @@ public sealed partial class MaskCanvasControl : UserControl
                 file.Name,
                 imgW,
                 imgH));
+            return bytes;
         }
         catch (Exception ex)
         {
             StatusMessage?.Invoke(LocalizationService.Instance.Format("common.load_failed", ex.Message));
+            return null;
         }
     }
 

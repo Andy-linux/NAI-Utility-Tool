@@ -512,7 +512,7 @@ public sealed partial class MainWindow
         if (MaskCanvas.IsInPreviewMode && _pendingResultBitmap != null)
             return await CreatePreviewCompositeBytes();
 
-        if (_lastGeneratedImageBytes != null && _lastGeneratedImageBytes.Length > 0)
+        if (CanSaveCurrentI2IImageFromRawBytes())
             return _lastGeneratedImageBytes;
 
         return await CreateCurrentFullImageBytes();
@@ -521,10 +521,6 @@ public sealed partial class MainWindow
     private bool CanSaveCurrentI2IImageFromRawBytes()
     {
         if (_lastGeneratedImageBytes == null || _lastGeneratedImageBytes.Length == 0)
-            return false;
-        if (_i2iImageTextChunks == null || _i2iImageTextChunks.Count == 0)
-            return false;
-        if (ImageMetadataService.ReadPngTextChunks(_lastGeneratedImageBytes).Count == 0)
             return false;
 
         var original = MaskCanvas.Document.OriginalImage;
@@ -611,7 +607,10 @@ public sealed partial class MainWindow
 
             bool wasDirty = MaskCanvas.HasWorkspaceChangesSinceClean();
             bool previewDirty = _i2iPreviewDirty;
-            await MaskCanvas.ReloadImagePreservingWorkspaceAsync(path);
+            var reloadedBytes = await MaskCanvas.ReloadImagePreservingWorkspaceAsync(path);
+            if (reloadedBytes == null) return;
+            _lastGeneratedImageBytes = reloadedBytes;
+            _i2iImageTextChunks = ImageMetadataService.ReadRoundTripTextChunks(reloadedBytes);
             if (!wasDirty && !previewDirty)
                 MarkI2IWorkspaceClean();
             _i2iPreviewDirty = previewDirty;

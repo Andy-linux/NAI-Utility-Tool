@@ -1079,8 +1079,10 @@ public sealed partial class MainWindow
                     reader.ReadBytes(compBytes);
                 }
 
+                // This composite has new pixels; attach its edited Info before it can be reused as raw.
+                compBytes = await Task.Run(() => ImageMetadataService.ReapplyNovelAiMetadata(compBytes, pendingTextChunks));
                 _lastGeneratedImageBytes = compBytes;
-                _i2iImageTextChunks = pendingTextChunks;
+                _i2iImageTextChunks = ImageMetadataService.ReadRoundTripTextChunks(compBytes);
 
                 CanvasBitmap newOriginal;
                 using (var loadStream = new Windows.Storage.Streams.InMemoryRandomAccessStream())

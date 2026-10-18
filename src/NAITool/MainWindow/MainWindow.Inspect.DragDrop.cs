@@ -36,21 +36,25 @@ namespace NAITool;
 
 public sealed partial class MainWindow
 {
-    private async void OnMaskCanvasImageFileLoaded(string filePath)
+    private async void OnMaskCanvasImageFileLoaded(string filePath, byte[] bytes)
     {
         try
         {
-            var bytes = await File.ReadAllBytesAsync(filePath);
-            _lastGeneratedImageBytes = null;
-            _i2iImageTextChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(bytes));
+            var oldPreview = MaskCanvas.ClearPreview();
+            if (!ReferenceEquals(oldPreview, _pendingResultBitmap)) oldPreview?.Dispose();
             _pendingResultBitmap?.Dispose();
             _pendingResultBitmap = null;
+            _lastGeneratedImageBytes = bytes;
+            _i2iImageTextChunks = ImageMetadataService.ReadRoundTripTextChunks(bytes);
+            _i2iPreviewDirty = false;
             _pendingResultBytes = null;
             _pendingResultTextChunks = null;
             ClearI2IResultCandidates();
             _i2iApplyUndoStack.Clear();
             _i2iApplyRedoStack.Clear();
+            UpdateFloatingResultBarsVisibility();
             var meta = await Task.Run(() => ImageMetadataService.ReadFromBytes(bytes));
+            if (!ReferenceEquals(_lastGeneratedImageBytes, bytes)) return;
             if (meta != null && (meta.IsNaiParsed || meta.IsSdFormat))
                 await ImportMetadataAsync(meta, toI2I: true, fileName: Path.GetFileName(filePath));
         }
