@@ -466,6 +466,36 @@ public partial class NovelAIService : IDisposable
         return Convert.ToBase64String(data.ToArray());
     }
 
+    private static string PrepareV3ReferenceImage(string base64Image)
+    {
+        const int size = 448;
+        using var source = InpaintImageProcessing.DecodeClean(Convert.FromBase64String(base64Image));
+        if (source == null) throw new InvalidDataException("Unable to decode the V3 reference image.");
+        double scale = Math.Min((double)size / source.Width, (double)size / source.Height);
+        int width = Math.Max(1, (int)Math.Floor(source.Width * scale + .5));
+        int height = Math.Max(1, (int)Math.Floor(source.Height * scale + .5));
+        using var resized = LanczosImageResize.Resize(source, width, height);
+        int offsetX = (int)Math.Floor((size - width) / 2.0 + .5);
+        int offsetY = (int)Math.Floor((size - height) / 2.0 + .5);
+        var pixels = new SKColor[size * size];
+        Array.Fill(pixels, SKColors.Black);
+        var input = resized.Pixels;
+        for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+        {
+            var color = input[y * width + x];
+            double alpha = color.Alpha / 255.0;
+            pixels[(y + offsetY) * size + x + offsetX] = new SKColor(
+                (byte)Math.Round(color.Red * alpha), (byte)Math.Round(color.Green * alpha),
+                (byte)Math.Round(color.Blue * alpha), 255);
+        }
+        using var canvas = new SKBitmap(size, size, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+        canvas.Pixels = pixels;
+        using var image = SKImage.FromBitmap(canvas);
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        return Convert.ToBase64String(data.ToArray());
+    }
+
     private async Task EncodeUnencodedVibesAsync(
         List<VibeTransferInfo> vibeTransfers, string model, CancellationToken ct)
     {
@@ -496,12 +526,14 @@ public partial class NovelAIService : IDisposable
 
     private static void ApplyVibeTransferParameters(
         Dictionary<string, object?> parameters,
-        List<VibeTransferInfo> vibeTransfers)
+        List<VibeTransferInfo> vibeTransfers,
+        string model)
     {
         if (vibeTransfers.Count == 0)
             return;
 
-        parameters["reference_image_multiple"] = vibeTransfers.Select(x => x.ImageBase64).ToList();
+        parameters["reference_image_multiple"] = vibeTransfers.Select(x =>
+            ModelCapabilities.SupportsSmea(model) ? PrepareV3ReferenceImage(x.ImageBase64) : x.ImageBase64).ToList();
         var strengths = vibeTransfers.Select(x => x.Strength).ToList();
         if (vibeTransfers.All(x => x.IsEncoded))
         {
@@ -756,7 +788,7 @@ public partial class NovelAIService : IDisposable
             ApplyPreciseReferenceParameters(parameters, preciseReferences);
         else if (vibeTransfers is { Count: > 0 } && SupportsVibeTransferModel(naiParams.Model) && !isV4Plus)
         {
-            ApplyVibeTransferParameters(parameters, vibeTransfers);
+            ApplyVibeTransferParameters(parameters, vibeTransfers, naiParams.Model);
         }
 
         var payload = new Dictionary<string, object>
@@ -1023,7 +1055,7 @@ public partial class NovelAIService : IDisposable
         {
             if (IsV4PlusModel(naiParams.Model))
                 await EncodeUnencodedVibesAsync(vibeTransfers, naiParams.Model, ct);
-            ApplyVibeTransferParameters(parameters, vibeTransfers);
+            ApplyVibeTransferParameters(parameters, vibeTransfers, naiParams.Model);
         }
 
         var payload = new Dictionary<string, object>
@@ -1238,7 +1270,7 @@ public partial class NovelAIService : IDisposable
         {
             if (IsV4PlusModel(model))
                 await EncodeUnencodedVibesAsync(vibeTransfers, model, ct);
-            ApplyVibeTransferParameters(parameters, vibeTransfers);
+            ApplyVibeTransferParameters(parameters, vibeTransfers, naiParams.Model);
         }
 
         var payload = new Dictionary<string, object>
