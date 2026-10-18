@@ -552,8 +552,8 @@ public sealed partial class MainWindow
         var panel = new Grid
         {
             Margin = new Thickness(20, 18, 20, 20),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Width = SettingsHubLayerWidth,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            MaxWidth = SettingsHubLayerWidth,
         };
 
         for (int i = 0; i < layers.Length; i++)
@@ -574,7 +574,8 @@ public sealed partial class MainWindow
         {
             Content = panel,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            HorizontalScrollMode = ScrollMode.Disabled,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
             Padding = new Thickness(0, 0, 0, 8),
@@ -648,22 +649,26 @@ public sealed partial class MainWindow
         grid.Children.Add(iconHost);
         grid.Children.Add(textPanel);
         grid.Children.Add(controlHost);
-        if (expanded)
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        void UpdateControlPlacement(double width)
         {
-            grid.RowSpacing = 16;
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.ColumnDefinitions[2].Width = new GridLength(0);
-            controlHost.Width = double.NaN;
-            control.HorizontalAlignment = HorizontalAlignment.Stretch;
-            Grid.SetColumn(controlHost, 0);
-            Grid.SetColumnSpan(controlHost, 3);
-            Grid.SetRow(controlHost, 1);
+            bool stacked = expanded || width < SettingsHubControlColumnWidth + 260;
+            grid.RowSpacing = stacked ? 16 : 0;
+            grid.ColumnDefinitions[2].Width = new GridLength(stacked ? 0 : SettingsHubControlColumnWidth);
+            controlHost.Width = stacked ? double.NaN : SettingsHubControlColumnWidth;
+            control.MaxWidth = Math.Max(0, stacked ? width : SettingsHubControlColumnWidth);
+            control.HorizontalAlignment = expanded ? HorizontalAlignment.Stretch : HorizontalAlignment.Right;
+            Grid.SetColumn(controlHost, stacked ? 0 : 2);
+            Grid.SetColumnSpan(controlHost, stacked ? 3 : 1);
+            Grid.SetRow(controlHost, stacked ? 1 : 0);
         }
+        grid.SizeChanged += (_, args) => UpdateControlPlacement(args.NewSize.Width);
+        UpdateControlPlacement(SettingsHubLayerWidth - 44);
 
         return new Border
         {
-            Width = SettingsHubLayerWidth,
+            MaxWidth = SettingsHubLayerWidth,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             CornerRadius = new CornerRadius(12),
             BorderThickness = new Thickness(1),
