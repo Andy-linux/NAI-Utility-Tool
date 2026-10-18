@@ -18,6 +18,7 @@ public class MaskDocument : IDisposable
     public Vector2 ImageOffset { get; set; } = Vector2.Zero;
     public Vector2 PixelAlignedImageOffset =>
         new(MathF.Round(ImageOffset.X), MathF.Round(ImageOffset.Y));
+    public InpaintRegion? InpaintRegion { get; set; }
     public int CanvasWidth { get; private set; }
     public int CanvasHeight { get; private set; }
 
@@ -26,6 +27,7 @@ public class MaskDocument : IDisposable
     {
         CanvasWidth = width;
         CanvasHeight = height;
+        InpaintRegion = InpaintRegion?.Clip(width, height);
 
         _maskTarget?.Dispose();
         _maskTarget = new CanvasRenderTarget(device, width, height, 96f);

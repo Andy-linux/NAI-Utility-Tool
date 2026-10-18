@@ -2057,7 +2057,24 @@
                                     <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
                                               Glyph="&#xE7C2;" FontSize="18"/>
                                 </ToggleButton>
+                                <ToggleButton x:Name="BtnInpaintRegion"
+                                              Click="OnToolInpaintRegion" Width="40" Height="40" Padding="0">
+                                    <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}"
+                                              Glyph="&#xEF20;" FontSize="18"/>
+                                </ToggleButton>
                             </StackPanel>
+                            <Grid x:Name="PanelInpaintRegion" Visibility="Collapsed" ColumnSpacing="4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="TxtInpaintRegion" VerticalAlignment="Center"
+                                           TextWrapping="Wrap" FontSize="12"/>
+                                <Button x:Name="BtnClearInpaintRegion" Grid.Column="1"
+                                        Click="OnClearInpaintRegion" Width="28" Height="28" Padding="0">
+                                    <FontIcon Glyph="&#xE711;" FontSize="12"/>
+                                </Button>
+                            </Grid>
 
                             <TextBlock x:Name="TxtBrushSizeLabel" Text="" Style="{StaticResource CaptionTextBlockStyle}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>

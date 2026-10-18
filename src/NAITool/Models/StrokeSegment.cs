@@ -33,4 +33,5 @@ public enum StrokeTool : byte
     Eraser = 1,
     Rectangle = 2,
     MoveMask = 3,
+    Region = 4,
 }

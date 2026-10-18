@@ -40,12 +40,14 @@ public sealed partial class MainWindow
     {
         if (_i2iEditMode != I2IEditMode.Inpaint) return;
         MaskCanvas.CancelMaskMove();
+        MaskCanvas.CancelRegionSelection();
         if (MaskCanvas.IsActivelyDrawing) return;
         MaskCanvas.Brush.CurrentTool = tool;
         BtnBrush.IsChecked = tool == StrokeTool.Brush;
         BtnEraser.IsChecked = tool == StrokeTool.Eraser;
         BtnRect.IsChecked = tool == StrokeTool.Rectangle;
         BtnMoveMask.IsChecked = tool == StrokeTool.MoveMask;
+        BtnInpaintRegion.IsChecked = tool == StrokeTool.Region;
         MaskCanvas.RefreshToolCursor();
     }
 
@@ -53,6 +55,23 @@ public sealed partial class MainWindow
     private void OnToolEraser(object sender, RoutedEventArgs e) => SetToolSelection(StrokeTool.Eraser);
     private void OnToolRect(object sender, RoutedEventArgs e) => SetToolSelection(StrokeTool.Rectangle);
     private void OnToolMoveMask(object sender, RoutedEventArgs e) => SetToolSelection(StrokeTool.MoveMask);
+    private void OnToolInpaintRegion(object sender, RoutedEventArgs e) => SetToolSelection(StrokeTool.Region);
+    private void OnClearInpaintRegion(object sender, RoutedEventArgs e) => MaskCanvas.ClearRegion();
+
+    private void UpdateInpaintRegionUI()
+    {
+        if (PanelInpaintRegion == null || MaskCanvas == null) return;
+        if (MaskCanvas.SelectedRegion is not { Width: > 0, Height: > 0 } region)
+        {
+            PanelInpaintRegion.Visibility = Visibility.Collapsed;
+            return;
+        }
+        PanelInpaintRegion.Visibility = Visibility.Visible;
+        var size = region.RequestSize();
+        TxtInpaintRegion.Text = Lf("inpaint.region.size", InpaintRegion.Round(region.Width),
+            InpaintRegion.Round(region.Height), size.Width, size.Height);
+        BtnClearInpaintRegion.IsEnabled = MaskCanvas.CanMoveImage;
+    }
 
     private void OnBrushSizeChanged(object sender,
         Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
@@ -257,7 +276,8 @@ public sealed partial class MainWindow
 
         if (_currentMode == AppMode.I2I && _i2iEditMode == I2IEditMode.Inpaint)
         {
-            if (e.Key == Windows.System.VirtualKey.Escape && MaskCanvas.CancelMaskMove())
+            if (e.Key == Windows.System.VirtualKey.Escape &&
+                (MaskCanvas.CancelRegionSelection() || MaskCanvas.CancelMaskMove()))
             {
                 e.Handled = true;
                 return;

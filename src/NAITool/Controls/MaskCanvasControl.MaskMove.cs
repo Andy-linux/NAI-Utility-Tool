@@ -92,7 +92,7 @@ public sealed partial class MaskCanvasControl
                     if (!moved.AsSpan().SequenceEqual(_maskMoveSnapshot))
                     {
                         _document.RestoreMaskSnapshot(moved);
-                        _undoManager.PushState(_maskMoveSnapshot, _document.ImageOffset, _canvasWidth, _canvasHeight);
+                        _undoManager.PushState(_maskMoveSnapshot, _document.ImageOffset, _canvasWidth, _canvasHeight, _document.InpaintRegion);
                         changed = true;
                     }
                 }
@@ -129,6 +129,7 @@ public sealed partial class MaskCanvasControl
 
     private void OnMaskMoveCaptureLost(object sender, PointerRoutedEventArgs e)
     {
+        CancelRegionSelection();
         if (_isMaskMoving && e.Pointer.PointerId == _maskMovePointerId)
             CancelMaskMove();
     }

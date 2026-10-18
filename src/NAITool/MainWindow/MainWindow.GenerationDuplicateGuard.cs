@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using NAITool.Services;
+using NAITool.Models;
 
 namespace NAITool;
 
@@ -166,7 +167,7 @@ public sealed partial class MainWindow
         List<PreciseReferenceInfo>? preciseReferences,
         string imageBase64,
         string? maskBase64,
-        Vector2 imageOffset)
+        Vector2 imageOffset, InpaintRegion? region = null)
     {
         parameters = ModelCapabilities.CreateRequestSnapshot(parameters);
         if (ModelCapabilities.IsMedium(parameters)) negativePrompt = "";
@@ -202,6 +203,7 @@ public sealed partial class MainWindow
             NegativePrompt = negativePrompt,
             ImageHash = ComputeStableHash(imageBase64),
             MaskHash = ComputeStableHash(maskBase64),
+            Region = region,
             ImageOffsetX = imageOffset.X,
             ImageOffsetY = imageOffset.Y,
             Characters = CreateCharacterSignatureData(characters, ModelCapabilities.IsMedium(parameters)),

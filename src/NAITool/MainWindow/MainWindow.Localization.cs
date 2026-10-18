@@ -221,6 +221,11 @@ public sealed partial class MainWindow
         ToolTipService.SetToolTip(BtnBrush, L("tooltip.brush"));
         ToolTipService.SetToolTip(BtnEraser, L("tooltip.eraser"));
         ToolTipService.SetToolTip(BtnRect, L("tooltip.rectangle"));
+        ToolTipService.SetToolTip(BtnInpaintRegion, L("tooltip.inpaint_region"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(BtnInpaintRegion, L("tooltip.inpaint_region"));
+        ToolTipService.SetToolTip(BtnClearInpaintRegion, L("tooltip.clear_inpaint_region"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(BtnClearInpaintRegion, L("tooltip.clear_inpaint_region"));
+        UpdateInpaintRegionUI();
         ToolTipService.SetToolTip(BtnMoveMask, L("tooltip.move_mask"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(BtnMoveMask, L("tooltip.move_mask"));
         ChkVariety.Content = L("panel.variety");

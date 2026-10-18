@@ -1219,5 +1219,8 @@
   "image.drag.failed": "Could not prepare image for dragging: {0}",
   "dialog.advanced.legacy_uc": "Legacy negative prompt (V4)",
   "file.error.png_conversion_failed": "Unable to encode the image as PNG.",
-  "references.error.encode_inputs_changed": "Reference inputs changed during encoding. The completed encoding is cached; review the inputs and generate again."
+  "references.error.encode_inputs_changed": "Reference inputs changed during encoding. The completed encoding is cached; review the inputs and generate again.",
+  "tooltip.inpaint_region": "Focused area: drag to select, move inside, resize with the corner. The image is cropped for generation and pasted back at this location.",
+  "tooltip.clear_inpaint_region": "Clear focused area and use the full canvas",
+  "inpaint.region.size": "Area {0} × {1} → Generate {2} × {3}"
 }

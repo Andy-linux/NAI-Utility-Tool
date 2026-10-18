@@ -3,7 +3,7 @@ using SkiaSharp;
 
 namespace NAITool.Services;
 
-internal static class InpaintImageProcessing
+internal static partial class InpaintImageProcessing
 {
     internal static SKBitmap? DecodeClean(byte[] bytes) => DecodeClean(bytes, out _);
 
@@ -91,6 +91,31 @@ internal static class InpaintImageProcessing
         using var raw = DecodeClean(generated);
         using var mask = SKBitmap.Decode(Convert.FromBase64String(maskBase64));
         int width = source.Width, height = source.Height;
+        var feather = CreateFeatherMask(mask, width, height);
+        using var output = new SKBitmap(width, height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+        var pixels = new SKColor[width * height];
+        for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+        {
+            var foreground = raw.GetPixel(x, y);
+            var background = source.GetPixel(x, y);
+            double maskAlpha = feather[y * width + x] / 255.0;
+            double alpha = Math.Floor(foreground.Alpha * maskAlpha + .5) / 255.0;
+            double backgroundAlpha = Math.Floor(background.Alpha * (1 - maskAlpha) + .5) / 255.0;
+            double combinedAlpha = alpha + backgroundAlpha;
+            byte Channel(byte f, byte b) => combinedAlpha == 0 ? (byte)0 : (byte)Math.Clamp((int)Math.Round((f * alpha + b * backgroundAlpha) / combinedAlpha), 0, 255);
+            pixels[y * width + x] = new SKColor(Channel(foreground.Red, background.Red), Channel(foreground.Green, background.Green),
+                Channel(foreground.Blue, background.Blue), (byte)Math.Round(combinedAlpha * 255));
+        }
+        output.Pixels = pixels;
+        using var image = SKImage.FromBitmap(output);
+        using var png = image.Encode(SKEncodedImageFormat.Png, 100);
+        // Preserve the response's Info and alpha payload; signature validity depends on the resulting pixels.
+        return ImageMetadataService.ReapplyNovelAiMetadata(png.ToArray(), generated, width, height);
+    }
+
+    private static byte[] CreateFeatherMask(SKBitmap mask, int width, int height)
+    {
         var dilated = new byte[mask.Width * mask.Height];
         for (int y = 0; y < mask.Height; y++)
         for (int x = 0; x < mask.Width; x++)
@@ -130,25 +155,6 @@ internal static class InpaintImageProcessing
                 }
             }
         }
-        using var output = new SKBitmap(width, height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
-        var pixels = new SKColor[width * height];
-        for (int y = 0; y < height; y++)
-        for (int x = 0; x < width; x++)
-        {
-            var foreground = raw.GetPixel(x, y);
-            var background = source.GetPixel(x, y);
-            double maskAlpha = feather[y * width + x] / 255.0;
-            double alpha = Math.Floor(foreground.Alpha * maskAlpha + .5) / 255.0;
-            double backgroundAlpha = Math.Floor(background.Alpha * (1 - maskAlpha) + .5) / 255.0;
-            double combinedAlpha = alpha + backgroundAlpha;
-            byte Channel(byte f, byte b) => combinedAlpha == 0 ? (byte)0 : (byte)Math.Clamp((int)Math.Round((f * alpha + b * backgroundAlpha) / combinedAlpha), 0, 255);
-            pixels[y * width + x] = new SKColor(Channel(foreground.Red, background.Red), Channel(foreground.Green, background.Green),
-                Channel(foreground.Blue, background.Blue), (byte)Math.Round(combinedAlpha * 255));
-        }
-        output.Pixels = pixels;
-        using var image = SKImage.FromBitmap(output);
-        using var png = image.Encode(SKEncodedImageFormat.Png, 100);
-        // Pixel edits invalidate the raw result's signed_hash; the edited-image writer omits it.
-        return ImageMetadataService.ReapplyNovelAiMetadata(png.ToArray(), generated, width, height);
+        return feather;
     }
 }

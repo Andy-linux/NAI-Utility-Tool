@@ -146,14 +146,15 @@ public sealed partial class MaskCanvasControl : UserControl
         int CanvasWidth,
         int CanvasHeight,
         byte[]? MaskPixels,
-        string? LoadedFilePath);
+        string? LoadedFilePath,
+        InpaintRegion? Region = null);
     public bool PreviewMaskOnly
     {
         get => _previewMaskOnly;
         set { _previewMaskOnly = value; }
     }
 
-    public bool IsActivelyDrawing => _isDrawing || _isRectDrawing || _isPanning || _isImageDragging || _isMaskMoving;
+    public bool IsActivelyDrawing => _isDrawing || _isRectDrawing || _isPanning || _isImageDragging || _isMaskMoving || _isRegionSelecting;
     public bool IsInPreviewMode => _previewBitmap != null;
     public bool IsImageFileDropEnabled { get; set; } = true;
     private bool _isImageMoveLocked;
@@ -168,6 +169,7 @@ public sealed partial class MaskCanvasControl : UserControl
             {
                 _isImageDragging = false;
                 CancelMaskMove();
+                CancelRegionSelection();
             }
         }
     }
@@ -498,6 +500,7 @@ public sealed partial class MaskCanvasControl : UserControl
         _thumbnailMaskOverlayEffect = null;
         _previewBitmap?.Dispose();
         _previewBitmap = null;
+        _previewRegion = null;
         foreach (var retiredHandle in _retiredToolCursorHandles)
         {
             if (retiredHandle != 0)
@@ -529,6 +532,8 @@ public sealed partial class MaskCanvasControl : UserControl
     public void InitializeCanvas(int width, int height)
     {
         CancelMaskMove();
+        CancelRegionSelection();
+        _document.InpaintRegion = null;
         _canvasWidth = width;
         _canvasHeight = height;
         if (_device != null)
@@ -547,6 +552,8 @@ public sealed partial class MaskCanvasControl : UserControl
     private bool ApplyImportCanvasSize(uint imageWidth, uint imageHeight)
     {
         CancelMaskMove();
+        CancelRegionSelection();
+        _document.InpaintRegion = null;
         if (_device == null) return false;
 
         var size = ResolveImportCanvasSize((int)imageWidth, (int)imageHeight, UseAssetProtectionCanvasSizing);
@@ -671,7 +678,7 @@ public sealed partial class MaskCanvasControl : UserControl
         var current = _document.GetMaskSnapshot();
         if (current == null) return;
 
-        var snapshot = _undoManager.Undo(current, _document.ImageOffset, _canvasWidth, _canvasHeight);
+        var snapshot = _undoManager.Undo(current, _document.ImageOffset, _canvasWidth, _canvasHeight, _document.InpaintRegion);
         if (snapshot.HasValue)
         {
             RestoreUndoSnapshot(snapshot.Value);
@@ -685,7 +692,7 @@ public sealed partial class MaskCanvasControl : UserControl
         var current = _document.GetMaskSnapshot();
         if (current == null) return;
 
-        var snapshot = _undoManager.Redo(current, _document.ImageOffset, _canvasWidth, _canvasHeight);
+        var snapshot = _undoManager.Redo(current, _document.ImageOffset, _canvasWidth, _canvasHeight, _document.InpaintRegion);
         if (snapshot.HasValue)
         {
             RestoreUndoSnapshot(snapshot.Value);
@@ -717,6 +724,7 @@ public sealed partial class MaskCanvasControl : UserControl
         lock (_stateLock)
         {
             _document.ImageOffset = snapshot.ImageOffset;
+            _document.InpaintRegion = snapshot.Region;
         }
 
         if (canvasSizeChanged)
@@ -731,7 +739,7 @@ public sealed partial class MaskCanvasControl : UserControl
         CancelMaskMove();
         var current = _document.GetMaskSnapshot();
         if (current != null && current.Length > 0)
-            _undoManager.PushState(current, _document.ImageOffset, _canvasWidth, _canvasHeight);
+            _undoManager.PushState(current, _document.ImageOffset, _canvasWidth, _canvasHeight, _document.InpaintRegion);
         lock (_renderLock) { _document.ClearMask(); }
         ContentChanged?.Invoke();
     }
@@ -743,7 +751,7 @@ public sealed partial class MaskCanvasControl : UserControl
 
         var snapshot = _document.GetMaskSnapshot();
         if (snapshot != null && snapshot.Length > 0)
-            _undoManager.PushState(snapshot, _document.ImageOffset, _canvasWidth, _canvasHeight);
+            _undoManager.PushState(snapshot, _document.ImageOffset, _canvasWidth, _canvasHeight, _document.InpaintRegion);
     }
 
     public void MoveImage(Vector2 canvasDelta)
@@ -916,7 +924,8 @@ public sealed partial class MaskCanvasControl : UserControl
             canvasWidth,
             canvasHeight,
             maskPixels == null ? null : (byte[])maskPixels.Clone(),
-            _loadedFilePath);
+            _loadedFilePath,
+            _document.InpaintRegion);
     }
 
     public async Task RestoreWorkspaceSnapshotAsync(WorkspaceSnapshot snapshot)
@@ -927,6 +936,7 @@ public sealed partial class MaskCanvasControl : UserControl
         _resourcesReady = false;
         var oldPreview = _previewBitmap;
         _previewBitmap = null;
+        _previewRegion = null;
 
         CanvasBitmap? restoredImage = null;
         if (snapshot.OriginalImageBytes != null)
@@ -955,6 +965,7 @@ public sealed partial class MaskCanvasControl : UserControl
         lock (_stateLock)
         {
             _document.ImageOffset = snapshot.ImageOffset;
+            _document.InpaintRegion = snapshot.Region;
         }
 
         _loadedFilePath = snapshot.LoadedFilePath;
@@ -978,6 +989,7 @@ public sealed partial class MaskCanvasControl : UserControl
             _cleanImageOffset = _document.ImageOffset;
             _cleanCanvasWidth = _canvasWidth;
             _cleanCanvasHeight = _canvasHeight;
+            _cleanRegion = _document.InpaintRegion;
         }
 
         var maskPixels = _document.GetMaskSnapshot();
@@ -1004,7 +1016,7 @@ public sealed partial class MaskCanvasControl : UserControl
             || canvasHeight != _cleanCanvasHeight
             || Vector2.DistanceSquared(imageOffset, _cleanImageOffset) > 0.01f;
 
-        return imageChanged || HasMaskChangedSinceClean();
+        return imageChanged || _document.InpaintRegion != _cleanRegion || HasMaskChangedSinceClean();
     }
 
     private bool HasMaskChangedSinceClean()
@@ -1034,7 +1046,7 @@ public sealed partial class MaskCanvasControl : UserControl
 
         var snapshot = _document.GetMaskSnapshot();
         if (snapshot != null && snapshot.Length > 0)
-            _undoManager.PushState(snapshot, _document.ImageOffset, _canvasWidth, _canvasHeight);
+            _undoManager.PushState(snapshot, _document.ImageOffset, _canvasWidth, _canvasHeight, _document.InpaintRegion);
 
         using var filler = new CanvasRenderTarget(_device, _canvasWidth, _canvasHeight, 96f);
         using (var ds = filler.CreateDrawingSession())
@@ -1075,6 +1087,7 @@ public sealed partial class MaskCanvasControl : UserControl
         int imgW = (int)_document.OriginalImage.SizeInPixels.Width;
         int imgH = (int)_document.OriginalImage.SizeInPixels.Height;
         var offset = _document.PixelAlignedImageOffset;
+        var region = _document.InpaintRegion;
 
         if (_canvasWidth == imgW && _canvasHeight == imgH
             && offset.X == 0 && offset.Y == 0)
@@ -1082,7 +1095,7 @@ public sealed partial class MaskCanvasControl : UserControl
 
         var snapshot = _document.GetMaskSnapshot();
         if (snapshot != null && snapshot.Length > 0)
-            _undoManager.PushState(snapshot, _document.ImageOffset, _canvasWidth, _canvasHeight);
+            _undoManager.PushState(snapshot, _document.ImageOffset, _canvasWidth, _canvasHeight, _document.InpaintRegion);
 
         _resourcesReady = false;
 
@@ -1099,6 +1112,8 @@ public sealed partial class MaskCanvasControl : UserControl
             _canvasWidth = imgW;
             _canvasHeight = imgH;
             _document.Initialize(_device, imgW, imgH);
+            _document.InpaintRegion = region is { } r
+                ? (r with { X = r.X - offset.X, Y = r.Y - offset.Y }).Clip(imgW, imgH) : null;
 
             if (oldMask != null && _document.MaskTarget != null)
             {
@@ -1116,11 +1131,12 @@ public sealed partial class MaskCanvasControl : UserControl
         return true;
     }
 
-    public CanvasBitmap? SetPreview(CanvasBitmap bitmap)
+    public CanvasBitmap? SetPreview(CanvasBitmap bitmap, InpaintRegion? region = null)
     {
         CancelMaskMove();
         var previous = _previewBitmap;
         _previewBitmap = bitmap;
+        _previewRegion = region;
         ApplySystemCursorVisibility();
         ContentChanged?.Invoke();
         return previous;
@@ -1130,6 +1146,7 @@ public sealed partial class MaskCanvasControl : UserControl
     {
         var previous = _previewBitmap;
         _previewBitmap = null;
+        _previewRegion = null;
         ApplySystemCursorVisibility();
         ContentChanged?.Invoke();
         return previous;
@@ -1149,7 +1166,7 @@ public sealed partial class MaskCanvasControl : UserControl
         CancelMaskMove();
         if (_document.MaskTarget == null) return;
         var snapshot = _document.GetMaskSnapshot();
-        if (snapshot != null && snapshot.Length > 0) _undoManager.PushState(snapshot, _document.ImageOffset, _canvasWidth, _canvasHeight);
+        if (snapshot != null && snapshot.Length > 0) _undoManager.PushState(snapshot, _document.ImageOffset, _canvasWidth, _canvasHeight, _document.InpaintRegion);
 
         var px = _document.MaskTarget.GetPixelBytes();
         for (int i = 0; i < px.Length; i += 4)
@@ -1168,7 +1185,7 @@ public sealed partial class MaskCanvasControl : UserControl
         CancelMaskMove();
         if (_document.MaskTarget == null) return;
         var snapshot = _document.GetMaskSnapshot();
-        if (snapshot != null && snapshot.Length > 0) _undoManager.PushState(snapshot, _document.ImageOffset, _canvasWidth, _canvasHeight);
+        if (snapshot != null && snapshot.Length > 0) _undoManager.PushState(snapshot, _document.ImageOffset, _canvasWidth, _canvasHeight, _document.InpaintRegion);
 
         var src = _document.MaskTarget.GetPixelBytes();
         int w = _canvasWidth, h = _canvasHeight;
@@ -1200,7 +1217,7 @@ public sealed partial class MaskCanvasControl : UserControl
         CancelMaskMove();
         if (_document.MaskTarget == null) return;
         var snapshot = _document.GetMaskSnapshot();
-        if (snapshot != null && snapshot.Length > 0) _undoManager.PushState(snapshot, _document.ImageOffset, _canvasWidth, _canvasHeight);
+        if (snapshot != null && snapshot.Length > 0) _undoManager.PushState(snapshot, _document.ImageOffset, _canvasWidth, _canvasHeight, _document.InpaintRegion);
 
         var src = _document.MaskTarget.GetPixelBytes();
         int w = _canvasWidth, h = _canvasHeight;
@@ -1301,7 +1318,7 @@ public sealed partial class MaskCanvasControl : UserControl
                 ds.DrawImage(checker);
 
             var preview = _previewBitmap;
-            if (preview != null && !_isComparing)
+            if (preview != null && !_isComparing && _previewRegion == null)
             {
                 var destRect = new Windows.Foundation.Rect(0, 0, _canvasWidth, _canvasHeight);
                 ds.DrawImage(preview, destRect, preview.Bounds, 1f, interp);
@@ -1326,7 +1343,11 @@ public sealed partial class MaskCanvasControl : UserControl
                     }
                 }
 
-                if (!_isComparing && IsMaskOverlayVisible)
+                if (preview != null && !_isComparing && _previewRegion is { } area)
+                    ds.DrawImage(preview, new Windows.Foundation.Rect(area.X, area.Y, area.Width, area.Height),
+                        preview.Bounds, 1f, interp);
+
+                if (preview == null && !_isComparing && IsMaskOverlayVisible)
                 {
                     lock (_renderLock)
                     {
@@ -1362,6 +1383,7 @@ public sealed partial class MaskCanvasControl : UserControl
 
             }
 
+            DrawRegion(ds, viewScale);
             float bw = 1f / viewScale;
             ds.DrawRectangle(0, 0, _canvasWidth, _canvasHeight, Color.FromArgb(80, 128, 128, 128), bw);
 
@@ -1407,7 +1429,7 @@ public sealed partial class MaskCanvasControl : UserControl
             if (!CanMoveImage) return;
             var snapshot = _document.GetMaskSnapshot();
             if (snapshot != null && snapshot.Length > 0)
-                _undoManager.PushState(snapshot, _document.ImageOffset, _canvasWidth, _canvasHeight);
+                _undoManager.PushState(snapshot, _document.ImageOffset, _canvasWidth, _canvasHeight, _document.InpaintRegion);
             _isImageDragging = true;
             _canvas.CapturePointer(e.Pointer);
             _imageDragStartPos = screenPos;
@@ -1417,12 +1439,18 @@ public sealed partial class MaskCanvasControl : UserControl
             e.Handled = true;
         }
         // 左键（无 Alt）→ 绘制
-        else if (point.Properties.IsLeftButtonPressed && !_isPanning && IsMaskEditingEnabled)
+        else if (point.Properties.IsLeftButtonPressed && !_isPanning && IsMaskEditingEnabled && !IsInPreviewMode && !_isImageMoveLocked)
         {
             Vector2 canvasPos;
             lock (_stateLock)
             {
                 canvasPos = _viewTransform.ScreenToCanvas(screenPos);
+            }
+
+            if (_brushSettings.CurrentTool == StrokeTool.Region)
+            {
+                BeginRegionSelection(canvasPos, e);
+                return;
             }
 
             if (_brushSettings.CurrentTool == StrokeTool.MoveMask)
@@ -1441,7 +1469,7 @@ public sealed partial class MaskCanvasControl : UserControl
 
             var snapshot = _document.GetMaskSnapshot();
             if (snapshot != null && snapshot.Length > 0)
-                _undoManager.PushState(snapshot, _document.ImageOffset, _canvasWidth, _canvasHeight);
+                _undoManager.PushState(snapshot, _document.ImageOffset, _canvasWidth, _canvasHeight, _document.InpaintRegion);
 
             if (_brushSettings.CurrentTool == StrokeTool.Rectangle)
             {
@@ -1482,7 +1510,12 @@ public sealed partial class MaskCanvasControl : UserControl
         var lastPt = points[points.Count - 1];
         var newCursorPos = new Vector2((float)lastPt.Position.X, (float)lastPt.Position.Y);
 
-        if (_isRectDrawing)
+        if (_isRegionSelecting)
+        {
+            lock (_stateLock) UpdateRegionSelection(_viewTransform.ScreenToCanvas(newCursorPos));
+            e.Handled = true;
+        }
+        else if (_isRectDrawing)
         {
             lock (_stateLock)
             {
@@ -1573,6 +1606,7 @@ public sealed partial class MaskCanvasControl : UserControl
 
     private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
+        if (_isRegionSelecting) { CompleteRegionSelection(e); return; }
         if (_isMaskMoving) { CompleteMaskMove(e); return; }
         if (_canvas == null) return;
 
@@ -1746,7 +1780,7 @@ public sealed partial class MaskCanvasControl : UserControl
             viewScale = _viewTransform.Scale;
         }
 
-        int radiusPx = tool == StrokeTool.Rectangle
+        int radiusPx = tool is StrokeTool.Rectangle or StrokeTool.Region
             ? Math.Max(8, (int)MathF.Round(10f * DpiScale))
             : Math.Clamp((int)MathF.Round(_brushSettings.BrushRadius * viewScale * DpiScale), 1, (ToolCursorMaxSize / 2) - 4);
         int thicknessPx = Math.Max(1, (int)MathF.Round(1.5f * DpiScale));
@@ -1792,7 +1826,7 @@ public sealed partial class MaskCanvasControl : UserControl
 
     private static int ResolveToolCursorSize(StrokeTool tool, int radiusPx, int thicknessPx)
     {
-        int desired = tool == StrokeTool.Rectangle
+        int desired = tool is StrokeTool.Rectangle or StrokeTool.Region
             ? Math.Max(ToolCursorMinSize, (radiusPx + thicknessPx + 2) * 2)
             : Math.Max(ToolCursorMinSize, (radiusPx + (thicknessPx * 3) + 2) * 2);
 
@@ -1813,7 +1847,7 @@ public sealed partial class MaskCanvasControl : UserControl
         Array.Fill(andMask, (byte)0xFF);
 
         int center = cursorSize / 2;
-        if (tool == StrokeTool.Rectangle)
+        if (tool is StrokeTool.Rectangle or StrokeTool.Region)
             DrawXorCrosshair(xorMask, stride, cursorSize, center, radiusPx, thicknessPx);
         else
             DrawXorCircle(xorMask, stride, cursorSize, center, radiusPx, thicknessPx);

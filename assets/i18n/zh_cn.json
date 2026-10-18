@@ -1219,5 +1219,8 @@
   "image.drag.failed": "准备拖出图像失败：{0}",
   "dialog.advanced.legacy_uc": "旧版负面提示词（V4）",
   "file.error.png_conversion_failed": "无法将图像编码为 PNG。",
-  "references.error.encode_inputs_changed": "编码期间参考图设置已改变。已完成的编码已缓存，请核对设置后重新生成。"
+  "references.error.encode_inputs_changed": "编码期间参考图设置已改变。已完成的编码已缓存，请核对设置后重新生成。",
+  "tooltip.inpaint_region": "局部选区：拖动框选，框内移动，拖动角点调整大小。生成时裁切选区，再按原位置回贴。",
+  "tooltip.clear_inpaint_region": "清除局部选区，使用整个画布",
+  "inpaint.region.size": "选区 {0} × {1} → 生成 {2} × {3}"
 }

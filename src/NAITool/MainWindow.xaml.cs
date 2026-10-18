@@ -189,6 +189,7 @@ public sealed partial class MainWindow : Window
     // ═══ 重绘预览工作流 ═══
     private CanvasBitmap? _pendingResultBitmap;
     private byte[]? _pendingResultBytes;
+    private InpaintRegion? _pendingResultRegion;
     private Dictionary<string, string>? _pendingResultTextChunks;
     private Dictionary<string, string>? _i2iImageTextChunks;
     private readonly List<I2IResultCandidate> _i2iResultCandidates = [];
@@ -204,6 +205,7 @@ public sealed partial class MainWindow : Window
     {
         public required string FilePath { get; init; }
         public Dictionary<string, string>? TextChunks { get; init; }
+        public InpaintRegion? Region { get; init; }
     }
 
     private sealed class I2IApplyWorkspaceState
@@ -446,6 +448,7 @@ public sealed partial class MainWindow : Window
                 UpdateGenerateButtonWarning();
             }
             QueueThumbnailRender();
+            UpdateInpaintRegionUI();
             UpdateDynamicMenuStates();
         };
         MaskCanvas.StatusMessage += m => TxtStatus.Text = m;

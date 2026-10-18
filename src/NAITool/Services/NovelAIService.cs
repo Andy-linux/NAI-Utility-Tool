@@ -643,15 +643,15 @@ public partial class NovelAIService : IDisposable
         List<VibeTransferInfo>? vibeTransfers = null,
         List<PreciseReferenceInfo>? preciseReferences = null,
         IProgress<byte[]>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default, NAIParameters? requestParameters = null)
     {
-        using var diagnostic = BeginBusinessLog(new { operation = "inpaint", imageBase64, maskBase64, width, height, prompt, negativePrompt, characters, vibeTransfers, preciseReferences, parameters = _settings.Settings.InpaintParameters });
+        using var diagnostic = BeginBusinessLog(new { operation = "inpaint", imageBase64, maskBase64, width, height, prompt, negativePrompt, characters, vibeTransfers, preciseReferences, parameters = requestParameters ?? _settings.Settings.InpaintParameters });
         if (!_settings.HasApiTokens)
         {
             diagnostic.Stage("request_rejected", new { reason = "missing_api_token" });
             return (null, L("api.error.token_missing_network"));
         }
-        var naiParams = ModelCapabilities.CreateRequestSnapshot(_settings.Settings.InpaintParameters);
+        var naiParams = ModelCapabilities.CreateRequestSnapshot(requestParameters ?? _settings.Settings.InpaintParameters);
         bool streamGeneration = _settings.Settings.StreamGeneration && IsV4PlusModel(naiParams.Model);
         if (!_settings.Settings.UsesCustomApiBaseUrl &&
             NovelAiAnlasCalculator.PaidBaseCost(naiParams.Model, width, height, naiParams.Steps,
