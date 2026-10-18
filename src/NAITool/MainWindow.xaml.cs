@@ -200,6 +200,7 @@ public sealed partial class MainWindow : Window
     private int _i2iResultSessionId;
     private int _i2iResultSequence;
     private int _i2iResultSelectionVersion;
+    private int _i2iImageImportVersion;
     private bool _i2iResultApplying;
     private readonly Stack<I2IApplyWorkspaceState> _i2iApplyUndoStack = new();
     private readonly Stack<I2IApplyWorkspaceState> _i2iApplyRedoStack = new();
@@ -445,6 +446,7 @@ public sealed partial class MainWindow : Window
         _updatingInpaintContext = false;
         MaskCanvas.WorkspaceReplacing += () =>
         {
+            _i2iImageImportVersion++;
             if (_generateRequestRunning && _generationOwner == AppMode.I2I)
                 _generateCts?.Cancel();
         };

@@ -176,7 +176,7 @@ public sealed partial class MaskCanvasControl : UserControl
     public bool CanMoveImage => !_isImageMoveLocked && !IsInPreviewMode;
     public int WorkspaceVersion { get; private set; }
     public event Action? WorkspaceReplacing;
-    private int BeginWorkspaceReplacement()
+    internal int BeginWorkspaceReplacement()
     {
         WorkspaceVersion++;
         WorkspaceReplacing?.Invoke();

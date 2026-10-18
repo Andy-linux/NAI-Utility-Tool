@@ -771,6 +771,7 @@ public sealed partial class MainWindow
 
     private void OnResetGenParams(object sender, RoutedEventArgs e)
     {
+        _i2iImageImportVersion++;
         if (_currentMode == AppMode.ImageGeneration)
         {
             _settings.Settings.GenParameters = CreateDefaultGenerationParameters();
@@ -791,6 +792,7 @@ public sealed partial class MainWindow
 
     private void OnClearAllPrompts(object sender, RoutedEventArgs e)
     {
+        _i2iImageImportVersion++;
         if (_currentMode == AppMode.ImageGeneration)
         {
             _genPositivePrompt = "";

@@ -272,13 +272,31 @@ public sealed partial class MainWindow
 
     private async Task<bool> SendImageToI2IAsync(byte[] imageBytes, string? sourcePath = null, bool importMetadata = true)
     {
+        int workspaceVersion = MaskCanvas.BeginWorkspaceReplacement();
+        int importVersion = _i2iImageImportVersion;
+        string fallbackPositive = _genPositivePrompt, fallbackNegative = _genNegativePrompt, fallbackStyle = _genStylePrompt;
+        CanvasBitmap? bitmap = null;
+        bool applying = false;
+        bool OwnsImport() => workspaceVersion == MaskCanvas.WorkspaceVersion && importVersion == _i2iImageImportVersion;
         try
         {
             var device = MaskCanvas.GetDevice() ?? CanvasDevice.GetSharedDevice();
-            var bitmap = await LoadI2IDisplayBitmapAsync(device, imageBytes);
+            bitmap = await LoadI2IDisplayBitmapAsync(device, imageBytes);
+            var prepared = await Task.Run(() =>
+            {
+                var text = ImageMetadataService.ReadRoundTripTextChunks(imageBytes);
+                var metadata = importMetadata ? ImageMetadataService.ReadFromBytes(imageBytes) : null;
+                if (metadata != null)
+                {
+                    foreach (var reference in metadata.VibeTransfers) Convert.FromBase64String(reference.ImageBase64);
+                    foreach (var reference in metadata.PreciseReferences) Convert.FromBase64String(reference.ImageBase64);
+                }
+                return (Text: text, Metadata: metadata);
+            });
+            if (!OwnsImport()) return false;
+
+            applying = true;
             SaveCurrentPromptToBuffer();
-            _lastGeneratedImageBytes = null;
-            _i2iImageTextChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(imageBytes));
             var oldPreview = MaskCanvas.ClearPreview();
             if (oldPreview != null && !ReferenceEquals(oldPreview, _pendingResultBitmap))
                 oldPreview.Dispose();
@@ -287,42 +305,30 @@ public sealed partial class MainWindow
             _pendingResultBytes = null;
             _pendingResultRegion = null;
             _pendingResultTextChunks = null;
+            _pendingResultPngMetadata = false;
             ClearI2IResultCandidates();
             _i2iApplyUndoStack.Clear();
             _i2iApplyRedoStack.Clear();
 
-            var meta = importMetadata ? await Task.Run(() => ImageMetadataService.ReadFromBytes(imageBytes)) : null;
-
-            string sendPos, sendNeg, sendStyle;
-            if (meta != null && (meta.IsNaiParsed || meta.IsSdFormat))
-            {
-                sendPos = meta.HasPositivePrompt ? meta.PositivePrompt : _i2iPositivePrompt;
-                sendNeg = meta.HasNegativePrompt ? meta.NegativePrompt : _i2iNegativePrompt;
-                sendStyle = meta.HasPositivePrompt ? "" : _i2iStylePrompt;
-
-                if (meta.IsNaiParsed)
-                {
-                    SaveAllCharacterPrompts();
-                    if (meta.HasCharacterPrompts)
-                        SetI2ICharactersFromMetadata(meta);
-                }
-            }
-            else
-            {
-                sendPos = _genPositivePrompt;
-                sendNeg = _genNegativePrompt;
-                sendStyle = _genStylePrompt;
-            }
-
             int imgW = (int)bitmap.SizeInPixels.Width;
             int imgH = (int)bitmap.SizeInPixels.Height;
-
             SwitchMode(AppMode.I2I);
-            if (importMetadata)
+            var meta = prepared.Metadata;
+            if (meta != null && (meta.IsNaiParsed || meta.IsSdFormat))
             {
-                _i2iPositivePrompt = sendPos;
-                _i2iNegativePrompt = sendNeg;
-                _i2iStylePrompt = sendStyle;
+                ApplyMetadataToI2I(meta, Path.GetFileName(sourcePath) ?? L("image.preview_label"), new MetadataImportSelection
+                {
+                    Settings = false,
+                    Seed = false,
+                    Size = false,
+                    References = meta.VibeTransfers.Count > 0 || meta.PreciseReferences.Count > 0,
+                });
+            }
+            else if (importMetadata)
+            {
+                _i2iPositivePrompt = fallbackPositive;
+                _i2iNegativePrompt = fallbackNegative;
+                _i2iStylePrompt = fallbackStyle;
             }
 
             var importSize = MaskCanvasControl.ResolveImportCanvasSize(
@@ -330,7 +336,6 @@ public sealed partial class MainWindow
             int canvasW = importSize.W;
             int canvasH = importSize.H;
             bool sizeApplied = canvasW == imgW && canvasH == imgH;
-
             _customWidth = canvasW;
             _customHeight = canvasH;
             SetSizeInputsSilently(_customWidth, _customHeight);
@@ -340,25 +345,17 @@ public sealed partial class MainWindow
 
             LoadPromptFromBuffer();
             RefreshCharacterPanel();
-            if (meta != null)
-            {
-                ApplyImportedImageModel(meta, CurrentParams,
-                    _i2iEditMode == I2IEditMode.Denoise ? GenerationModels : I2IModels);
-                if (meta.IsNaiParsed)
-                    ApplyReferenceDataFromMetadata(meta, AppMode.I2I);
-                RefreshCharacterPanel();
-            }
             MaskCanvas.InitializeCanvas(canvasW, canvasH);
             string? reloadPath = !string.IsNullOrWhiteSpace(sourcePath) && File.Exists(sourcePath)
                 ? sourcePath
                 : null;
             MaskCanvas.LoadImageFromBitmap(bitmap, reloadPath);
+            bitmap = null;
             _lastGeneratedImageBytes = imageBytes;
+            _i2iImageTextChunks = prepared.Text;
             _i2iPreviewDirty = false;
             MaskCanvas.FitToScreen();
-
             UpdatePromptHighlights();
-
             TxtStatus.Text = sizeApplied
                 ? Lf("i2i.sent_with_synced_size", imgW, imgH)
                 : Lf("i2i.sent_with_canvas_size", imgW, imgH, canvasW, canvasH);
@@ -366,8 +363,12 @@ public sealed partial class MainWindow
         }
         catch (Exception ex)
         {
-            TxtStatus.Text = Lf("i2i.send_failed", ex.Message);
+            if (applying || OwnsImport()) TxtStatus.Text = Lf("i2i.send_failed", ex.Message);
             return false;
+        }
+        finally
+        {
+            bitmap?.Dispose();
         }
     }
 

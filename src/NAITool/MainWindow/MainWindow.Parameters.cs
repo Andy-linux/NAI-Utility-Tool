@@ -430,6 +430,7 @@ public sealed partial class MainWindow
     private void OnResetGeneration(object sender, RoutedEventArgs e)
     {
         if (_currentMode != AppMode.ImageGeneration || _generateRequestRunning || _continuousGenRunning || _autoGenRunning) return;
+        _i2iImageImportVersion++;
         bool wasPopulating = _populatingModelList;
         bool wasSyncing = _isSyncingSidebarAdv;
         _populatingModelList = true;

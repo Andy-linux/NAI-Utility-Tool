@@ -65,6 +65,7 @@ public sealed partial class MainWindow
 
     private void SwitchMode(AppMode mode)
     {
+        _i2iImageImportVersion++;
         bool wasGallery = _currentMode == AppMode.Gallery;
         StopPreviewDrag();
         MaskCanvas.CancelMaskMove();
