@@ -72,7 +72,7 @@ public sealed partial class MainWindow
         if (data == null) return imageBytes;
         // The website's WebP-to-PNG download copies only its six text fields,
         // keeping the signed Comment and alpha bits without normalizing metadata.
-        var source = ImageMetadataService.ReadGenerationTextChunks(imageBytes);
+        var source = ImageMetadataService.ReadConversionTextChunks(imageBytes);
         var saved = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var key in new[] { "Title", "Description", "Software", "Source", "Generation time", "Comment" })
             if (source.TryGetValue(key, out string? value)) saved[key] = value;

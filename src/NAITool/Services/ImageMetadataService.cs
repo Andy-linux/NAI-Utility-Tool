@@ -130,55 +130,110 @@ public static class ImageMetadataService
 
     public static Dictionary<string, string> ReadGenerationTextChunks(byte[] data)
     {
+        var textChunks = ReadPngTextChunks(data);
+        if (textChunks.Count > 0) return textChunks;
+        textChunks = ReadExifTextChunks(data);
+        return textChunks.Count > 0 ? textChunks : TryReadStealthTextChunks(data);
+    }
+
+    public static Dictionary<string, string> ReadConversionTextChunks(byte[] data)
+    {
         var textChunks = TryReadStealthTextChunks(data);
-        foreach (var pair in ReadPngTextChunks(data)) textChunks[pair.Key] = pair.Value;
-        foreach (var pair in ReadWebpExifTextChunks(data)) textChunks[pair.Key] = pair.Value;
+        foreach (var pair in ReadExifTextChunks(data)) textChunks[pair.Key] = pair.Value;
         return textChunks;
     }
 
-    private static Dictionary<string, string> ReadWebpExifTextChunks(byte[] data)
+    private static Dictionary<string, string> ReadExifTextChunks(byte[] data)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (data.Length < 12 || Encoding.ASCII.GetString(data, 0, 4) != "RIFF" || Encoding.ASCII.GetString(data, 8, 4) != "WEBP") return result;
         try
+        {
+            var exif = FindExifData(data);
+            if (exif == null) return result;
+            int start = exif.Length >= 6 && Encoding.ASCII.GetString(exif, 0, 6) == "Exif\0\0" ? 6 : 0;
+            if (exif.Length - start < 8) return result;
+            bool little = exif[start] == 'I' && exif[start + 1] == 'I';
+            if (!little && !(exif[start] == 'M' && exif[start + 1] == 'M')) return result;
+            ushort U16(int p) => little ? System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(exif.AsSpan(p, 2)) : System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(exif.AsSpan(p, 2));
+            uint U32(int p) => little ? System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(exif.AsSpan(p, 4)) : System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(exif.AsSpan(p, 4));
+            void ReadIfd(int position, bool nested)
+            {
+                int count = U16(position);
+                for (int i = 0; i < count; i++)
+                {
+                    int p = checked(position + 2 + 12 * i);
+                    ushort tag = U16(p);
+                    if (tag == 0x8769 && !nested) ReadIfd(checked(start + (int)U32(p + 8)), true);
+                    if (tag != 0x9286) continue;
+                    int size = checked((int)U32(p + 4));
+                    int value = size <= 4 ? p + 8 : checked(start + (int)U32(p + 8));
+                    if (size < 8 || value < 0 || size > exif.Length - value) continue;
+                    string header = Encoding.ASCII.GetString(exif, value, 8);
+                    string json;
+                    if (header == "UNICODE\0")
+                    {
+                        bool unicodeLittle = size >= 10 && exif[value + 8] == 255 && exif[value + 9] == 254;
+                        json = (unicodeLittle ? Encoding.Unicode : Encoding.BigEndianUnicode)
+                            .GetString(exif, value + 8, size - 8).TrimStart('\uFEFF');
+                    }
+                    else
+                    {
+                        int skip = header is "ASCII\0\0\0" or "\0\0\0\0\0\0\0\0" ? 8 : 0;
+                        json = Encoding.UTF8.GetString(exif, value + skip, size - skip);
+                    }
+                    using var doc = JsonDocument.Parse(json.TrimEnd('\0'));
+                    foreach (var field in doc.RootElement.EnumerateObject())
+                        result[field.Name] = field.Value.ValueKind == JsonValueKind.String
+                            ? field.Value.GetString()!.Replace("\0", "", StringComparison.Ordinal)
+                            : field.Value.ValueKind == JsonValueKind.Null ? "" : field.Value.GetRawText();
+                }
+            }
+            ReadIfd(checked(start + (int)U32(start + 4)), false);
+        }
+        catch { /* Unreadable EXIF falls back to the image's stealth carrier. */ }
+        return result;
+    }
+
+    private static byte[]? FindExifData(byte[] data)
+    {
+        if (data.Length >= 12 && Encoding.ASCII.GetString(data, 0, 4) == "RIFF" &&
+            Encoding.ASCII.GetString(data, 8, 4) == "WEBP")
         {
             for (int offset = 12; offset + 8 <= data.Length;)
             {
                 int length = checked((int)BitConverter.ToUInt32(data, offset + 4));
                 if (length > data.Length - offset - 8) break;
                 if (Encoding.ASCII.GetString(data, offset, 4) == "EXIF")
-                {
-                    byte[] exif = data.AsSpan(offset + 8, length).ToArray();
-                    int start = exif.Length >= 6 && Encoding.ASCII.GetString(exif, 0, 6) == "Exif\0\0" ? 6 : 0;
-                    bool little = exif[start] == 'I' && exif[start + 1] == 'I';
-                    if (!little && !(exif[start] == 'M' && exif[start + 1] == 'M')) break;
-                    ushort U16(int p) => little ? System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(exif.AsSpan(p, 2)) : System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(exif.AsSpan(p, 2));
-                    uint U32(int p) => little ? System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(exif.AsSpan(p, 4)) : System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(exif.AsSpan(p, 4));
-                    void ReadIfd(int position, bool nested)
-                    {
-                        int count = U16(position);
-                        for (int i = 0; i < count; i++)
-                        {
-                            int p = checked(position + 2 + 12 * i);
-                            ushort tag = U16(p);
-                            if (tag == 0x8769 && !nested) ReadIfd(checked(start + (int)U32(p + 8)), true);
-                            if (tag != 0x9286) continue;
-                            int size = checked((int)U32(p + 4));
-                            int value = size <= 4 ? p + 8 : checked(start + (int)U32(p + 8));
-                            if (size < 8 || size > exif.Length - value) continue;
-                            string json = Encoding.UTF8.GetString(exif, value + 8, size - 8).TrimEnd('\0');
-                            using var doc = JsonDocument.Parse(json);
-                            foreach (var field in doc.RootElement.EnumerateObject())
-                                if (field.Value.ValueKind == JsonValueKind.String) result[field.Name] = field.Value.GetString()!;
-                        }
-                    }
-                    ReadIfd(checked(start + (int)U32(start + 4)), false);
-                }
+                    return data.AsSpan(offset + 8, length).ToArray();
                 offset = checked(offset + 8 + length + (length & 1));
             }
         }
-        catch { /* Malformed/unsupported EXIF does not block stealth or image reading. */ }
-        return result;
+        else if (data.Length >= 8 && data.AsSpan(0, 8).SequenceEqual(PngSignature))
+        {
+            for (int offset = 8; offset + 12 <= data.Length;)
+            {
+                int length = ReadInt32BE(data, offset);
+                if (length < 0 || length > data.Length - offset - 12) break;
+                if (Encoding.ASCII.GetString(data, offset + 4, 4) == "eXIf")
+                    return data.AsSpan(offset + 8, length).ToArray();
+                offset += 12 + length;
+            }
+        }
+        else if (data.Length >= 2 && data[0] == 255 && data[1] == 216)
+        {
+            int offset = 2;
+            while (offset + 4 <= data.Length && data[offset] == 255)
+            {
+                byte marker = data[offset + 1];
+                if (marker is 0xDA or 0xD9) break;
+                int length = (data[offset + 2] << 8) | data[offset + 3];
+                if (length < 2 || length > data.Length - offset - 2) break;
+                if (marker == 0xE1 && length >= 8 && Encoding.ASCII.GetString(data, offset + 4, 6) == "Exif\0\0")
+                    return data.AsSpan(offset + 4, length - 2).ToArray();
+                offset += 2 + length;
+            }
+        }
+        return null;
     }
 
     public static Dictionary<string, string> ReadRoundTripTextChunks(byte[] data)
@@ -484,44 +539,41 @@ public static class ImageMetadataService
         }
         using var bitmap = DecodeRgbaUnpremulBitmap(pngData);
         if (bitmap == null) throw new ArgumentException("Invalid PNG image.", nameof(pngData));
-        return ReapplyNovelAiMetadata(pngData, textChunks, bitmap.Width, bitmap.Height);
+        return WritePngTextChunks(RemoveNovelAiStealthMetadata(pngData), textChunks, transplant: false);
     }
 
-    public static byte[] ReplacePngTextChunks(byte[] pngData, IReadOnlyDictionary<string, string>? textChunks)
+    public static byte[] ReplacePngTextChunks(byte[] pngData, IReadOnlyDictionary<string, string>? textChunks) =>
+        WritePngTextChunks(pngData, textChunks, transplant: false);
+
+    private static byte[] WritePngTextChunks(byte[] pngData, IReadOnlyDictionary<string, string>? textChunks, bool transplant)
     {
         if (pngData.Length < PngSignature.Length || !pngData.AsSpan(0, PngSignature.Length).SequenceEqual(PngSignature))
             throw new ArgumentException("PNG metadata editing requires a PNG image.", nameof(pngData));
         using var output = new MemoryStream();
         output.Write(PngSignature, 0, 8);
-
         int offset = 8;
-        bool wroteText = false;
         while (offset + 12 <= pngData.Length)
         {
             int length = ReadInt32BE(pngData, offset);
-            if (length < 0 || offset + 12 + length > pngData.Length) break;
-
+            if (length < 0 || length > pngData.Length - offset - 12) break;
             string type = Encoding.ASCII.GetString(pngData, offset + 4, 4);
             int chunkTotalLen = 12 + length;
-            bool isTextChunk = type is "tEXt" or "iTXt" or "zTXt" or "eXIf";
-
-            if (!isTextChunk)
+            bool remove = !transplant && type is "tEXt" or "iTXt" or "zTXt" or "eXIf";
+            if (transplant && type is "tEXt" or "iTXt")
             {
-                // Match official PNG exports: expose Info before the first image-data chunk.
-                if (type is "IDAT" or "IEND" && !wroteText && textChunks != null && textChunks.Count > 0)
-                {
-                    foreach (var kvp in textChunks)
-                        WriteTextChunk(output, kvp.Key, kvp.Value);
-                    wroteText = true;
-                }
-
+                int end = Array.IndexOf(pngData, (byte)0, offset + 8, length);
+                string? key = end >= 0 ? Encoding.Latin1.GetString(pngData, offset + 8, end - offset - 8) : null;
+                remove = key != null && textChunks?.ContainsKey(key) == true;
+            }
+            if (!remove)
+            {
                 output.Write(pngData, offset, chunkTotalLen);
+                if (type == "IHDR" && textChunks != null)
+                    foreach (var pair in textChunks) WriteTextChunk(output, pair.Key, pair.Value, transplant);
                 if (type == "IEND") break;
             }
-
             offset += chunkTotalLen;
         }
-
         return output.ToArray();
     }
 
@@ -556,53 +608,37 @@ public static class ImageMetadataService
     {
         if (pngData.Length == 0 || metadataSourceBytes == null || metadataSourceBytes.Length == 0)
             return pngData;
-
-        var sourceChunks = ReadGenerationTextChunks(metadataSourceBytes);
-        if (sourceChunks.Count == 0)
-            return pngData;
-
-        var normalizedChunks = NormalizeTextChunksForSavedImage(sourceChunks, imageWidth, imageHeight);
-        if (normalizedChunks.Count == 0)
-            return pngData;
-
-        byte[] withStealth = InjectNovelAiStealthMetadata(pngData, normalizedChunks);
-        return ReplacePngTextChunks(withStealth, normalizedChunks);
+        byte[] result = TransplantStealthAlpha(pngData, metadataSourceBytes);
+        var textChunks = ReadPngTextChunks(metadataSourceBytes);
+        return textChunks.Count == 0 ? result : WritePngTextChunks(result, textChunks, transplant: true);
     }
 
-    public static byte[] ReapplyNovelAiMetadata(byte[] pngData, IReadOnlyDictionary<string, string>? textChunks)
+    public static byte[] ReapplyNovelAiMetadata(byte[] pngData, IReadOnlyDictionary<string, string>? textChunks) =>
+        textChunks == null || textChunks.Count == 0 ? pngData : WritePngTextChunks(pngData, textChunks, transplant: true);
+
+    public static byte[] ReapplyNovelAiMetadata(byte[] pngData, IReadOnlyDictionary<string, string>? textChunks,
+        int imageWidth, int imageHeight) => ReapplyNovelAiMetadata(pngData, textChunks);
+
+    private static byte[] TransplantStealthAlpha(byte[] pngData, byte[] sourceBytes)
     {
-        if (pngData.Length == 0 || textChunks == null || textChunks.Count == 0)
-            return pngData;
-
-        try
+        if (TryExtractStealthJsonText(sourceBytes) == null) return pngData;
+        using var source = DecodeRgbaUnpremulBitmap(sourceBytes);
+        using var target = DecodeRgbaUnpremulBitmap(pngData);
+        if (source == null || target == null) return pngData;
+        var sourcePixels = source.Pixels;
+        var targetPixels = target.Pixels;
+        int count = Math.Min(sourcePixels.Length, targetPixels.Length);
+        for (int i = 0; i < count; i++)
         {
-            using var bitmap = SKBitmap.Decode(pngData);
-            if (bitmap == null)
-                return pngData;
-
-            return ReapplyNovelAiMetadata(pngData, textChunks, bitmap.Width, bitmap.Height);
+            int from = (i % source.Height) * source.Width + i / source.Height;
+            int to = (i % target.Height) * target.Width + i / target.Height;
+            var color = targetPixels[to];
+            targetPixels[to] = color.WithAlpha((byte)((color.Alpha & 254) | (sourcePixels[from].Alpha & 1)));
         }
-        catch
-        {
-            return pngData;
-        }
-    }
-
-    public static byte[] ReapplyNovelAiMetadata(
-        byte[] pngData,
-        IReadOnlyDictionary<string, string>? textChunks,
-        int imageWidth,
-        int imageHeight)
-    {
-        if (pngData.Length == 0 || textChunks == null || textChunks.Count == 0)
-            return pngData;
-
-        var normalizedChunks = NormalizeTextChunksForSavedImage(textChunks, imageWidth, imageHeight);
-        if (normalizedChunks.Count == 0)
-            return pngData;
-
-        byte[] withStealth = InjectNovelAiStealthMetadata(pngData, normalizedChunks);
-        return ReplacePngTextChunks(withStealth, normalizedChunks);
+        target.Pixels = targetPixels;
+        using var image = SKImage.FromBitmap(target);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        return encoded.ToArray();
     }
 
     private static byte[] RemoveNovelAiStealthMetadata(byte[] pngData)
@@ -620,7 +656,7 @@ public static class ImageMetadataService
                 for (int x = 0; x < bitmap.Width; x++)
                 {
                     var color = bitmap.GetPixel(x, y);
-                    bitmap.SetPixel(x, y, new SKColor(color.Red, color.Green, color.Blue, (byte)(color.Alpha & 0xFE)));
+                    bitmap.SetPixel(x, y, color.WithAlpha(color.Alpha == 254 ? (byte)255 : color.Alpha == 1 ? (byte)0 : color.Alpha));
                 }
             }
 
@@ -634,10 +670,10 @@ public static class ImageMetadataService
         }
     }
 
-    private static void WriteTextChunk(Stream output, string keyword, string text)
+    private static void WriteTextChunk(Stream output, string keyword, string text, bool international = false)
     {
-        byte[] keyBytes = Encoding.ASCII.GetBytes(keyword);
-        if (CanEncodeLatin1(text))
+        byte[] keyBytes = (international ? Encoding.UTF8 : Encoding.Latin1).GetBytes(keyword.Length > 79 ? keyword[..79] : keyword);
+        if (!international && CanEncodeLatin1(text))
         {
             byte[] textBytes = Encoding.Latin1.GetBytes(text);
             int dataLen = keyBytes.Length + 1 + textBytes.Length;
@@ -1011,127 +1047,6 @@ public static class ImageMetadataService
         return output.ToArray();
     }
 
-    private static byte[] CompressGzip(byte[] data)
-    {
-        using var output = new MemoryStream();
-        using (var gzip = new GZipStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
-            gzip.Write(data, 0, data.Length);
-        return output.ToArray();
-    }
-
-    private static Dictionary<string, string> NormalizeTextChunksForSavedImage(
-        IReadOnlyDictionary<string, string> sourceChunks,
-        int imageWidth,
-        int imageHeight)
-    {
-        var normalized = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var kvp in sourceChunks)
-        {
-            if (kvp.Key == "signed_hash") continue;
-            string value = kvp.Key == "Comment"
-                ? NormalizeCommentJsonForSavedImage(kvp.Value, imageWidth, imageHeight)
-                : kvp.Value;
-            normalized[kvp.Key] = value;
-        }
-
-        if (normalized.TryGetValue("Comment", out var comment) &&
-            string.IsNullOrWhiteSpace(comment))
-        {
-            normalized.Remove("Comment");
-        }
-
-        return normalized;
-    }
-
-    private static string NormalizeCommentJsonForSavedImage(string json, int imageWidth, int imageHeight)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-            return json;
-
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object)
-                return json;
-
-            using var stream = new MemoryStream();
-            using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions
-            {
-                Indented = false,
-                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-            }))
-            {
-                writer.WriteStartObject();
-                foreach (var prop in doc.RootElement.EnumerateObject())
-                {
-                    if (prop.NameEquals("width"))
-                    {
-                        writer.WriteNumber("width", imageWidth);
-                        continue;
-                    }
-
-                    if (prop.NameEquals("height"))
-                    {
-                        writer.WriteNumber("height", imageHeight);
-                        continue;
-                    }
-
-                    // Edits invalidate the original signature; omit it instead of inventing a marker.
-                    if (prop.NameEquals("signed_hash")) continue;
-
-                    prop.WriteTo(writer);
-                }
-
-                writer.WriteEndObject();
-            }
-
-            return Encoding.UTF8.GetString(stream.ToArray());
-        }
-        catch
-        {
-            return json;
-        }
-    }
-
-    private static byte[] InjectNovelAiStealthMetadata(byte[] pngData, IReadOnlyDictionary<string, string> textChunks)
-    {
-        try
-        {
-            byte[] cleaned = RemoveNovelAiStealthMetadata(pngData);
-            using var bitmap = DecodeRgbaUnpremulBitmap(cleaned);
-            if (bitmap == null)
-                return pngData;
-
-            string jsonText = SerializeTextChunks(textChunks);
-            byte[] hiddenStream = BuildStealthPayload(jsonText, compressed: true);
-            byte[] bitStream = ExpandToBits(hiddenStream);
-
-            int capacity = bitmap.Width * bitmap.Height;
-            if (bitStream.Length > capacity)
-                return cleaned;
-
-            int bitIndex = 0;
-            for (int x = 0; x < bitmap.Width; x++)
-            {
-                for (int y = 0; y < bitmap.Height; y++)
-                {
-                    if (bitIndex >= bitStream.Length) break;
-                    var color = bitmap.GetPixel(x, y);
-                    byte alpha = (byte)((color.Alpha & 0xFE) | bitStream[bitIndex++]);
-                    bitmap.SetPixel(x, y, new SKColor(color.Red, color.Green, color.Blue, alpha));
-                }
-            }
-
-            using var image = SKImage.FromBitmap(bitmap);
-            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-            return data?.ToArray() ?? cleaned;
-        }
-        catch
-        {
-            return pngData;
-        }
-    }
-
     private static SKBitmap? DecodeRgbaUnpremulBitmap(byte[] pngData)
     {
         using var stream = new SKMemoryStream(pngData);
@@ -1147,50 +1062,6 @@ public static class ImageMetadataService
 
         bitmap.Dispose();
         return null;
-    }
-
-    private static string SerializeTextChunks(IReadOnlyDictionary<string, string> textChunks)
-    {
-        using var stream = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions
-        {
-            Indented = false,
-            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        }))
-        {
-            writer.WriteStartObject();
-            foreach (var kvp in textChunks)
-                writer.WriteString(kvp.Key, kvp.Value);
-            writer.WriteEndObject();
-        }
-
-        return Encoding.UTF8.GetString(stream.ToArray());
-    }
-
-    private static byte[] BuildStealthPayload(string jsonText, bool compressed)
-    {
-        byte[] raw = Encoding.UTF8.GetBytes(jsonText);
-        byte[] payload = compressed ? CompressGzip(raw) : raw;
-        string magic = compressed ? StealthMagicCompressed : StealthMagicPlain;
-        byte[] magicBytes = Encoding.UTF8.GetBytes(magic);
-        byte[] result = new byte[magicBytes.Length + 4 + payload.Length];
-        Array.Copy(magicBytes, result, magicBytes.Length);
-        WriteInt32BE(result, magicBytes.Length, payload.Length * 8);
-        Array.Copy(payload, 0, result, magicBytes.Length + 4, payload.Length);
-        return result;
-    }
-
-    private static byte[] ExpandToBits(byte[] data)
-    {
-        var bits = new byte[data.Length * 8];
-        int index = 0;
-        foreach (byte value in data)
-        {
-            for (int shift = 7; shift >= 0; shift--)
-                bits[index++] = (byte)((value >> shift) & 1);
-        }
-
-        return bits;
     }
 
     private static void WriteInt32BE(byte[] buffer, int offset, int value)
