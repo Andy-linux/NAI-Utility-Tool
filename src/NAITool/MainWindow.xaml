@@ -933,7 +933,7 @@
                                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
                                     <Button x:Name="BtnResetGeneration" Style="{StaticResource SubtleButtonStyle}"
                                             Padding="5" MinWidth="28" MinHeight="28" Click="OnResetGeneration">
-                                        <FontIcon Glyph="&#xE777;" FontSize="14"/>
+                                        <FontIcon Glyph="&#xE72C;" FontSize="14"/>
                                     </Button>
                                     <TextBlock x:Name="TxtModelLabel" Text=""
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"

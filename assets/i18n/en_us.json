@@ -1,5 +1,7 @@
 {
-  "generation.reset": "Reset generation inputs to V5 Full Medium",
+  "generation.reset": "Reset generation inputs",
+  "generation.reset.tooltip": "Clear prompts, characters and reference images, and restore default generation settings (V5 Full · Medium).",
+  "generation.reset.done": "Generation inputs reset",
   "references.vibe.normalize_strengths": "Normalize reference strengths",
   "references.vibe.encoded_extraction_unavailable": "Encoded; original extraction unavailable",
   "references.vibe.incompatible_encoding": "Encoding unavailable for this model",

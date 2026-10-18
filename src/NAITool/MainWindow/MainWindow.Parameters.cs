@@ -478,7 +478,7 @@ public sealed partial class MainWindow
         }
         SyncRememberedPromptAndParameterState();
         _settings.Save();
-        TxtStatus.Text = L("generation.reset");
+        TxtStatus.Text = L("generation.reset.done");
     }
 
     private static NAIParameters CreateDefaultGenerationParameters() => new()

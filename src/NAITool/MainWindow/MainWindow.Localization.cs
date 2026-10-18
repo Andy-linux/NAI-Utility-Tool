@@ -210,7 +210,7 @@ public sealed partial class MainWindow
         TxtStylePrompt.EnableResizing(L("prompt.resize_help"), minimumHeight: 34);
 
         TxtModelLabel.Text = L("panel.model");
-        ToolTipService.SetToolTip(BtnResetGeneration, L("generation.reset"));
+        ToolTipService.SetToolTip(BtnResetGeneration, L("generation.reset.tooltip"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(BtnResetGeneration, L("generation.reset"));
         TxtSizeLabel.Text = L("panel.size");
         BtnSizePresets.Content = L("size.presets.open");
