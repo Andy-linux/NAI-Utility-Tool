@@ -21,6 +21,7 @@ public sealed partial class MainWindow
         if (options.Characters && !options.AppendCharacters && !options.ActualPrompt && NovelAIService.IsV5Model(meta.ModelDisplayName))
             positivePrompt = NovelAiPromptPresets.StripAutoText(positivePrompt, meta);
         string negativePrompt = options.NegativePromptFrom(meta);
+        if (meta.IsNaiParsed && negativePrompt == "lowres") negativePrompt = "";
 
         if (meta.IsSdFormat)
         {
@@ -35,7 +36,7 @@ public sealed partial class MainWindow
         if (options.Settings && ModelCapabilities.SupportsEffort(p.Model))
             p.Effort = meta.Effort ?? (meta.ModelDisplayName.Contains("-medium", System.StringComparison.Ordinal) ? "medium" : "high");
         var presetMatch = ExtractImportedPromptPresetMatch(positivePrompt, negativePrompt, p.Model, meta.TagHintTransparentBackground == true, meta.UcPresetId == "none", meta.QualityToggle == false);
-        if (options.Settings)
+        if (options.Settings || meta.IsNaiParsed)
         {
             positivePrompt = presetMatch.PositivePrompt;
             negativePrompt = presetMatch.NegativePrompt;
@@ -149,6 +150,7 @@ public sealed partial class MainWindow
         if (options.Characters && !options.AppendCharacters && !options.ActualPrompt && NovelAIService.IsV5Model(meta.ModelDisplayName))
             positivePrompt = NovelAiPromptPresets.StripAutoText(positivePrompt, meta);
         string negativePrompt = options.NegativePromptFrom(meta);
+        if (meta.IsNaiParsed && negativePrompt == "lowres") negativePrompt = "";
 
         if (meta.IsSdFormat)
         {
@@ -163,7 +165,7 @@ public sealed partial class MainWindow
         if (options.Settings && ModelCapabilities.SupportsEffort(p.Model))
             p.Effort = meta.Effort ?? (meta.ModelDisplayName.Contains("-medium", System.StringComparison.Ordinal) ? "medium" : "high");
         var presetMatch = ExtractImportedPromptPresetMatch(positivePrompt, negativePrompt, p.Model, meta.TagHintTransparentBackground == true, meta.UcPresetId == "none", meta.QualityToggle == false);
-        if (options.Settings)
+        if (options.Settings || meta.IsNaiParsed)
         {
             positivePrompt = presetMatch.PositivePrompt;
             negativePrompt = presetMatch.NegativePrompt;
