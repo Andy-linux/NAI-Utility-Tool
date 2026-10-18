@@ -497,6 +497,7 @@ public sealed partial class MainWindow
     {
         ValidateI2IRequest(workspaceVersion, ct);
         var device = MaskCanvas.GetDevice()!;
+        bool saveAsPng = _settings.Settings.SaveGeneratedImagesAsPng;
         BusinessLog.Current?.Stage("inpaint_region", new
         {
             request.Region, request.CanvasWidth, request.CanvasHeight, request.Width, request.Height,
@@ -548,8 +549,8 @@ public sealed partial class MainWindow
             LogBusinessMetadata("returned_original_info", imageBytes);
             var originalChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(imageBytes), ct);
             await RegisterI2IResultCandidateAsync(imageBytes, originalChunks, device,
-                workspaceVersion, ct, resetResultCandidates, request.Region, pngMetadata: true);
-            var arrivedBytes = await Task.Run(() => EnsurePngEncoded(imageBytes), ct);
+                workspaceVersion, ct, resetResultCandidates, request.Region, saveAsPng);
+            var arrivedBytes = saveAsPng ? await Task.Run(() => EnsurePngEncoded(imageBytes), ct) : imageBytes;
             var compositedBytes = await Task.Run(() => InpaintImageProcessing.Composite(arrivedBytes, request), ct);
             var textChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(compositedBytes), ct);
             await RegisterI2IResultCandidateAsync(compositedBytes, textChunks, device,
