@@ -519,6 +519,27 @@ public class RememberedPromptState
     public bool IsSplitPrompt { get; set; }
     public List<RememberedCharacterState> GenCharacters { get; set; } = new();
     public List<RememberedCharacterState> I2ICharacters { get; set; } = new();
+    public List<RememberedVibeState> GenV3Vibes { get; set; } = new();
+    public List<RememberedVibeState> GenV4Vibes { get; set; } = new();
+    public bool NormalizeVibeStrengths { get; set; } = true;
+}
+
+public class RememberedVibeState
+{
+    public string FileName { get; set; } = "";
+    public string ImageDataKey { get; set; } = "";
+    public string? OriginalDataKey { get; set; }
+    public string? OriginalImageHash { get; set; }
+    public string? OriginalThumbnailHash { get; set; }
+    public string? OriginalImagePath { get; set; }
+    public string? EncodingModel { get; set; }
+    public double Strength { get; set; } = 1;
+    public double InformationExtracted { get; set; } = 1;
+    public bool HasInformationExtracted { get; set; } = true;
+    public bool IsEncodedFile { get; set; }
+    public bool IsCachedEncoding { get; set; }
+    public bool IsDisabled { get; set; }
+    public bool IsCollapsed { get; set; }
 }
 
 public class RememberedCharacterState

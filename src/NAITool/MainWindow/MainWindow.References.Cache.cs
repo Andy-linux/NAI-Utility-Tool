@@ -21,8 +21,9 @@ public sealed partial class MainWindow
 {
     private void RecheckVibeTransferCacheState(bool refreshPanel = true)
     {
+        if (!SupportsVibeTransferFeature()) return;
         string cacheDir = VibeCacheService.GetCacheDir(AppRootDir);
-        string currentModel = GetCurrentModelKey();
+        string currentModel = _settings.Settings.GenParameters.Model;
         bool anyChanged = false;
 
         foreach (var entry in _genVibeTransfers)

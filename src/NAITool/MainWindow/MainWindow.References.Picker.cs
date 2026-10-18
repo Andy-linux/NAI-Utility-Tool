@@ -266,9 +266,27 @@ public sealed partial class MainWindow
         if (thumbnailMatchedEncoding != null && matchedImageHash != null)
         {
             TxtStatus.Text = Lf("references.status.cached_vibe_loaded", file.Name, currentModel);
+            // A thumbnail match identifies an encoding, not the source pixels used to create it.
+            foreach (var cached in VibeCacheService.ListAllEntries(cacheDir).Where(x => x.ImageHash == matchedImageHash))
+            {
+                string? sourcePath = VibeCacheService.ResolveOriginalPath(cacheDir, cached.OriginalImagePath);
+                if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath)) continue;
+                try
+                {
+                    var sourceFile = await StorageFile.GetFileFromPathAsync(sourcePath);
+                    var sourceBytes = await ReadImageFileAsPngAsync(sourceFile);
+                    if (sourceBytes == null || VibeCacheService.ComputeImageHash(sourceBytes) != matchedImageHash) continue;
+                    return new VibePickResult(file.Name, thumbnailMatchedEncoding, IsEncodedFile: true,
+                        ImageHash: matchedImageHash, ThumbnailHash: thumbnailHash,
+                        OriginalBase64: Convert.ToBase64String(sourceBytes), IsCachedHit: true,
+                        OriginalImagePath: sourcePath, EncodingModel: currentModel, InformationExtracted: defaultExtraction);
+                }
+                catch (Exception ex) { DebugLog($"[Vibe] Original unavailable: {ex.Message}"); }
+            }
+            // Without the verified original, extraction cannot be changed on this encoding.
             return new VibePickResult(file.Name, thumbnailMatchedEncoding, IsEncodedFile: true,
-                ImageHash: matchedImageHash, ThumbnailHash: thumbnailHash, OriginalBase64: originalBase64, IsCachedHit: true,
-                OriginalImagePath: originalPath, InformationExtracted: defaultExtraction);
+                ImageHash: matchedImageHash, ThumbnailHash: thumbnailHash, IsCachedHit: true,
+                EncodingModel: currentModel, InformationExtracted: defaultExtraction);
         }
 
         return new VibePickResult(file.Name, originalBase64, IsEncodedFile: false,

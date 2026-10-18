@@ -23,7 +23,12 @@ public sealed partial class MainWindow
     private const int MaxPreciseReferences = 16;
 
     private bool _normalizeVibeStrengths = true;
-    private readonly List<VibeTransferEntry> _genVibeTransfers = new();
+    private readonly List<VibeTransferEntry> _genV3VibeTransfers = new();
+    private readonly List<VibeTransferEntry> _genV4VibeTransfers = new();
+    private List<VibeTransferEntry> GetVibeTransferFamily(string model) =>
+        IsV3ModelKey(model) ? _genV3VibeTransfers : _genV4VibeTransfers;
+    private List<VibeTransferEntry> _genVibeTransfers =>
+        GetVibeTransferFamily(_settings.Settings.GenParameters.Model);
     private readonly List<PreciseReferenceEntry> _genPreciseReferences = new();
 
     private sealed class VibeTransferEntry
@@ -253,7 +258,9 @@ public sealed partial class MainWindow
 
     private void ClearReferenceFeatures()
     {
-        _genVibeTransfers.Clear();
+        _genV3VibeTransfers.Clear();
+        _genV4VibeTransfers.Clear();
+        _normalizeVibeStrengths = true;
         _genPreciseReferences.Clear();
     }
 
@@ -264,7 +271,11 @@ public sealed partial class MainWindow
         // Validate before replacing either list; malformed metadata must not erase attachments.
         foreach (var item in meta.VibeTransfers) Convert.FromBase64String(item.ImageBase64);
         foreach (var item in meta.PreciseReferences) Convert.FromBase64String(item.ImageBase64);
-        _genVibeTransfers.Clear();
+        string targetModel = targetMode == AppMode.I2I
+            ? (_i2iEditMode == I2IEditMode.Denoise ? _settings.Settings.I2IDenoiseParameters.Model : _settings.Settings.InpaintParameters.Model)
+            : _settings.Settings.GenParameters.Model;
+        var targetVibes = GetVibeTransferFamily(targetModel);
+        targetVibes.Clear();
         _genPreciseReferences.Clear();
 
         if (meta.VibeTransfers.Count > 0)
@@ -280,7 +291,7 @@ public sealed partial class MainWindow
                 if (string.IsNullOrWhiteSpace(vibe.ImageBase64))
                     continue;
 
-                _genVibeTransfers.Add(new VibeTransferEntry
+                targetVibes.Add(new VibeTransferEntry
                 {
                     FileName = string.IsNullOrWhiteSpace(vibe.FileName) ? L("references.imported.vibe_label") : vibe.FileName,
                     ImageBase64 = vibe.ImageBase64,
@@ -332,46 +343,68 @@ public sealed partial class MainWindow
         if (!NovelAIService.IsV4PlusModel(model))
             return null;
 
+        var sourceEntries = _genVibeTransfers;
+        bool normalize = _normalizeVibeStrengths;
+        var requests = sourceEntries.Where(x => !x.IsDisabled).Select(entry => new
+        {
+            Entry = entry,
+            Source = entry.OriginalImageBase64 ?? entry.ImageBase64,
+            Extraction = entry.InformationExtracted,
+            Strength = entry.Strength,
+            FileName = entry.FileName,
+            OriginalPath = entry.OriginalImagePath,
+        }).ToArray();
+        bool InputsStillCurrent() =>
+            SupportsVibeTransferFeature() && string.Equals(GetCurrentModelKey(), model, StringComparison.Ordinal) &&
+            ReferenceEquals(_genVibeTransfers, sourceEntries) && _normalizeVibeStrengths == normalize &&
+            ActivePreciseReferenceCount() == 0 &&
+            _genVibeTransfers.Where(x => !x.IsDisabled).SequenceEqual(requests.Select(x => x.Entry)) &&
+            requests.All(x => x.Entry.InformationExtracted == x.Extraction && x.Entry.Strength == x.Strength &&
+                string.Equals(x.Entry.OriginalImageBase64 ?? x.Entry.ImageBase64, x.Source, StringComparison.Ordinal));
+
         string cacheDir = VibeCacheService.GetCacheDir(AppRootDir);
         bool anyEncoded = false;
-
-        foreach (var entry in _genVibeTransfers.Where(x => !x.IsDisabled))
+        foreach (var request in requests)
         {
-            if (entry.IsEncodedFile || string.IsNullOrWhiteSpace(entry.ImageBase64))
+            if (!InputsStillCurrent()) return L("references.error.encode_inputs_changed");
+            var entry = request.Entry;
+            if (entry.IsEncodedFile || string.IsNullOrWhiteSpace(request.Source))
                 continue;
 
-            string rawBase64 = entry.OriginalImageBase64 ?? entry.ImageBase64;
             var (vibeData, error) = await _naiService.EncodeVibeAsync(
-                rawBase64, model, entry.InformationExtracted, ct);
+                request.Source, model, request.Extraction, ct);
             _ = RefreshAnlasInfoAsync(forceRefresh: true);
-
             if (vibeData == null)
-                return Lf("references.error.vibe_encode_failed", entry.FileName, error ?? "");
+                return Lf("references.error.vibe_encode_failed", request.FileName, error ?? "");
 
-            string encodedBase64 = Convert.ToBase64String(vibeData);
-            entry.ImageBase64 = encodedBase64;
+            // Cache under the immutable source/model/extraction actually submitted.
+            byte[] originalBytes = Convert.FromBase64String(request.Source);
+            string originalHash = VibeCacheService.ComputeImageHash(originalBytes);
+            VibeCacheService.SaveVibe(cacheDir, originalBytes, originalBytes, vibeData,
+                request.Extraction, model, originalImagePath: request.OriginalPath);
+            if (!InputsStillCurrent())
+            {
+                RecheckVibeTransferCacheState();
+                return L("references.error.encode_inputs_changed");
+            }
+
+            entry.OriginalImageBase64 = request.Source;
+            entry.OriginalImageHash = originalHash;
+            entry.OriginalThumbnailHash ??= VibeCacheService.ComputeThumbnailHash(
+                VibeCacheService.CreateCanonicalThumbnail(originalBytes));
+            entry.ImageBase64 = Convert.ToBase64String(vibeData);
             entry.IsEncodedFile = true;
             entry.EncodingModel = model;
             entry.HasInformationExtracted = true;
             entry.IsCachedEncoding = true;
-
-            if (entry.OriginalImageHash != null)
+            if (_settings.Settings.AutoCopyVibeOriginalsToWorkspace &&
+                !string.IsNullOrWhiteSpace(request.OriginalPath))
             {
-                byte[] originalBytes = Convert.FromBase64String(rawBase64);
-                entry.OriginalThumbnailHash ??= VibeCacheService.ComputeThumbnailHash(
-                    VibeCacheService.CreateCanonicalThumbnail(originalBytes));
-                VibeCacheService.SaveVibe(
-                    cacheDir, originalBytes, originalBytes, vibeData, entry.InformationExtracted, model,
-                    originalImagePath: entry.OriginalImagePath);
-                if (_settings.Settings.AutoCopyVibeOriginalsToWorkspace &&
-                    !string.IsNullOrWhiteSpace(entry.OriginalImagePath))
-                {
-                    if (VibeCacheService.TryMoveOriginalToWorkspace(
-                        cacheDir, entry.OriginalImageHash, entry.OriginalImagePath, out var storedOriginalPath, out var moveError))
-                        entry.OriginalImagePath = storedOriginalPath;
-                    else
-                        DebugLog($"[Generate] Failed to move vibe original to workspace: {moveError}");
-                }
+                if (VibeCacheService.TryMoveOriginalToWorkspace(
+                    cacheDir, originalHash, request.OriginalPath, out var storedOriginalPath, out var moveError))
+                    entry.OriginalImagePath = storedOriginalPath;
+                else
+                    DebugLog($"[Generate] Failed to move vibe original to workspace: {moveError}");
             }
 
             DebugLog($"[Generate] Vibe 自动编码并缓存: {entry.FileName}");
@@ -383,8 +416,7 @@ public sealed partial class MainWindow
             RefreshVibeTransferPanel();
             UpdateGenerateButtonWarning();
         }
-
-        return null;
+        return InputsStillCurrent() ? null : L("references.error.encode_inputs_changed");
     }
 
     private List<VibeTransferInfo>? GetVibeTransferData()
@@ -415,7 +447,7 @@ public sealed partial class MainWindow
     private List<PreciseReferenceInfo>? GetPreciseReferenceData()
     {
         if (!SupportsPreciseReferenceFeature()) return null;
-        if (ActiveVibeTransferCount() > 0) return null;
+        if (SupportsVibeTransferFeature() && ActiveVibeTransferCount() > 0) return null;
 
         var result = _genPreciseReferences
             .Where(x => !x.IsDisabled && !string.IsNullOrWhiteSpace(x.ImageBase64))

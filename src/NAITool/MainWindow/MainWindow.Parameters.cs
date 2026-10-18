@@ -572,6 +572,7 @@ public sealed partial class MainWindow
             _isSplitPrompt = false;
             _genCharacters.Clear();
             _i2iCharacters.Clear();
+            ClearReferenceFeatures();
             return;
         }
 
@@ -587,6 +588,9 @@ public sealed partial class MainWindow
         _customHeight = SnapToMultipleOf64(_settings.Settings.RememberedCustomHeight);
         LoadRememberedCharacters(_genCharacters, remembered.GenCharacters);
         LoadRememberedCharacters(_i2iCharacters, remembered.I2ICharacters);
+        LoadRememberedVibes(_genV3VibeTransfers, remembered.GenV3Vibes);
+        LoadRememberedVibes(_genV4VibeTransfers, remembered.GenV4Vibes);
+        _normalizeVibeStrengths = remembered.NormalizeVibeStrengths;
     }
 
     private static void LoadRememberedCharacters(List<CharacterEntry> target, List<RememberedCharacterState>? rememberedCharacters)
@@ -613,6 +617,8 @@ public sealed partial class MainWindow
     private void ClearRememberedPromptState()
     {
         _settings.Settings.RememberedPrompts = new RememberedPromptState();
+        try { ReferenceDraftStore.Clear(AppRootDir); }
+        catch (Exception ex) { DebugLog($"[Vibe] Cannot clear remembered sources: {ex.Message}"); }
         _settings.Settings.RememberedCustomWidth = 832;
         _settings.Settings.RememberedCustomHeight = 1216;
     }
@@ -634,6 +640,9 @@ public sealed partial class MainWindow
             IsSplitPrompt = _isSplitPrompt,
             GenCharacters = _genCharacters.Select(CreateRememberedCharacterState).ToList(),
             I2ICharacters = _i2iCharacters.Select(CreateRememberedCharacterState).ToList(),
+            GenV3Vibes = CreateRememberedVibes(_genV3VibeTransfers),
+            GenV4Vibes = CreateRememberedVibes(_genV4VibeTransfers),
+            NormalizeVibeStrengths = _normalizeVibeStrengths,
         };
         _settings.Settings.RememberedCustomWidth = _customWidth;
         _settings.Settings.RememberedCustomHeight = _customHeight;

@@ -266,7 +266,6 @@ public sealed partial class MainWindow
                     SaveAllCharacterPrompts();
                     if (meta.HasCharacterPrompts)
                         SetI2ICharactersFromMetadata(meta);
-                    ApplyReferenceDataFromMetadata(meta, AppMode.I2I);
                 }
             }
             else
@@ -303,8 +302,13 @@ public sealed partial class MainWindow
             LoadPromptFromBuffer();
             RefreshCharacterPanel();
             if (meta != null)
+            {
                 ApplyImportedImageModel(meta, CurrentParams,
                     _i2iEditMode == I2IEditMode.Denoise ? GenerationModels : I2IModels);
+                if (meta.IsNaiParsed)
+                    ApplyReferenceDataFromMetadata(meta, AppMode.I2I);
+                RefreshCharacterPanel();
+            }
             MaskCanvas.InitializeCanvas(canvasW, canvasH);
             string? reloadPath = !string.IsNullOrWhiteSpace(sourcePath) && File.Exists(sourcePath)
                 ? sourcePath

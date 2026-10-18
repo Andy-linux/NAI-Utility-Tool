@@ -1210,5 +1210,6 @@
     "oobe.api.settings_hint": "您也可以在设置页面里更改请求 Base URL 以及增加多个 API Token。",
     "help.highlights.multi_api.title": "多 API 支持",
     "help.highlights.multi_api.body": "支持在设置中添加多个 API Token，共用一个请求 Base URL，并一并测试所有账号。\n\n可选择轮询、最多额度、最少额度或随机调用，根据请求消耗的 V5 额度或 Anlas 自动分配账号；不消耗额度时使用轮询。主界面显示额度总和，额度管理可按 API 编号查看各账号，重复 Token 不会重复调用或累计额度。",
-  "dialog.advanced.legacy_uc": "旧版负面提示词（V4）"
+  "dialog.advanced.legacy_uc": "旧版负面提示词（V4）",
+  "references.error.encode_inputs_changed": "编码期间参考图设置已改变。已完成的编码已缓存，请核对设置后重新生成。"
 }
