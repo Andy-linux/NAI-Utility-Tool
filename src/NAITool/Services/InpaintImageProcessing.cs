@@ -5,8 +5,11 @@ namespace NAITool.Services;
 
 internal static class InpaintImageProcessing
 {
-    internal static SKBitmap? DecodeClean(byte[] bytes)
+    internal static SKBitmap? DecodeClean(byte[] bytes) => DecodeClean(bytes, out _);
+
+    private static SKBitmap? DecodeClean(byte[] bytes, out bool hasStealth)
     {
+        hasStealth = false;
         using var codec = SKCodec.Create(SKData.CreateCopy(bytes));
         if (codec == null) return null;
         var bitmap = new SKBitmap(codec.Info.WithColorType(SKColorType.Rgba8888).WithAlphaType(SKAlphaType.Unpremul));
@@ -23,6 +26,7 @@ internal static class InpaintImageProcessing
             }
             if (value != marker[i]) return bitmap;
         }
+        hasStealth = true;
         var pixels = bitmap.Pixels;
         for (int i = 0; i < pixels.Length; i++)
         {
@@ -31,6 +35,18 @@ internal static class InpaintImageProcessing
         }
         bitmap.Pixels = pixels;
         return bitmap;
+    }
+
+    internal static byte[] PrepareDisplayBytes(byte[] bytes)
+    {
+        // Info's alpha bits are data, not transparency. Remove them before WinUI
+        // premultiplies pixels so repeated canvas edits do not darken RGB values.
+        using var bitmap = DecodeClean(bytes, out bool hasStealth);
+        bool isWebp = ImageOutputNaming.Extension(bytes) == ".webp";
+        if (bitmap == null || (!hasStealth && !isWebp)) return bytes;
+        using var image = SKImage.FromBitmap(bitmap);
+        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
+        return encoded.ToArray();
     }
 
     internal static byte[] EncodeMask(SKBitmap source)

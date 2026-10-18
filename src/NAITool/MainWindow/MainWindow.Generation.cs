@@ -322,15 +322,8 @@ public sealed partial class MainWindow
         }
     }
 
-    private static byte[] GetWinUiDisplayBytes(byte[] imageBytes)
-    {
-        // WinUI BitmapImage does not decode WebP; the saved response must stay untouched.
-        if (ImageOutputNaming.Extension(imageBytes) != ".webp") return imageBytes;
-        using var bitmap = SKBitmap.Decode(imageBytes) ?? throw new InvalidDataException("Cannot decode WebP preview");
-        using var image = SKImage.FromBitmap(bitmap);
-        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
-        return encoded.ToArray();
-    }
+    private static byte[] GetWinUiDisplayBytes(byte[] imageBytes) =>
+        InpaintImageProcessing.PrepareDisplayBytes(imageBytes);
 
     private async Task ShowGenPreviewAsync(byte[] imageBytes, int targetW = 0, int targetH = 0, Func<bool>? acceptPreview = null)
     {

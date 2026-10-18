@@ -1088,7 +1088,7 @@ public sealed partial class MainWindow
                 using (var loadStream = new Windows.Storage.Streams.InMemoryRandomAccessStream())
                 {
                     using var writer = new Windows.Storage.Streams.DataWriter(loadStream);
-                    writer.WriteBytes(compBytes);
+                    writer.WriteBytes(GetWinUiDisplayBytes(compBytes));
                     await writer.StoreAsync();
                     writer.DetachStream();
                     loadStream.Seek(0);

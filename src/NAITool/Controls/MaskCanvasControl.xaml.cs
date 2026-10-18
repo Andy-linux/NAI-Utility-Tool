@@ -567,7 +567,7 @@ public sealed partial class MaskCanvasControl : UserControl
         using (var reader = DataReader.FromBuffer(buffer)) reader.ReadBytes(bytes);
         using var stream = new InMemoryRandomAccessStream();
         using var writer = new DataWriter(stream);
-        writer.WriteBytes(bytes);
+        writer.WriteBytes(InpaintImageProcessing.PrepareDisplayBytes(bytes));
         await writer.StoreAsync();
         writer.DetachStream();
         stream.Seek(0);
