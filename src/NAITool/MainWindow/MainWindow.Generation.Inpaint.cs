@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
@@ -84,12 +84,13 @@ public sealed partial class MainWindow
         }
     }
 
-    private void SetPendingI2IResult(CanvasBitmap bitmap, byte[] imageBytes, Dictionary<string, string>? textChunks, InpaintRegion? region = null)
+    private void SetPendingI2IResult(CanvasBitmap bitmap, byte[] imageBytes, Dictionary<string, string>? textChunks, InpaintRegion? region = null, bool pngMetadata = false)
     {
         var oldPending = _pendingResultBitmap;
         _pendingResultBitmap = bitmap;
         _pendingResultBytes = imageBytes;
         _pendingResultRegion = region;
+        _pendingResultPngMetadata = pngMetadata;
         _pendingResultTextChunks = CloneTextChunks(textChunks);
 
         var oldPreview = MaskCanvas.SetPreview(bitmap, region);
@@ -118,39 +119,72 @@ public sealed partial class MainWindow
         return await CanvasBitmap.LoadAsync(device, stream, 96f);
     }
 
-    private async Task RegisterI2IResultCandidateAsync(
-        byte[] imageBytes,
-        Dictionary<string, string>? textChunks,
-        CanvasDevice device,
-        bool resetCandidates, InpaintRegion? region = null)
+    private void ValidateI2IRequest(int workspaceVersion, CancellationToken ct)
     {
-        if (resetCandidates)
-            ResetI2IResultSession();
+        ct.ThrowIfCancellationRequested();
+        if (workspaceVersion != MaskCanvas.WorkspaceVersion)
+            throw new OperationCanceledException(ct);
+    }
 
+    private async Task RestoreI2IPreviewAfterRequestAsync(int workspaceVersion)
+    {
+        if (workspaceVersion != MaskCanvas.WorkspaceVersion) return;
+        if (_i2iResultCandidates.Count > 0)
+        {
+            await RestoreSelectedI2IResultCandidateAsync();
+            return;
+        }
+        var preview = MaskCanvas.ClearPreview();
+        if (_pendingResultBitmap != null && !ReferenceEquals(preview, _pendingResultBitmap))
+            _pendingResultBitmap.Dispose();
+        preview?.Dispose();
+        _pendingResultBitmap = null;
+        _pendingResultBytes = null;
+        _pendingResultRegion = null;
+        _pendingResultTextChunks = null;
+        _i2iPreviewDirty = false;
+        UpdateFloatingResultBarsVisibility();
+    }
+
+    private async Task RegisterI2IResultCandidateAsync(
+        byte[] imageBytes, Dictionary<string, string>? textChunks, CanvasDevice device,
+        int workspaceVersion, CancellationToken ct, bool resetCandidates,
+        InpaintRegion? region = null, bool pngMetadata = false)
+    {
+        ValidateI2IRequest(workspaceVersion, ct);
+        int session = resetCandidates ? _i2iResultSessionId + 1 : _i2iResultSessionId;
+        int sequence = resetCandidates ? 1 : _i2iResultSequence + 1;
         Directory.CreateDirectory(I2ITempDir);
-        string cachePath = Path.Combine(I2ITempDir, $"i2i_{_i2iResultSessionId}_{++_i2iResultSequence}{ImageOutputNaming.Extension(imageBytes)}");
-        BusinessLog.Current?.Stage("save_start", new { destination = "i2i_candidate_cache", result_path = cachePath });
+        string cachePath = Path.Combine(I2ITempDir, $"i2i_{session}_{sequence}{ImageOutputNaming.Extension(imageBytes)}");
+        CanvasBitmap? bitmap = null;
         try
         {
-            await File.WriteAllBytesAsync(cachePath, imageBytes);
+            BusinessLog.Current?.Stage("save_start", new { destination = "i2i_candidate_cache", result_path = cachePath });
+            await File.WriteAllBytesAsync(cachePath, imageBytes, ct);
+            bitmap = await LoadI2IDisplayBitmapAsync(device, imageBytes);
+            ValidateI2IRequest(workspaceVersion, ct);
+
+            if (resetCandidates) ResetI2IResultSession();
+            _i2iResultSequence = sequence;
+            _i2iResultCandidates.Add(new I2IResultCandidate
+            {
+                FilePath = cachePath,
+                Region = region,
+                PngMetadata = pngMetadata,
+                TextChunks = CloneTextChunks(textChunks),
+            });
+            _i2iResultIndex = _i2iResultCandidates.Count - 1;
+            SetPendingI2IResult(bitmap, imageBytes, textChunks, region, pngMetadata);
+            bitmap = null;
             LogBusinessMetadata("post_save_metadata", imageBytes);
             BusinessLog.Current?.Stage("save_result", new { save_outcome = "success", destination = "i2i_candidate_cache", result_path = cachePath });
         }
-        catch (Exception ex)
+        catch
         {
-            BusinessLog.Current?.Stage("save_result", new { save_outcome = "failed", exception = ex.ToString() });
+            bitmap?.Dispose();
+            if (File.Exists(cachePath)) File.Delete(cachePath);
             throw;
         }
-
-        _i2iResultCandidates.Add(new I2IResultCandidate
-        {
-            FilePath = cachePath,
-            Region = region,
-            TextChunks = CloneTextChunks(textChunks),
-        });
-        var bitmap = await LoadI2IDisplayBitmapAsync(device, imageBytes);
-        _i2iResultIndex = _i2iResultCandidates.Count - 1;
-        SetPendingI2IResult(bitmap, imageBytes, textChunks, region);
     }
 
     private async Task<bool> SelectI2IResultCandidateAsync(int index, bool allowDuringApply = false)
@@ -181,7 +215,7 @@ public sealed partial class MainWindow
         }
 
         _i2iResultIndex = index;
-        SetPendingI2IResult(bitmap, imageBytes, candidate.TextChunks, candidate.Region);
+        SetPendingI2IResult(bitmap, imageBytes, candidate.TextChunks, candidate.Region, candidate.PngMetadata);
         return true;
     }
 
@@ -250,7 +284,7 @@ public sealed partial class MainWindow
             _pendingResultBitmap?.Dispose();
             _pendingResultBitmap = null;
             _pendingResultBytes = null;
-        _pendingResultRegion = null;
+            _pendingResultRegion = null;
             _pendingResultTextChunks = null;
             ClearI2IResultCandidates();
             _i2iApplyUndoStack.Clear();
@@ -342,6 +376,7 @@ public sealed partial class MainWindow
 
     private async Task<bool> DoInpaintGenerateAsync(bool forceRandomSeed = false)
     {
+        if (_generateRequestRunning || _i2iResultApplying) return false;
         using var diagnostic = BeginUiBusinessLog("inpaint", new { forceRandomSeed });
         if (_i2iEditMode == I2IEditMode.Denoise)
             return await DoDenoiseGenerateAsync(forceRandomSeed);
@@ -365,6 +400,8 @@ public sealed partial class MainWindow
         TxtStatus.Text = L("generate.status.generating");
         var ip = ModelCapabilities.CreateRequestSnapshot(_settings.Settings.InpaintParameters);
         string restoreSeed = ip.Seed;
+        int workspaceVersion = MaskCanvas.WorkspaceVersion;
+        int canvasW = MaskCanvas.CanvasW, canvasH = MaskCanvas.CanvasH;
 
         try
         {
@@ -378,10 +415,7 @@ public sealed partial class MainWindow
             using var exportImage = MaskCanvas.Document.CreateCompositeForExport(device);
             if (exportImage == null) { TxtStatus.Text = L("inpaint.error.export_image_failed"); BtnGenerate.IsEnabled = true; return false; }
 
-            var imageBase64 = await NovelAIService.EncodeRenderTargetAsync(exportImage, isMask: false);
-            var maskBase64 = await NovelAIService.EncodeRenderTargetAsync(MaskCanvas.Document.MaskTarget!, isMask: true);
-
-            var inpaintImage = await Task.Run(() => InpaintImageProcessing.PrepareRequest(imageBase64, maskBase64, region), ct);
+            InpaintRequestImage? inpaintImage = null;
             if (!TryValidateReferenceRequest(out string referenceError))
             {
                 TxtStatus.Text = referenceError;
@@ -395,15 +429,24 @@ public sealed partial class MainWindow
                 ip.Seed = actualSeed;
                 var wildcardContext = CreateWildcardContext(actualSeed, ip.Model);
                 var (prompt, negPrompt) = GetPrompts(wildcardContext);
+                var chars = (CurrentCharacterEntries.Count > 0 && !IsCurrentModelV3()) ? GetCharacterData(wildcardContext) : null;
+                var preciseReferences = GetPreciseReferenceData();
                 if (ActiveVibeTransferCount() > 0 && ActivePreciseReferenceCount() == 0)
                 {
                     string? encodeError = await EnsureVibesEncodedAsync(ip.Model, ct);
                     if (encodeError != null) { TxtStatus.Text = encodeError; return false; }
                 }
-                var chars = (CurrentCharacterEntries.Count > 0 && !IsCurrentModelV3()) ? GetCharacterData(wildcardContext) : null;
-                chars = InpaintImageProcessing.RemapCharacters(chars, inpaintImage);
                 var vibes = GetVibeTransferData();
-                var preciseReferences = GetPreciseReferenceData();
+                ValidateI2IRequest(workspaceVersion, ct);
+                if (inpaintImage == null)
+                {
+                    var imageBase64 = await NovelAIService.EncodeRenderTargetAsync(exportImage, isMask: false);
+                    ValidateI2IRequest(workspaceVersion, ct);
+                    var maskBase64 = await NovelAIService.EncodeRenderTargetAsync(MaskCanvas.Document.MaskTarget!, isMask: true);
+                    inpaintImage = await Task.Run(() => InpaintImageProcessing.PrepareRequest(imageBase64, maskBase64, region), ct);
+                    ValidateI2IRequest(workspaceVersion, ct);
+                }
+                chars = InpaintImageProcessing.RemapCharacters(chars, inpaintImage);
                 var signature = BuildI2IGenerationRequestSignature(
                     "i2i-inpaint",
                     ip,
@@ -419,6 +462,7 @@ public sealed partial class MainWindow
                     inpaintImage.MaskBase64,
                     imageOffset, inpaintImage.Region);
                 var duplicateDecision = await CheckDuplicateGenerationRequestAsync(signature, restoreSeed);
+                ValidateI2IRequest(workspaceVersion, ct);
                 if (duplicateDecision == DuplicateGenerationDecision.Cancel)
                     return false;
                 if (duplicateDecision == DuplicateGenerationDecision.ProceedWithRandomSeed)
@@ -432,7 +476,7 @@ public sealed partial class MainWindow
                 DebugLog($"[Inpaint] Start | Model={ip.Model} | Seed={actualSeed}");
 
                 var resultBitmap = await SendInpaintRequestAsync(
-                    inpaintImage, prompt, negPrompt, ip, chars, vibes, preciseReferences, ct, resetResultCandidates: true);
+                    inpaintImage, prompt, negPrompt, ip, chars, vibes, preciseReferences, ct, workspaceVersion, resetResultCandidates: true);
                 _lastUsedSeed = actualSeed;
 
                 if (resultBitmap == null) return false;
@@ -467,7 +511,6 @@ public sealed partial class MainWindow
             SetGenerationRequestRunning(false);
             SetI2IRequestImageMoveLocked(false);
             UpdateBtnGenerateForApiKey();
-            ip.Seed = restoreSeed;
             UpdateI2IResultNavigator();
         }
     }
@@ -475,9 +518,10 @@ public sealed partial class MainWindow
     private async Task<CanvasBitmap?> SendInpaintRequestAsync(
         InpaintRequestImage request, string prompt, string negPrompt, NAIParameters parameters,
         List<CharacterPromptInfo>? chars, List<VibeTransferInfo>? vibes,
-        List<PreciseReferenceInfo>? preciseReferences, CancellationToken ct,
+        List<PreciseReferenceInfo>? preciseReferences, CancellationToken ct, int workspaceVersion,
         bool resetResultCandidates = false)
     {
+        ValidateI2IRequest(workspaceVersion, ct);
         var device = MaskCanvas.GetDevice()!;
         bool saveAsPng = _settings.Settings.SaveGeneratedImagesAsPng;
         BusinessLog.Current?.Stage("inpaint_region", new
@@ -485,63 +529,59 @@ public sealed partial class MainWindow
             request.Region, request.CanvasWidth, request.CanvasHeight, request.Width, request.Height,
         });
         int streamPreviewVer = 0;
-        CanvasBitmap? streamPreviewBmp = null;
         bool acceptStreamPreview = true;
+        bool accepted = false;
         IProgress<byte[]>? progress = _settings.Settings.StreamGeneration
             ? new Progress<byte[]>(async bytes =>
             {
-                if (!acceptStreamPreview || ct.IsCancellationRequested) return;
+                if (!acceptStreamPreview || ct.IsCancellationRequested ||
+                    workspaceVersion != MaskCanvas.WorkspaceVersion) return;
                 int myVer = ++streamPreviewVer;
                 try
                 {
                     var bmp = await LoadI2IDisplayBitmapAsync(device, bytes);
-                    if (!acceptStreamPreview || ct.IsCancellationRequested || myVer != streamPreviewVer)
+                    if (!acceptStreamPreview || ct.IsCancellationRequested ||
+                        myVer != streamPreviewVer || workspaceVersion != MaskCanvas.WorkspaceVersion)
                     { bmp.Dispose(); return; }
-                    streamPreviewBmp = bmp;
                     SetTransientI2IPreview(bmp, request.Region);
                 }
                 catch { }
             })
             : null;
 
-        byte[]? imageBytes;
-        string? error;
         try
         {
-            (imageBytes, error) = await _naiService.InpaintAsync(
-                request.ImageBase64, request.MaskBase64, request.Width, request.Height,
-                prompt, negPrompt, chars, vibes, preciseReferences, progress, ct, parameters);
-        }
-        finally
-        {
-            acceptStreamPreview = false;
-            ++streamPreviewVer;
-        }
-        _ = RefreshAnlasInfoAsync(forceRefresh: true);
-        ct.ThrowIfCancellationRequested();
+            byte[]? imageBytes;
+            string? error;
+            try
+            {
+                (imageBytes, error) = await _naiService.InpaintAsync(
+                    request.ImageBase64, request.MaskBase64, request.Width, request.Height,
+                    prompt, negPrompt, chars, vibes, preciseReferences, progress, ct, parameters);
+            }
+            finally
+            {
+                acceptStreamPreview = false;
+                ++streamPreviewVer;
+            }
+            _ = RefreshAnlasInfoAsync(forceRefresh: true);
+            ValidateI2IRequest(workspaceVersion, ct);
+            if (error != null || imageBytes == null)
+            {
+                TxtStatus.Text = error ?? L("generate.error.empty_result");
+                return null;
+            }
 
-        if (error != null || imageBytes == null)
-        {
-            TxtStatus.Text = error ?? L("generate.error.empty_result");
-            BtnGenerate.IsEnabled = true;
-            var oldPreview = MaskCanvas.ClearPreview();
-            if (oldPreview != null && !ReferenceEquals(oldPreview, streamPreviewBmp))
-                oldPreview.Dispose();
-            streamPreviewBmp?.Dispose();
-            await RestoreSelectedI2IResultCandidateAsync();
-            return null;
-        }
-
-        try
-        {
             LogBusinessMetadata("returned_original_info", imageBytes);
             var originalChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(imageBytes), ct);
-            await RegisterI2IResultCandidateAsync(imageBytes, originalChunks, device, resetResultCandidates, request.Region);
+            await RegisterI2IResultCandidateAsync(imageBytes, originalChunks, device,
+                workspaceVersion, ct, resetResultCandidates, request.Region, saveAsPng);
             var arrivedBytes = saveAsPng ? await Task.Run(() => EnsurePngEncoded(imageBytes), ct) : imageBytes;
             var compositedBytes = await Task.Run(() => InpaintImageProcessing.Composite(arrivedBytes, request), ct);
             var textChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(compositedBytes), ct);
-            ct.ThrowIfCancellationRequested();
-            await RegisterI2IResultCandidateAsync(compositedBytes, textChunks, device, resetCandidates: false);
+            await RegisterI2IResultCandidateAsync(compositedBytes, textChunks, device,
+                workspaceVersion, ct, resetCandidates: false);
+            accepted = true;
             return _pendingResultBitmap;
         }
         catch (OperationCanceledException) { throw; }
@@ -552,10 +592,17 @@ public sealed partial class MainWindow
             TxtStatus.Text = L("generate.warning.generated_local_failed");
             return null;
         }
+        finally
+        {
+            acceptStreamPreview = false;
+            ++streamPreviewVer;
+            if (!accepted) await RestoreI2IPreviewAfterRequestAsync(workspaceVersion);
+        }
     }
 
     private async Task<bool> DoDenoiseGenerateAsync(bool forceRandomSeed = false)
     {
+        if (_generateRequestRunning || _i2iResultApplying) return false;
         if (!MaskCanvas.IsInPreviewMode) ApplyCharCountPrefixStrip();
         using var diagnostic = BeginUiBusinessLog("denoise", new { forceRandomSeed });
         if (MaskCanvas.IsInPreviewMode)
@@ -574,8 +621,11 @@ public sealed partial class MainWindow
         SetI2IRequestImageMoveLocked(true);
         UpdateBtnGenerateForApiKey();
         TxtStatus.Text = L("generate.status.generating");
-        var dp = _settings.Settings.I2IDenoiseParameters;
+        var dp = ModelCapabilities.CreateRequestSnapshot(_settings.Settings.I2IDenoiseParameters);
         string restoreSeed = dp.Seed;
+        int workspaceVersion = MaskCanvas.WorkspaceVersion;
+        int canvasW = MaskCanvas.CanvasW, canvasH = MaskCanvas.CanvasH;
+        var imageOffset = MaskCanvas.Document.PixelAlignedImageOffset;
 
         try
         {
@@ -584,11 +634,10 @@ public sealed partial class MainWindow
             var ct = _generateCts.Token;
             var device = MaskCanvas.GetDevice()!;
 
-            var exportImage = MaskCanvas.Document.CreateCompositeForExport(device);
+            using var exportImage = MaskCanvas.Document.CreateCompositeForExport(device);
             if (exportImage == null) { TxtStatus.Text = L("inpaint.error.export_image_failed"); BtnGenerate.IsEnabled = true; return false; }
 
-            var imageBase64 = await NovelAIService.EncodeRenderTargetAsync(exportImage, isMask: false);
-            exportImage.Dispose();
+            string? imageBase64 = null;
             if (!TryValidateReferenceRequest(out string referenceError))
             {
                 TxtStatus.Text = referenceError;
@@ -602,19 +651,22 @@ public sealed partial class MainWindow
                 dp.Seed = actualSeed;
                 var wildcardContext = CreateWildcardContext(actualSeed, dp.Model);
                 var (prompt, negPrompt) = GetPrompts(wildcardContext);
+                var chars = (CurrentCharacterEntries.Count > 0 && !IsCurrentModelV3()) ? GetCharacterData(wildcardContext) : null;
+                var preciseReferences = GetPreciseReferenceData();
                 if (ActiveVibeTransferCount() > 0 && ActivePreciseReferenceCount() == 0)
                 {
                     string? encodeError = await EnsureVibesEncodedAsync(dp.Model, ct);
                     if (encodeError != null) { TxtStatus.Text = encodeError; return false; }
                 }
-                var chars = (CurrentCharacterEntries.Count > 0 && !IsCurrentModelV3()) ? GetCharacterData(wildcardContext) : null;
                 var vibes = GetVibeTransferData();
-                var preciseReferences = GetPreciseReferenceData();
+                ValidateI2IRequest(workspaceVersion, ct);
+                imageBase64 ??= await NovelAIService.EncodeRenderTargetAsync(exportImage, isMask: false);
+                ValidateI2IRequest(workspaceVersion, ct);
                 var signature = BuildI2IGenerationRequestSignature(
                     "i2i-denoise",
                     dp,
-                    MaskCanvas.CanvasW,
-                    MaskCanvas.CanvasH,
+                    canvasW,
+                    canvasH,
                     actualSeed,
                     prompt,
                     negPrompt,
@@ -623,8 +675,9 @@ public sealed partial class MainWindow
                     preciseReferences,
                     imageBase64,
                     null,
-                    MaskCanvas.Document.PixelAlignedImageOffset);
+                    imageOffset);
                 var duplicateDecision = await CheckDuplicateGenerationRequestAsync(signature, restoreSeed);
+                ValidateI2IRequest(workspaceVersion, ct);
                 if (duplicateDecision == DuplicateGenerationDecision.Cancel)
                     return false;
                 if (duplicateDecision == DuplicateGenerationDecision.ProceedWithRandomSeed)
@@ -638,7 +691,7 @@ public sealed partial class MainWindow
                 DebugLog($"[Denoise] Start | Model={dp.Model} | Seed={actualSeed} | Strength={dp.DenoiseStrength:0.##} | Noise={dp.DenoiseNoise:0.##}");
 
                 var resultBitmap = await SendDenoiseRequestAsync(
-                    imageBase64, prompt, negPrompt, wildcardContext, ct, resetResultCandidates: true);
+                    imageBase64, canvasW, canvasH, prompt, negPrompt, dp, chars, vibes, preciseReferences, ct, workspaceVersion, resetResultCandidates: true);
                 _lastUsedSeed = actualSeed;
 
                 if (resultBitmap == null) return false;
@@ -673,100 +726,82 @@ public sealed partial class MainWindow
             SetGenerationRequestRunning(false);
             SetI2IRequestImageMoveLocked(false);
             UpdateBtnGenerateForApiKey();
-            dp.Seed = restoreSeed;
             UpdateI2IResultNavigator();
         }
     }
 
     private async Task<CanvasBitmap?> SendDenoiseRequestAsync(
-        string imageBase64,
-        string prompt, string negPrompt, WildcardExpandContext wildcardContext, CancellationToken ct,
-        bool resetResultCandidates = false)
+        string imageBase64, int width, int height, string prompt, string negPrompt,
+        NAIParameters parameters, List<CharacterPromptInfo>? chars,
+        List<VibeTransferInfo>? vibes, List<PreciseReferenceInfo>? preciseReferences,
+        CancellationToken ct, int workspaceVersion, bool resetResultCandidates = false)
     {
+        ValidateI2IRequest(workspaceVersion, ct);
         var device = MaskCanvas.GetDevice()!;
-        if (!TryValidateReferenceRequest(out string referenceError))
-        {
-            TxtStatus.Text = referenceError;
-            BtnGenerate.IsEnabled = true;
-            return null;
-        }
-        var chars = (CurrentCharacterEntries.Count > 0 && !IsCurrentModelV3()) ? GetCharacterData(wildcardContext) : null;
-        if (ActiveVibeTransferCount() > 0 && ActivePreciseReferenceCount() == 0)
-        {
-            string? encodeError = await EnsureVibesEncodedAsync(_settings.Settings.GenParameters.Model, ct);
-            if (encodeError != null) { TxtStatus.Text = encodeError; return null; }
-        }
-        var vibes = GetVibeTransferData();
-        var preciseReferences = GetPreciseReferenceData();
-
         int streamPreviewVer = 0;
-        CanvasBitmap? streamPreviewBmp = null;
         bool acceptStreamPreview = true;
+        bool accepted = false;
         IProgress<byte[]>? progress = _settings.Settings.StreamGeneration
             ? new Progress<byte[]>(async bytes =>
             {
-                if (!acceptStreamPreview)
-                    return;
-
+                if (!acceptStreamPreview || ct.IsCancellationRequested ||
+                    workspaceVersion != MaskCanvas.WorkspaceVersion) return;
                 int myVer = ++streamPreviewVer;
                 try
                 {
                     var bmp = await LoadI2IDisplayBitmapAsync(device, bytes);
-                    if (!acceptStreamPreview || myVer != streamPreviewVer) { bmp.Dispose(); return; }
-                    streamPreviewBmp = bmp;
+                    if (!acceptStreamPreview || ct.IsCancellationRequested ||
+                        myVer != streamPreviewVer || workspaceVersion != MaskCanvas.WorkspaceVersion)
+                    { bmp.Dispose(); return; }
                     SetTransientI2IPreview(bmp);
                 }
                 catch { }
             })
             : null;
 
-        var (imageBytes, error) = await _naiService.ImageToImageAsync(
-            imageBase64,
-            MaskCanvas.CanvasW, MaskCanvas.CanvasH,
-            prompt, negPrompt, chars, vibes, preciseReferences, progress, ct);
-        _ = RefreshAnlasInfoAsync(forceRefresh: true);
-
-        acceptStreamPreview = false;
-        ++streamPreviewVer;
-
-        if (error != null)
-        {
-            DebugLog($"[Denoise] API error: {error}");
-            TxtStatus.Text = error;
-            BtnGenerate.IsEnabled = true;
-            var oldPreview = MaskCanvas.ClearPreview();
-            if (oldPreview != null && !ReferenceEquals(oldPreview, streamPreviewBmp))
-                oldPreview.Dispose();
-            streamPreviewBmp?.Dispose();
-            await RestoreSelectedI2IResultCandidateAsync();
-            return null;
-        }
-        if (imageBytes == null)
-        {
-            DebugLog("[Denoise] API returned no image");
-            TxtStatus.Text = L("generate.error.empty_result");
-            BtnGenerate.IsEnabled = true;
-            var oldPreview = MaskCanvas.ClearPreview();
-            if (oldPreview != null && !ReferenceEquals(oldPreview, streamPreviewBmp))
-                oldPreview.Dispose();
-            streamPreviewBmp?.Dispose();
-            await RestoreSelectedI2IResultCandidateAsync();
-            return null;
-        }
-
         try
         {
+            byte[]? imageBytes;
+            string? error;
+            try
+            {
+                (imageBytes, error) = await _naiService.ImageToImageAsync(
+                    imageBase64, width, height, prompt, negPrompt,
+                    chars, vibes, preciseReferences, progress, ct, parameters);
+            }
+            finally
+            {
+                acceptStreamPreview = false;
+                ++streamPreviewVer;
+            }
+            _ = RefreshAnlasInfoAsync(forceRefresh: true);
+            ValidateI2IRequest(workspaceVersion, ct);
+            if (error != null || imageBytes == null)
+            {
+                TxtStatus.Text = error ?? L("generate.error.empty_result");
+                return null;
+            }
+
             LogBusinessMetadata("returned_original_info", imageBytes);
-            var textChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(imageBytes));
-            await RegisterI2IResultCandidateAsync(imageBytes, textChunks, device, resetResultCandidates);
+            var textChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(imageBytes), ct);
+            await RegisterI2IResultCandidateAsync(imageBytes, textChunks, device,
+                workspaceVersion, ct, resetResultCandidates);
+            accepted = true;
             return _pendingResultBitmap;
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             BusinessLog.Current?.Stage("local_processing_failed", new { stage = "i2i_result", exception = ex.GetType().Name, hresult = ex.HResult, stack = ex.StackTrace });
             DebugLog($"[I2I] Post-response local failure: {ex.GetType().Name} (0x{ex.HResult:X8})");
             TxtStatus.Text = L("generate.warning.generated_local_failed");
             return null;
+        }
+        finally
+        {
+            acceptStreamPreview = false;
+            ++streamPreviewVer;
+            if (!accepted) await RestoreI2IPreviewAfterRequestAsync(workspaceVersion);
         }
     }
 
@@ -776,28 +811,17 @@ public sealed partial class MainWindow
 
     private async void OnApplyResult(object sender, RoutedEventArgs e)
     {
-        if (_i2iResultApplying)
-            return;
-
+        if (_i2iResultApplying || _generateRequestRunning) return;
         _i2iResultApplying = true;
         _i2iResultSelectionVersion++;
         SetResultBarEnabled(false);
         UpdateI2IResultNavigator();
-
-        if (_pendingResultBitmap == null && _i2iResultIndex >= 0)
-            await RestoreSelectedI2IResultCandidateAsync(allowDuringApply: true);
-        if (_pendingResultBitmap == null)
-        {
-            _i2iResultApplying = false;
-            SetResultBarEnabled(true);
-            UpdateI2IResultNavigator();
-            return;
-        }
-
         try
         {
-            await ApplyInpaintResultAsync();
-            TxtStatus.Text = L("inpaint.result_applied");
+            if (_pendingResultBitmap == null && _i2iResultIndex >= 0)
+                await RestoreSelectedI2IResultCandidateAsync(allowDuringApply: true);
+            if (_pendingResultBitmap != null && await ApplyInpaintResultAsync())
+                TxtStatus.Text = L("inpaint.result_applied");
         }
         catch (Exception ex) { TxtStatus.Text = Lf("inpaint.apply_failed", ex.Message); }
         finally
@@ -810,6 +834,7 @@ public sealed partial class MainWindow
 
     private async Task<bool> RedoInpaintGenerateAsync(bool forceRandomSeed = false)
     {
+        if (_generateRequestRunning || _i2iResultApplying) return false;
         ApplyCharCountPrefixStrip();
         using var diagnostic = BeginUiBusinessLog("i2i_regenerate", new { forceRandomSeed });
         var editMode = _i2iEditMode;
@@ -826,10 +851,12 @@ public sealed partial class MainWindow
         UpdateBtnGenerateForApiKey();
         SetResultBarEnabled(false);
         TxtStatus.Text = L("generate.status.regenerating");
-        var ip = editMode == I2IEditMode.Denoise
+        var ip = ModelCapabilities.CreateRequestSnapshot(editMode == I2IEditMode.Denoise
             ? _settings.Settings.I2IDenoiseParameters
-            : ModelCapabilities.CreateRequestSnapshot(_settings.Settings.InpaintParameters);
+            : _settings.Settings.InpaintParameters);
         string restoreSeed = ip.Seed;
+        int workspaceVersion = MaskCanvas.WorkspaceVersion;
+        int canvasW = MaskCanvas.CanvasW, canvasH = MaskCanvas.CanvasH;
 
         try
         {
@@ -843,12 +870,8 @@ public sealed partial class MainWindow
             using var exportImage = MaskCanvas.Document.CreateCompositeForExport(device);
             if (exportImage == null) { TxtStatus.Text = L("inpaint.error.export_image_failed"); BtnGenerate.IsEnabled = true; return false; }
 
-            var imageBase64 = await NovelAIService.EncodeRenderTargetAsync(exportImage, isMask: false);
-            string? maskBase64 = editMode == I2IEditMode.Inpaint
-                ? await NovelAIService.EncodeRenderTargetAsync(MaskCanvas.Document.MaskTarget!, isMask: true)
-                : null;
-            var inpaintImage = maskBase64 != null
-                ? await Task.Run(() => InpaintImageProcessing.PrepareRequest(imageBase64, maskBase64, region), ct) : null;
+            string? imageBase64 = null, maskBase64 = null;
+            InpaintRequestImage? inpaintImage = null;
             if (!TryValidateReferenceRequest(out string referenceError))
             {
                 TxtStatus.Text = referenceError;
@@ -862,20 +885,32 @@ public sealed partial class MainWindow
                 ip.Seed = actualSeed;
                 var wildcardContext = CreateWildcardContext(actualSeed, ip.Model);
                 var (prompt, negPrompt) = GetPrompts(wildcardContext);
+                var chars = (CurrentCharacterEntries.Count > 0 && !IsCurrentModelV3()) ? GetCharacterData(wildcardContext) : null;
+                var preciseReferences = GetPreciseReferenceData();
                 if (ActiveVibeTransferCount() > 0 && ActivePreciseReferenceCount() == 0)
                 {
                     string? encodeError = await EnsureVibesEncodedAsync(ip.Model, ct);
                     if (encodeError != null) { TxtStatus.Text = encodeError; return false; }
                 }
-                var chars = (CurrentCharacterEntries.Count > 0 && !IsCurrentModelV3()) ? GetCharacterData(wildcardContext) : null;
-                if (inpaintImage != null) chars = InpaintImageProcessing.RemapCharacters(chars, inpaintImage);
                 var vibes = GetVibeTransferData();
-                var preciseReferences = GetPreciseReferenceData();
+                ValidateI2IRequest(workspaceVersion, ct);
+                if (imageBase64 == null)
+                {
+                    imageBase64 = await NovelAIService.EncodeRenderTargetAsync(exportImage, isMask: false);
+                    ValidateI2IRequest(workspaceVersion, ct);
+                    if (editMode == I2IEditMode.Inpaint)
+                    {
+                        maskBase64 = await NovelAIService.EncodeRenderTargetAsync(MaskCanvas.Document.MaskTarget!, isMask: true);
+                        inpaintImage = await Task.Run(() => InpaintImageProcessing.PrepareRequest(imageBase64, maskBase64, region), ct);
+                        ValidateI2IRequest(workspaceVersion, ct);
+                    }
+                }
+                if (inpaintImage != null) chars = InpaintImageProcessing.RemapCharacters(chars, inpaintImage);
                 var signature = BuildI2IGenerationRequestSignature(
                     editMode == I2IEditMode.Denoise ? "i2i-denoise" : "i2i-inpaint",
                     ip,
-                    inpaintImage?.Width ?? MaskCanvas.CanvasW,
-                    inpaintImage?.Height ?? MaskCanvas.CanvasH,
+                    inpaintImage?.Width ?? canvasW,
+                    inpaintImage?.Height ?? canvasH,
                     actualSeed,
                     prompt,
                     negPrompt,
@@ -886,6 +921,7 @@ public sealed partial class MainWindow
                     inpaintImage?.MaskBase64 ?? maskBase64,
                     imageOffset, inpaintImage?.Region);
                 var duplicateDecision = await CheckDuplicateGenerationRequestAsync(signature, restoreSeed);
+                ValidateI2IRequest(workspaceVersion, ct);
                 if (duplicateDecision == DuplicateGenerationDecision.Cancel)
                     return false;
                 if (duplicateDecision == DuplicateGenerationDecision.ProceedWithRandomSeed)
@@ -897,9 +933,9 @@ public sealed partial class MainWindow
 
                 RememberLastGenerationRequest(signature);
                 var resultBitmap = editMode == I2IEditMode.Denoise
-                    ? await SendDenoiseRequestAsync(imageBase64, prompt, negPrompt, wildcardContext, ct)
+                    ? await SendDenoiseRequestAsync(imageBase64, canvasW, canvasH, prompt, negPrompt, ip, chars, vibes, preciseReferences, ct, workspaceVersion)
                     : await SendInpaintRequestAsync(
-                        inpaintImage!, prompt, negPrompt, ip, chars, vibes, preciseReferences, ct);
+                        inpaintImage!, prompt, negPrompt, ip, chars, vibes, preciseReferences, ct, workspaceVersion);
                 _lastUsedSeed = actualSeed;
 
                 if (resultBitmap != null)
@@ -919,7 +955,6 @@ public sealed partial class MainWindow
             SetGenerationRequestRunning(false);
             SetI2IRequestImageMoveLocked(false);
             UpdateBtnGenerateForApiKey();
-            ip.Seed = restoreSeed;
             SetResultBarEnabled(true);
             UpdateI2IResultNavigator();
         }
@@ -1008,115 +1043,47 @@ public sealed partial class MainWindow
         MaskCanvas.IsComparing = false;
     }
 
-    private async Task ApplyInpaintResultAsync()
+    private async Task<bool> ApplyInpaintResultAsync()
     {
         var device = MaskCanvas.GetDevice();
-        var pendingBitmap = _pendingResultBitmap;
         var pendingBytes = _pendingResultBytes;
-        var pendingTextChunks = _pendingResultTextChunks != null
-            ? new Dictionary<string, string>(_pendingResultTextChunks, StringComparer.Ordinal)
-            : null;
-        if (device == null || pendingBitmap == null) return;
-
-        _i2iApplyUndoStack.Push(await CaptureI2IApplyWorkspaceStateAsync());
-        _i2iApplyRedoStack.Clear();
+        bool pngMetadata = _pendingResultPngMetadata;
+        int workspaceVersion = MaskCanvas.WorkspaceVersion;
+        if (device == null || pendingBytes == null) return false;
 
         var doc = MaskCanvas.Document;
         var offset = doc.PixelAlignedImageOffset;
-        int canvasW = MaskCanvas.CanvasW;
-        int canvasH = MaskCanvas.CanvasH;
+        var newOffset = new Vector2(offset.X + Math.Min(0, -offset.X),
+            offset.Y + Math.Min(0, -offset.Y));
+        int canvasW = MaskCanvas.CanvasW, canvasH = MaskCanvas.CanvasH;
+        var undoState = await CaptureI2IApplyWorkspaceStateAsync();
+        if (workspaceVersion != MaskCanvas.WorkspaceVersion || !ReferenceEquals(pendingBytes, _pendingResultBytes))
+            return false;
 
-        if (_pendingResultRegion is { } region && pendingBytes != null)
+        byte[]? appliedBytes = await CreatePreviewCompositeBytes();
+        if (appliedBytes == null) return false;
+        if (!ReferenceEquals(appliedBytes, pendingBytes))
+            appliedBytes = await Task.Run(() => ImageMetadataService.ReapplyNovelAiMetadata(
+                appliedBytes, pngMetadata ? EnsurePngEncoded(pendingBytes) : pendingBytes, canvasW, canvasH));
+        var textChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(appliedBytes));
+        var bitmap = await LoadI2IDisplayBitmapAsync(device, appliedBytes);
+        if (workspaceVersion != MaskCanvas.WorkspaceVersion || !ReferenceEquals(pendingBytes, _pendingResultBytes))
         {
-            using var source = doc.CreateCompositeForExport(device);
-            if (source == null) return;
-            var sourceBase64 = await NovelAIService.EncodeRenderTargetAsync(source, isMask: false);
-            var rawBytes = pendingBytes;
-            pendingBytes = await Task.Run(() => InpaintImageProcessing.PlaceRawResult(rawBytes, sourceBase64, region));
-            pendingBitmap = await LoadI2IDisplayBitmapAsync(device, pendingBytes);
-            pendingTextChunks = ImageMetadataService.ReadRoundTripTextChunks(pendingBytes);
+            bitmap.Dispose();
+            return false;
         }
 
-        if (doc.OriginalImage == null)
-        {
-            doc.SetOriginalImage(pendingBitmap);
-            _lastGeneratedImageBytes = pendingBytes;
-            _i2iImageTextChunks = pendingTextChunks;
-            _pendingResultBitmap = null;
-        }
-        else
-        {
-            float origW = doc.OriginalImage.SizeInPixels.Width;
-            float origH = doc.OriginalImage.SizeInPixels.Height;
-
-            float canvasInOrigX = -offset.X;
-            float canvasInOrigY = -offset.Y;
-
-            float minX = Math.Min(0, canvasInOrigX);
-            float minY = Math.Min(0, canvasInOrigY);
-            float maxX = Math.Max(origW, canvasInOrigX + canvasW);
-            float maxY = Math.Max(origH, canvasInOrigY + canvasH);
-
-            int compositeW = (int)Math.Ceiling(maxX - minX);
-            int compositeH = (int)Math.Ceiling(maxY - minY);
-            var newOffset = new Vector2(offset.X + minX, offset.Y + minY);
-
-            if (compositeW == canvasW && compositeH == canvasH)
-            {
-                doc.SetOriginalImage(pendingBitmap);
-                doc.ImageOffset = newOffset;
-                _lastGeneratedImageBytes = pendingBytes;
-                _i2iImageTextChunks = pendingTextChunks;
-                _pendingResultBitmap = null;
-            }
-            else
-            {
-                using var composite = new CanvasRenderTarget(device, compositeW, compositeH, 96f);
-                using (var ds = composite.CreateDrawingSession())
-                {
-                    ds.Clear(Windows.UI.Color.FromArgb(0, 0, 0, 0));
-                    ds.DrawImage(doc.OriginalImage, -minX, -minY);
-                    ds.DrawImage(pendingBitmap, canvasInOrigX - minX, canvasInOrigY - minY);
-                }
-
-                byte[] compBytes;
-                using (var saveStream = new Windows.Storage.Streams.InMemoryRandomAccessStream())
-                {
-                    await composite.SaveAsync(saveStream, CanvasBitmapFileFormat.Png);
-                    saveStream.Seek(0);
-                    compBytes = new byte[saveStream.Size];
-                    using var reader = new Windows.Storage.Streams.DataReader(saveStream);
-                    await reader.LoadAsync((uint)saveStream.Size);
-                    reader.ReadBytes(compBytes);
-                }
-
-                // This composite has new pixels; attach its edited Info before it can be reused as raw.
-                compBytes = await Task.Run(() => ImageMetadataService.ReapplyNovelAiMetadata(compBytes, pendingTextChunks));
-                _lastGeneratedImageBytes = compBytes;
-                _i2iImageTextChunks = ImageMetadataService.ReadRoundTripTextChunks(compBytes);
-
-                CanvasBitmap newOriginal;
-                using (var loadStream = new Windows.Storage.Streams.InMemoryRandomAccessStream())
-                {
-                    using var writer = new Windows.Storage.Streams.DataWriter(loadStream);
-                    writer.WriteBytes(GetWinUiDisplayBytes(compBytes));
-                    await writer.StoreAsync();
-                    writer.DetachStream();
-                    loadStream.Seek(0);
-                    newOriginal = await CanvasBitmap.LoadAsync(device, loadStream, 96f);
-                }
-
-                doc.SetOriginalImage(newOriginal);
-                doc.ImageOffset = newOffset;
-
-                pendingBitmap.Dispose();
-                _pendingResultBitmap = null;
-            }
-        }
-
+        _i2iApplyUndoStack.Push(undoState);
+        _i2iApplyRedoStack.Clear();
+        doc.SetOriginalImage(bitmap);
+        doc.ImageOffset = newOffset;
+        _lastGeneratedImageBytes = appliedBytes;
+        _i2iImageTextChunks = textChunks;
         var oldPreview = MaskCanvas.ClearPreview();
-        if (oldPreview != null && !ReferenceEquals(oldPreview, pendingBitmap))
-            oldPreview.Dispose();
+        if (_pendingResultBitmap != null && !ReferenceEquals(oldPreview, _pendingResultBitmap))
+            _pendingResultBitmap.Dispose();
+        oldPreview?.Dispose();
+        _pendingResultBitmap = null;
         _pendingResultBytes = null;
         _pendingResultRegion = null;
         _pendingResultTextChunks = null;
@@ -1126,5 +1093,6 @@ public sealed partial class MainWindow
         BtnGenerate.IsEnabled = true;
         MaskCanvas.RefreshCanvas();
         UpdateFloatingResultBarsVisibility();
+        return true;
     }
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
@@ -431,37 +431,52 @@ public sealed partial class MainWindow
         await ShowExportCanvasMaskDialogAsync();
     }
 
+    private async Task<byte[]?> CreateI2IResultCanvasBytesAsync()
+    {
+        var bytes = _pendingResultBytes;
+        var region = _pendingResultRegion;
+        bool pngMetadata = _pendingResultPngMetadata;
+        if (bytes == null || region == null) return bytes;
+        var device = MaskCanvas.GetDevice();
+        if (device == null) return null;
+        using var source = MaskCanvas.Document.CreateCompositeForExport(device);
+        if (source == null) return null;
+        var sourceBase64 = await NovelAIService.EncodeRenderTargetAsync(source, isMask: false);
+        return await Task.Run(() => InpaintImageProcessing.PlaceRawResult(
+            pngMetadata ? EnsurePngEncoded(bytes) : bytes, sourceBase64, region.Value));
+    }
+
     private async Task<byte[]?> CreatePreviewCompositeBytes()
     {
         var device = MaskCanvas.GetDevice();
-        if (device == null || _pendingResultBitmap == null) return null;
-
+        if (device == null || _pendingResultBytes == null) return null;
         var doc = MaskCanvas.Document;
-        if (doc.OriginalImage == null) return _pendingResultBytes;
+        if (doc.OriginalImage == null) return await CreateI2IResultCanvasBytesAsync();
 
         var offset = doc.PixelAlignedImageOffset;
         int canvasW = MaskCanvas.CanvasW, canvasH = MaskCanvas.CanvasH;
         float origW = doc.OriginalImage.SizeInPixels.Width;
         float origH = doc.OriginalImage.SizeInPixels.Height;
-
         float canvasInOrigX = -offset.X, canvasInOrigY = -offset.Y;
-        float minX = Math.Min(0, canvasInOrigX);
-        float minY = Math.Min(0, canvasInOrigY);
+        float minX = Math.Min(0, canvasInOrigX), minY = Math.Min(0, canvasInOrigY);
         float maxX = Math.Max(origW, canvasInOrigX + canvasW);
         float maxY = Math.Max(origH, canvasInOrigY + canvasH);
         int compositeW = (int)Math.Ceiling(maxX - minX);
         int compositeH = (int)Math.Ceiling(maxY - minY);
-
-        if (compositeW == canvasW && compositeH == canvasH && _pendingResultBytes != null)
-            return _pendingResultBytes;
+        if (compositeW == canvasW && compositeH == canvasH)
+            return await CreateI2IResultCanvasBytesAsync();
 
         using var composite = new CanvasRenderTarget(device, compositeW, compositeH, 96f);
         using (var ds = composite.CreateDrawingSession())
         {
             ds.Clear(Windows.UI.Color.FromArgb(0, 0, 0, 0));
             ds.DrawImage(doc.OriginalImage, -minX, -minY);
-            ds.DrawImage(_pendingResultBitmap, canvasInOrigX - minX, canvasInOrigY - minY);
         }
+        var canvasBytes = await CreateI2IResultCanvasBytesAsync();
+        if (canvasBytes == null) return null;
+        using var preview = await LoadI2IDisplayBitmapAsync(device, canvasBytes);
+        using (var ds = composite.CreateDrawingSession())
+            ds.DrawImage(preview, canvasInOrigX - minX, canvasInOrigY - minY);
 
         using var saveStream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
         await composite.SaveAsync(saveStream, CanvasBitmapFileFormat.Png);
@@ -476,31 +491,31 @@ public sealed partial class MainWindow
     private async Task<byte[]?> BuildI2ISaveBytesAsync(bool stripMetadata)
     {
         byte[]? bytes;
+        byte[]? metadataSource;
         IReadOnlyDictionary<string, string>? textChunks;
-
+        int canvasW = MaskCanvas.CanvasW, canvasH = MaskCanvas.CanvasH;
         if (MaskCanvas.IsInPreviewMode && _pendingResultBitmap != null)
         {
-            bytes = await CreatePreviewCompositeBytes();
+            metadataSource = _pendingResultBytes;
             textChunks = _pendingResultTextChunks;
-            if (!stripMetadata && bytes != null && ReferenceEquals(bytes, _pendingResultBytes))
+            bytes = await CreatePreviewCompositeBytes();
+            if (!stripMetadata && bytes != null && ReferenceEquals(bytes, metadataSource))
                 return bytes;
         }
         else
         {
             if (!stripMetadata && CanSaveCurrentI2IImageFromRawBytes())
                 return _lastGeneratedImageBytes;
-
-            bytes = await CreateCurrentFullImageBytes();
+            metadataSource = _lastGeneratedImageBytes;
             textChunks = _i2iImageTextChunks;
+            bytes = await CreateCurrentFullImageBytes();
         }
-
-        if (bytes == null || bytes.Length == 0)
-            return bytes;
-
+        if (bytes == null || bytes.Length == 0) return bytes;
         if (stripMetadata)
             return await Task.Run(() => ImageMetadataService.StripPngMetadata(bytes));
-
-        return await Task.Run(() => ImageMetadataService.ReapplyNovelAiMetadata(bytes, textChunks));
+        return await Task.Run(() => metadataSource != null
+            ? ImageMetadataService.ReapplyNovelAiMetadata(bytes, EnsurePngEncoded(metadataSource), canvasW, canvasH)
+            : ImageMetadataService.ReapplyNovelAiMetadata(bytes, textChunks));
     }
 
     private async Task<byte[]?> BuildI2IRawSaveBytesAsync()

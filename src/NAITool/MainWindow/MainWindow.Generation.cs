@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
@@ -44,6 +44,7 @@ public sealed partial class MainWindow
     {
         if (_autoGenRunning) { StopAutoGeneration(); return; }
         if (_continuousGenRunning) { StopContinuousGeneration(); return; }
+        if (_generateRequestRunning || _i2iResultApplying) return;
 
         if (!_settings.HasApiTokens)
         {
@@ -84,6 +85,7 @@ public sealed partial class MainWindow
 
     private async Task<bool> DoImageGenerationAsync(bool forceRandomSeed = false)
     {
+        if (_generateRequestRunning || _i2iResultApplying) return false;
         using var diagnostic = BeginUiBusinessLog("generate", new { forceRandomSeed, size = GetSelectedSize(), automation = _automationRunContext });
         _lastGenerationFailureStatusCode = null;
         var autoContext = _autoGenRunning ? _automationRunContext : null;
@@ -93,7 +95,7 @@ public sealed partial class MainWindow
         SetGenerationRequestRunning(true);
         UpdateBtnGenerateForApiKey();
         TxtStatus.Text = L("generate.status.generating");
-        var p = _settings.Settings.GenParameters;
+        var p = ModelCapabilities.CreateRequestSnapshot(_settings.Settings.GenParameters);
         string restoreSeed = p.Seed;
         string? pendingHistoryId = null;
         bool previewsOpen = true;
@@ -156,6 +158,7 @@ public sealed partial class MainWindow
                 }
 
                 chars = (CurrentCharacterEntries.Count > 0 && !IsCurrentModelV3()) ? GetCharacterData(wildcardContext) : null;
+                preciseReferences = GetPreciseReferenceData();
                 if (autoContext?.CurrentVibeOverride == null &&
                     ActiveVibeTransferCount() > 0 &&
                     ActivePreciseReferenceCount() == 0)
@@ -165,7 +168,7 @@ public sealed partial class MainWindow
                 }
 
                 vibes = autoContext?.CurrentVibeOverride ?? GetVibeTransferData();
-                preciseReferences = GetPreciseReferenceData();
+                ct.ThrowIfCancellationRequested();
                 var signature = BuildImageGenerationRequestSignature(
                     p, w, h, actualSeed, prompt, negPrompt, chars, vibes, preciseReferences);
                 var duplicateDecision = await CheckDuplicateGenerationRequestAsync(signature, restoreSeed);
@@ -195,9 +198,10 @@ public sealed partial class MainWindow
             diagnostic.Stage("preprocessing_complete", new { w, h, prompt, negPrompt, chars, vibes, preciseReferences, actualSeed });
             var (imageBytes, error) = await _naiService.GenerateAsync(
                 w, h, prompt, negPrompt,
-                chars, vibes, preciseReferences, progress, ct);
+                chars, vibes, preciseReferences, progress, ct, p);
             _ = RefreshAnlasInfoAsync(forceRefresh: true);
             previewsOpen = false;
+            ct.ThrowIfCancellationRequested();
             _lastUsedSeed = actualSeed;
 
             if (error != null)
@@ -318,7 +322,6 @@ public sealed partial class MainWindow
             }
             SetGenerationRequestRunning(false);
             UpdateBtnGenerateForApiKey();
-            p.Seed = restoreSeed;
         }
     }
 

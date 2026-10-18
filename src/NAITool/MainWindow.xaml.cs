@@ -163,6 +163,7 @@ public sealed partial class MainWindow : Window
     private int _autoGenRemaining;
     private bool _continuousGenRunning;
     private bool _generateRequestRunning;
+    private AppMode _generationOwner;
     private bool _generationPreviewPulseDesired;
     private Microsoft.UI.Composition.CompositionScopedBatch? _generationPreviewPulseFadeOutBatch;
     private CancellationTokenSource? _continuousGenCts;
@@ -190,6 +191,7 @@ public sealed partial class MainWindow : Window
     private CanvasBitmap? _pendingResultBitmap;
     private byte[]? _pendingResultBytes;
     private InpaintRegion? _pendingResultRegion;
+    private bool _pendingResultPngMetadata;
     private Dictionary<string, string>? _pendingResultTextChunks;
     private Dictionary<string, string>? _i2iImageTextChunks;
     private readonly List<I2IResultCandidate> _i2iResultCandidates = [];
@@ -206,6 +208,7 @@ public sealed partial class MainWindow : Window
         public required string FilePath { get; init; }
         public Dictionary<string, string>? TextChunks { get; init; }
         public InpaintRegion? Region { get; init; }
+        public bool PngMetadata { get; init; }
     }
 
     private sealed class I2IApplyWorkspaceState
@@ -436,6 +439,11 @@ public sealed partial class MainWindow : Window
 
         MaskCanvas.ZoomChanged += z => TxtZoomInfo.Text = Lf("status.zoom", z * 100);
         MaskCanvas.UseAssetProtectionCanvasSizing = IsAssetProtectionSizeLimitEnabled();
+        MaskCanvas.WorkspaceReplacing += () =>
+        {
+            if (_generateRequestRunning && _generationOwner == AppMode.I2I)
+                _generateCts?.Cancel();
+        };
         MaskCanvas.ContentChanged += () =>
         {
             if (_currentMode == AppMode.I2I &&
@@ -539,6 +547,7 @@ public sealed partial class MainWindow : Window
 
     private void SetGenerationRequestRunning(bool running)
     {
+        if (running) _generationOwner = _currentMode;
         _generateRequestRunning = running;
         BtnResetGeneration.IsEnabled = !running && !_continuousGenRunning && !_autoGenRunning;
         if (running && _settings.Settings.EnableGenerationWaitingAnimation)

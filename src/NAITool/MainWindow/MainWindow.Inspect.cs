@@ -90,7 +90,7 @@ public sealed partial class MainWindow
     private async Task<byte[]?> GetI2IPromptInferenceImageBytesAsync(bool canvasOnly)
     {
         if (MaskCanvas.IsInPreviewMode && _pendingResultBytes != null)
-            return canvasOnly ? _pendingResultBytes : await CreatePreviewCompositeBytes();
+            return canvasOnly ? await CreateI2IResultCanvasBytesAsync() : await CreatePreviewCompositeBytes();
 
         return canvasOnly
             ? await CreateCurrentCanvasImageBytesAsync()

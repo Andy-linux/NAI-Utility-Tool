@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -174,6 +174,15 @@ public sealed partial class MaskCanvasControl : UserControl
         }
     }
     public bool CanMoveImage => !_isImageMoveLocked && !IsInPreviewMode;
+    public int WorkspaceVersion { get; private set; }
+    public event Action? WorkspaceReplacing;
+    private int BeginWorkspaceReplacement()
+    {
+        WorkspaceVersion++;
+        WorkspaceReplacing?.Invoke();
+        return WorkspaceVersion;
+    }
+
     private bool _isMaskEditingEnabled = true;
     public bool IsMaskEditingEnabled
     {
@@ -531,6 +540,7 @@ public sealed partial class MaskCanvasControl : UserControl
 
     public void InitializeCanvas(int width, int height)
     {
+        BeginWorkspaceReplacement();
         CancelMaskMove();
         CancelRegionSelection();
         _document.InpaintRegion = null;
@@ -583,11 +593,18 @@ public sealed partial class MaskCanvasControl : UserControl
 
     public async Task LoadImageAsync(StorageFile file)
     {
+        int loadVersion = BeginWorkspaceReplacement();
         if (_device == null || _canvas == null) return;
         try
         {
             var (bitmap, bytes) = await ReadImageFileSnapshotAsync(file);
+            if (loadVersion != WorkspaceVersion)
+            {
+                bitmap.Dispose();
+                return;
+            }
 
+            BeginWorkspaceReplacement();
             uint imgW = bitmap.SizeInPixels.Width;
             uint imgH = bitmap.SizeInPixels.Height;
             bool sizeChanged = false;
@@ -618,6 +635,7 @@ public sealed partial class MaskCanvasControl : UserControl
 
     public void LoadImageFromBitmap(CanvasBitmap bitmap, string? filePath = null)
     {
+        BeginWorkspaceReplacement();
         if (_device == null || _canvas == null) return;
 
         uint imgW = bitmap.SizeInPixels.Width;
@@ -643,12 +661,19 @@ public sealed partial class MaskCanvasControl : UserControl
 
     public async Task<byte[]?> ReloadImagePreservingWorkspaceAsync(string filePath)
     {
+        int loadVersion = BeginWorkspaceReplacement();
         if (_device == null || _canvas == null) return null;
         try
         {
             var file = await StorageFile.GetFileFromPathAsync(filePath);
             var (bitmap, bytes) = await ReadImageFileSnapshotAsync(file);
+            if (loadVersion != WorkspaceVersion)
+            {
+                bitmap.Dispose();
+                return null;
+            }
 
+            BeginWorkspaceReplacement();
             uint imgW = bitmap.SizeInPixels.Width;
             uint imgH = bitmap.SizeInPixels.Height;
 
@@ -674,6 +699,7 @@ public sealed partial class MaskCanvasControl : UserControl
 
     public void PerformUndo()
     {
+        if (!CanMoveImage) return;
         CancelMaskMove();
         var current = _document.GetMaskSnapshot();
         if (current == null) return;
@@ -688,6 +714,7 @@ public sealed partial class MaskCanvasControl : UserControl
 
     public void PerformRedo()
     {
+        if (!CanMoveImage) return;
         CancelMaskMove();
         var current = _document.GetMaskSnapshot();
         if (current == null) return;
@@ -736,6 +763,7 @@ public sealed partial class MaskCanvasControl : UserControl
 
     public void ClearMask()
     {
+        if (!CanMoveImage) return;
         CancelMaskMove();
         var current = _document.GetMaskSnapshot();
         if (current != null && current.Length > 0)
@@ -930,6 +958,7 @@ public sealed partial class MaskCanvasControl : UserControl
 
     public async Task RestoreWorkspaceSnapshotAsync(WorkspaceSnapshot snapshot)
     {
+        int loadVersion = BeginWorkspaceReplacement();
         CancelMaskMove();
         if (_device == null) return;
 
@@ -952,6 +981,14 @@ public sealed partial class MaskCanvasControl : UserControl
             restoredImage = await CanvasBitmap.LoadAsync(_device, stream, 96f);
         }
 
+        if (loadVersion != WorkspaceVersion)
+        {
+            restoredImage?.Dispose();
+            oldPreview?.Dispose();
+            return;
+        }
+
+        BeginWorkspaceReplacement();
         lock (_renderLock)
         {
             _canvasWidth = snapshot.CanvasWidth;
@@ -1042,6 +1079,7 @@ public sealed partial class MaskCanvasControl : UserControl
     /// </summary>
     public void FillEmptyAreas()
     {
+        if (!CanMoveImage) return;
         if (_document.MaskTarget == null || _device == null) return;
 
         var snapshot = _document.GetMaskSnapshot();
@@ -1081,6 +1119,7 @@ public sealed partial class MaskCanvasControl : UserControl
     /// </summary>
     public bool TrimCanvas()
     {
+        if (!CanMoveImage) return false;
         CancelMaskMove();
         if (_device == null || _document.OriginalImage == null) return false;
 
@@ -1163,6 +1202,7 @@ public sealed partial class MaskCanvasControl : UserControl
 
     public void InvertMask()
     {
+        if (!CanMoveImage) return;
         CancelMaskMove();
         if (_document.MaskTarget == null) return;
         var snapshot = _document.GetMaskSnapshot();
@@ -1182,6 +1222,7 @@ public sealed partial class MaskCanvasControl : UserControl
 
     public void ExpandMask()
     {
+        if (!CanMoveImage) return;
         CancelMaskMove();
         if (_document.MaskTarget == null) return;
         var snapshot = _document.GetMaskSnapshot();
@@ -1214,6 +1255,7 @@ public sealed partial class MaskCanvasControl : UserControl
 
     public void ShrinkMask()
     {
+        if (!CanMoveImage) return;
         CancelMaskMove();
         if (_document.MaskTarget == null) return;
         var snapshot = _document.GetMaskSnapshot();

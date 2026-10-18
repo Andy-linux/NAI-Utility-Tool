@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -1138,17 +1138,17 @@ public partial class NovelAIService : IDisposable
         List<VibeTransferInfo>? vibeTransfers = null,
         List<PreciseReferenceInfo>? preciseReferences = null,
         IProgress<byte[]>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default, NAIParameters? requestParameters = null)
     {
         LastGenerationErrorStatusCode = null;
 
-        using var diagnostic = BeginBusinessLog(new { operation = "generate", width, height, prompt, negativePrompt, characters, vibeTransfers, preciseReferences, parameters = _settings.Settings.GenParameters });
+        using var diagnostic = BeginBusinessLog(new { operation = "generate", width, height, prompt, negativePrompt, characters, vibeTransfers, preciseReferences, parameters = requestParameters ?? _settings.Settings.GenParameters });
         if (!_settings.HasApiTokens)
         {
             diagnostic.Stage("request_rejected", new { reason = "missing_api_token" });
             return (null, L("api.error.token_missing_network_api"));
         }
-        var naiParams = ModelCapabilities.CreateRequestSnapshot(_settings.Settings.GenParameters);
+        var naiParams = ModelCapabilities.CreateRequestSnapshot(requestParameters ?? _settings.Settings.GenParameters);
         bool streamGeneration = _settings.Settings.StreamGeneration && IsV4PlusModel(naiParams.Model);
         string model = naiParams.Model;
         if (!_settings.Settings.UsesCustomApiBaseUrl &&
