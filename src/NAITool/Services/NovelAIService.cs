@@ -396,6 +396,7 @@ public partial class NovelAIService : IDisposable
     private static void ApplyVerifiedModelParameters(Dictionary<string, object?> parameters, NAIParameters p, int width, int height)
     {
         parameters["image_format"] = "webp";
+        parameters["controlnet_strength"] = 1.0;
         parameters["tag_hint_qt"] = NovelAiPromptPresets.HintId(p.QualityToggle ? p.QualityPresetId ?? "standard" : "none");
         parameters["tag_hint_uc_preset"] = NovelAiPromptPresets.HintId(NovelAiPromptPresets.ResolveUcId(p));
         parameters.Remove("ucPreset"); parameters.Remove("uc_preset");
