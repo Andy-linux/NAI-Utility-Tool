@@ -314,6 +314,8 @@ public sealed partial class MainWindow
                 ? sourcePath
                 : null;
             MaskCanvas.LoadImageFromBitmap(bitmap, reloadPath);
+            _lastGeneratedImageBytes = imageBytes;
+            _i2iPreviewDirty = false;
             MaskCanvas.FitToScreen();
 
             UpdatePromptHighlights();

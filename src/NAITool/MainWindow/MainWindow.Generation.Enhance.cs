@@ -353,6 +353,8 @@ public sealed partial class MainWindow
         UpdateGenEnhanceButtonWarning();
         TxtStatus.Text = L("generate.status.generating");
 
+        var previousImageBytes = _currentGenImageBytes;
+        var previousImagePath = _currentGenImagePath;
         _currentGenImageBytes = sourceImageBytes;
         _currentGenImagePath = sourceImagePath;
 
@@ -527,6 +529,8 @@ public sealed partial class MainWindow
             previewsOpen = false;
             if (!finalAccepted)
             {
+                _currentGenImageBytes = previousImageBytes;
+                _currentGenImagePath = previousImagePath;
                 GenPreviewImage.Source = previousPreviewSource;
                 GenPreviewImage.Width = previousPreviewWidth;
                 GenPreviewImage.Height = previousPreviewHeight;
