@@ -192,6 +192,7 @@ public sealed partial class MainWindow : Window
     private byte[]? _pendingResultBytes;
     private InpaintRegion? _pendingResultRegion;
     private bool _pendingResultPngMetadata;
+    private bool _updatingInpaintContext = true;
     private Dictionary<string, string>? _pendingResultTextChunks;
     private Dictionary<string, string>? _i2iImageTextChunks;
     private readonly List<I2IResultCandidate> _i2iResultCandidates = [];
@@ -439,6 +440,9 @@ public sealed partial class MainWindow : Window
 
         MaskCanvas.ZoomChanged += z => TxtZoomInfo.Text = Lf("status.zoom", z * 100);
         MaskCanvas.UseAssetProtectionCanvasSizing = IsAssetProtectionSizeLimitEnabled();
+        MaskCanvas.MinimumContextArea = _settings.Settings.InpaintMinimumContextArea;
+        NumInpaintContext.Value = MaskCanvas.MinimumContextArea;
+        _updatingInpaintContext = false;
         MaskCanvas.WorkspaceReplacing += () =>
         {
             if (_generateRequestRunning && _generationOwner == AppMode.I2I)

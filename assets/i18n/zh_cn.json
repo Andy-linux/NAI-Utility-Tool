@@ -1222,5 +1222,8 @@
   "references.error.encode_inputs_changed": "编码期间参考图设置已改变。已完成的编码已缓存，请核对设置后重新生成。",
   "tooltip.inpaint_region": "局部选区：拖动框选，框内移动，拖动角点调整大小。生成时裁切选区，再按原位置回贴。",
   "tooltip.clear_inpaint_region": "清除局部选区，使用整个画布",
-  "inpaint.region.size": "选区 {0} × {1} → 生成 {2} × {3}"
+  "inpaint.region.size": "选区 {0} × {1} → 生成 {2} × {3}",
+    "inpaint.region.select": "拖拽选择局部区域",
+    "inpaint.region.context": "最小上下文区域",
+    "tooltip.inpaint_context": "在选区内侧保留的上下文边距（像素）。默认 96；内圈没有遮罩时自动填充。"
 }

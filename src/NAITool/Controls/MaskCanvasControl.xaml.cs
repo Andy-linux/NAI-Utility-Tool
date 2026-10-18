@@ -1028,6 +1028,7 @@ public sealed partial class MaskCanvasControl : UserControl
             _cleanCanvasWidth = _canvasWidth;
             _cleanCanvasHeight = _canvasHeight;
             _cleanRegion = _document.InpaintRegion;
+            _cleanMinimumContextArea = MinimumContextArea;
         }
 
         var maskPixels = _document.GetMaskSnapshot();
@@ -1054,7 +1055,8 @@ public sealed partial class MaskCanvasControl : UserControl
             || canvasHeight != _cleanCanvasHeight
             || Vector2.DistanceSquared(imageOffset, _cleanImageOffset) > 0.01f;
 
-        return imageChanged || _document.InpaintRegion != _cleanRegion || HasMaskChangedSinceClean();
+        return imageChanged || _document.InpaintRegion != _cleanRegion ||
+            (_document.InpaintRegion != null && MinimumContextArea != _cleanMinimumContextArea) || HasMaskChangedSinceClean();
     }
 
     private bool HasMaskChangedSinceClean()
@@ -1398,8 +1400,14 @@ public sealed partial class MaskCanvasControl : UserControl
                         if (mask != null)
                         {
                             if (_previewMaskOnly)
-                            {
                                 ds.FillRectangle(0, 0, _canvasWidth, _canvasHeight, Color.FromArgb(255, 0, 0, 0));
+                            using var contextClip = _document.InpaintRegion is { } selected
+                                ? ds.CreateLayer(1f, new Windows.Foundation.Rect(
+                                    selected.X + MinimumContextArea, selected.Y + MinimumContextArea,
+                                    Math.Max(0, selected.Width - 2 * MinimumContextArea),
+                                    Math.Max(0, selected.Height - 2 * MinimumContextArea))) : null;
+                            if (_previewMaskOnly)
+                            {
                                 DrawMovingMask(ds, mask);
                             }
                             else if (_maskOverlayEffect != null)

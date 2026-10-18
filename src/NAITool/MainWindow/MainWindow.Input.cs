@@ -49,6 +49,7 @@ public sealed partial class MainWindow
         BtnMoveMask.IsChecked = tool == StrokeTool.MoveMask;
         BtnInpaintRegion.IsChecked = tool == StrokeTool.Region;
         MaskCanvas.RefreshToolCursor();
+        UpdateInpaintRegionUI();
     }
 
     private void OnToolBrush(object sender, RoutedEventArgs e) => SetToolSelection(StrokeTool.Brush);
@@ -61,16 +62,25 @@ public sealed partial class MainWindow
     private void UpdateInpaintRegionUI()
     {
         if (PanelInpaintRegion == null || MaskCanvas == null) return;
-        if (MaskCanvas.SelectedRegion is not { Width: > 0, Height: > 0 } region)
+        var region = MaskCanvas.SelectedRegion;
+        PanelInpaintRegion.Visibility = region != null || MaskCanvas.Brush.CurrentTool == StrokeTool.Region
+            ? Visibility.Visible : Visibility.Collapsed;
+        if (region is { Width: > 0, Height: > 0 } area)
         {
-            PanelInpaintRegion.Visibility = Visibility.Collapsed;
-            return;
+            var size = area.RequestSize();
+            TxtInpaintRegion.Text = Lf("inpaint.region.size", InpaintRegion.Round(area.Width),
+                InpaintRegion.Round(area.Height), size.Width, size.Height);
         }
-        PanelInpaintRegion.Visibility = Visibility.Visible;
-        var size = region.RequestSize();
-        TxtInpaintRegion.Text = Lf("inpaint.region.size", InpaintRegion.Round(region.Width),
-            InpaintRegion.Round(region.Height), size.Width, size.Height);
-        BtnClearInpaintRegion.IsEnabled = MaskCanvas.CanMoveImage;
+        else TxtInpaintRegion.Text = L("inpaint.region.select");
+        BtnClearInpaintRegion.IsEnabled = region != null && MaskCanvas.CanMoveImage;
+    }
+
+    private void OnInpaintContextChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+    {
+        if (_updatingInpaintContext || MaskCanvas == null || !double.IsFinite(args.NewValue)) return;
+        MaskCanvas.MinimumContextArea = args.NewValue;
+        _settings.Settings.InpaintMinimumContextArea = args.NewValue;
+        _settings.Save();
     }
 
     private void OnBrushSizeChanged(object sender,

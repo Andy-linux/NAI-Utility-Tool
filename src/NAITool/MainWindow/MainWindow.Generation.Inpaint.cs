@@ -388,7 +388,7 @@ public sealed partial class MainWindow
         }
         if (MaskCanvas.Document.MaskTarget == null || MaskCanvas.GetDevice() == null)
         { TxtStatus.Text = L("inpaint.error.canvas_not_initialized"); return false; }
-        if (!MaskCanvas.HasMaskContent())
+        if (!MaskCanvas.HasMaskContent() && MaskCanvas.SelectedRegion == null)
         { TxtStatus.Text = L("inpaint.error.mask_required"); return false; }
         ApplyCharCountPrefixStrip();
 
@@ -412,6 +412,7 @@ public sealed partial class MainWindow
             var device = MaskCanvas.GetDevice()!;
 
             var region = MaskCanvas.SelectedRegion;
+            double minimumContextArea = MaskCanvas.MinimumContextArea;
             var imageOffset = MaskCanvas.Document.PixelAlignedImageOffset;
             using var exportImage = MaskCanvas.Document.CreateCompositeForExport(device);
             if (exportImage == null) { TxtStatus.Text = L("inpaint.error.export_image_failed"); BtnGenerate.IsEnabled = true; return false; }
@@ -444,7 +445,7 @@ public sealed partial class MainWindow
                     var imageBase64 = await NovelAIService.EncodeRenderTargetAsync(exportImage, isMask: false);
                     ValidateI2IRequest(workspaceVersion, ct);
                     var maskBase64 = await NovelAIService.EncodeRenderTargetAsync(MaskCanvas.Document.MaskTarget!, isMask: true);
-                    inpaintImage = await Task.Run(() => InpaintImageProcessing.PrepareRequest(imageBase64, maskBase64, region), ct);
+                    inpaintImage = await Task.Run(() => InpaintImageProcessing.PrepareFocusedRequest(imageBase64, maskBase64, region, minimumContextArea), ct);
                     ValidateI2IRequest(workspaceVersion, ct);
                 }
                 chars = InpaintImageProcessing.RemapCharacters(chars, inpaintImage);
@@ -841,7 +842,7 @@ public sealed partial class MainWindow
         var editMode = _i2iEditMode;
         if (MaskCanvas.Document.MaskTarget == null || MaskCanvas.GetDevice() == null)
         { TxtStatus.Text = L("inpaint.error.canvas_not_initialized"); return false; }
-        if (editMode == I2IEditMode.Inpaint && !MaskCanvas.HasMaskContent())
+        if (editMode == I2IEditMode.Inpaint && !MaskCanvas.HasMaskContent() && MaskCanvas.SelectedRegion == null)
         { TxtStatus.Text = L("inpaint.error.mask_required"); return false; }
         if (editMode == I2IEditMode.Denoise && MaskCanvas.Document.OriginalImage == null)
         { TxtStatus.Text = L("i2i.error.no_image_to_send"); return false; }
@@ -867,6 +868,7 @@ public sealed partial class MainWindow
             var device = MaskCanvas.GetDevice()!;
 
             var region = MaskCanvas.SelectedRegion;
+            double minimumContextArea = MaskCanvas.MinimumContextArea;
             var imageOffset = MaskCanvas.Document.PixelAlignedImageOffset;
             using var exportImage = MaskCanvas.Document.CreateCompositeForExport(device);
             if (exportImage == null) { TxtStatus.Text = L("inpaint.error.export_image_failed"); BtnGenerate.IsEnabled = true; return false; }
@@ -902,7 +904,7 @@ public sealed partial class MainWindow
                     if (editMode == I2IEditMode.Inpaint)
                     {
                         maskBase64 = await NovelAIService.EncodeRenderTargetAsync(MaskCanvas.Document.MaskTarget!, isMask: true);
-                        inpaintImage = await Task.Run(() => InpaintImageProcessing.PrepareRequest(imageBase64, maskBase64, region), ct);
+                        inpaintImage = await Task.Run(() => InpaintImageProcessing.PrepareFocusedRequest(imageBase64, maskBase64, region, minimumContextArea), ct);
                         ValidateI2IRequest(workspaceVersion, ct);
                     }
                 }

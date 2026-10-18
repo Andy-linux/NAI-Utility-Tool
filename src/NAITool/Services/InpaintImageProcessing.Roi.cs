@@ -11,6 +11,49 @@ internal sealed record InpaintRequestImage(
 
 internal static partial class InpaintImageProcessing
 {
+    internal static InpaintRequestImage PrepareFocusedRequest(
+        string sourceBase64, string maskBase64, InpaintRegion? selection, double minimumContextArea) =>
+        PrepareRequest(sourceBase64, PrepareFocusedMask(maskBase64, selection, minimumContextArea), selection);
+
+    internal static string PrepareFocusedMask(string maskBase64, InpaintRegion? selection, double minimumContextArea)
+    {
+        if (selection is not { } region) return maskBase64;
+        using var mask = SKBitmap.Decode(Convert.FromBase64String(maskBase64))
+            ?? throw new ArgumentException("Invalid inpaint mask.");
+        using var output = new SKBitmap(mask.Width, mask.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(output);
+        canvas.Clear(SKColors.Transparent);
+        var inner = new SKRect((float)((region.X + minimumContextArea) / 8),
+            (float)((region.Y + minimumContextArea) / 8),
+            (float)((region.X + region.Width - minimumContextArea) / 8),
+            (float)((region.Y + region.Height - minimumContextArea) / 8));
+        if (inner.Width > 0 && inner.Height > 0)
+        {
+            canvas.DrawBitmap(mask, 0, 0);
+            using var contextMask = new SKBitmap(mask.Width, mask.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+            using (var contextCanvas = new SKCanvas(contextMask))
+            using (var paint = new SKPaint { Color = SKColors.White, IsAntialias = true })
+            {
+                contextCanvas.Clear(SKColors.Transparent);
+                contextCanvas.DrawRect(inner, paint);
+            }
+            using (var clipPaint = new SKPaint { BlendMode = SKBlendMode.DstIn })
+                canvas.DrawBitmap(contextMask, 0, 0, clipPaint);
+            bool hasContent = false;
+            int left = (int)Math.Truncate(inner.Left), top = (int)Math.Truncate(inner.Top);
+            int right = left + (int)Math.Truncate(inner.Width), bottom = top + (int)Math.Truncate(inner.Height);
+            for (int y = Math.Max(0, top); y < Math.Min(mask.Height, bottom) && !hasContent; y++)
+            for (int x = Math.Max(0, left); x < Math.Min(mask.Width, right); x++)
+                if (output.GetPixel(x, y).Alpha != 0) { hasContent = true; break; }
+            if (!hasContent)
+            {
+                using var paint = new SKPaint { Color = SKColors.White, IsAntialias = true };
+                canvas.DrawRect(inner, paint);
+            }
+        }
+        return Convert.ToBase64String(EncodePng(output));
+    }
+
     internal static InpaintRequestImage PrepareRequest(string sourceBase64, string maskBase64, InpaintRegion? selection)
     {
         using var source = DecodeClean(Convert.FromBase64String(sourceBase64))

@@ -222,6 +222,9 @@ public sealed partial class MainWindow
         ToolTipService.SetToolTip(BtnEraser, L("tooltip.eraser"));
         ToolTipService.SetToolTip(BtnRect, L("tooltip.rectangle"));
         ToolTipService.SetToolTip(BtnInpaintRegion, L("tooltip.inpaint_region"));
+        TxtInpaintContextLabel.Text = L("inpaint.region.context");
+        ToolTipService.SetToolTip(NumInpaintContext, L("tooltip.inpaint_context"));
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(NumInpaintContext, L("inpaint.region.context"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(BtnInpaintRegion, L("tooltip.inpaint_region"));
         ToolTipService.SetToolTip(BtnClearInpaintRegion, L("tooltip.clear_inpaint_region"));
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(BtnClearInpaintRegion, L("tooltip.clear_inpaint_region"));

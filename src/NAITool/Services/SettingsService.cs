@@ -382,6 +382,7 @@ public class AppSettings
     public ReverseTaggerSettings ReverseTagger { get; set; } = new();
     public NAIParameters GenParameters { get; set; } = new() { Model = NAIParameters.DefaultGenerationModel };
     public NAIParameters InpaintParameters { get; set; } = new() { Model = NAIParameters.DefaultInpaintModel };
+    public double InpaintMinimumContextArea { get; set; } = 96;
     public NAIParameters I2IDenoiseParameters { get; set; } = new() { Model = NAIParameters.DefaultI2IDenoiseModel, DenoiseStrength = 0.7, DenoiseNoise = 0 };
     public RememberedPromptState RememberedPrompts { get; set; } = new();
     public int RememberedCustomWidth { get; set; } = 832;

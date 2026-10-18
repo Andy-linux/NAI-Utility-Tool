@@ -18,6 +18,18 @@ public sealed partial class MaskCanvasControl
     private InpaintRegion? _previewRegion;
 
     public InpaintRegion? SelectedRegion => _document.InpaintRegion;
+    private double _minimumContextArea = 96;
+    private double _cleanMinimumContextArea = 96;
+    public double MinimumContextArea
+    {
+        get => _minimumContextArea;
+        set
+        {
+            if (!double.IsFinite(value) || _minimumContextArea == value) return;
+            _minimumContextArea = value;
+            ContentChanged?.Invoke();
+        }
+    }
 
     public bool ClearRegion()
     {
@@ -113,6 +125,10 @@ public sealed partial class MaskCanvasControl
         if (!IsMaskOverlayVisible || _isComparing || _document.InpaintRegion is not { } region) return;
         var color = Color.FromArgb(255, 255, 192, 64);
         ds.DrawRectangle((float)region.X, (float)region.Y, (float)region.Width, (float)region.Height, color, 2 / scale);
+        if (region.Width > 2 * MinimumContextArea && region.Height > 2 * MinimumContextArea)
+            ds.DrawRectangle((float)(region.X + MinimumContextArea), (float)(region.Y + MinimumContextArea),
+                (float)(region.Width - 2 * MinimumContextArea), (float)(region.Height - 2 * MinimumContextArea),
+                Color.FromArgb(128, 255, 192, 64), 1 / scale);
         float size = 8 / scale;
         ds.FillRectangle((float)(region.X + region.Width) - size / 2,
             (float)(region.Y + region.Height) - size / 2, size, size, color);

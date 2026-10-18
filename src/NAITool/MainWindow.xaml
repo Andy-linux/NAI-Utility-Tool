@@ -2063,7 +2063,11 @@
                                               Glyph="&#xEF20;" FontSize="18"/>
                                 </ToggleButton>
                             </StackPanel>
-                            <Grid x:Name="PanelInpaintRegion" Visibility="Collapsed" ColumnSpacing="4">
+                            <Grid x:Name="PanelInpaintRegion" Visibility="Collapsed" ColumnSpacing="4" RowSpacing="4">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
@@ -2074,6 +2078,11 @@
                                         Click="OnClearInpaintRegion" Width="28" Height="28" Padding="0">
                                     <FontIcon Glyph="&#xE711;" FontSize="12"/>
                                 </Button>
+                                <TextBlock x:Name="TxtInpaintContextLabel" Grid.Row="1"
+                                           VerticalAlignment="Center" TextWrapping="Wrap" FontSize="12"/>
+                                <NumberBox x:Name="NumInpaintContext" Grid.Row="1" Grid.Column="1"
+                                           Value="96" SmallChange="8" LargeChange="32" Width="88"
+                                           SpinButtonPlacementMode="Compact" ValueChanged="OnInpaintContextChanged"/>
                             </Grid>
 
                             <TextBlock x:Name="TxtBrushSizeLabel" Text="" Style="{StaticResource CaptionTextBlockStyle}"

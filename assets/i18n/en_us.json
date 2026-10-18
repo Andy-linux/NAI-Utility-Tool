@@ -1222,5 +1222,8 @@
   "references.error.encode_inputs_changed": "Reference inputs changed during encoding. The completed encoding is cached; review the inputs and generate again.",
   "tooltip.inpaint_region": "Focused area: drag to select, move inside, resize with the corner. The image is cropped for generation and pasted back at this location.",
   "tooltip.clear_inpaint_region": "Clear focused area and use the full canvas",
-  "inpaint.region.size": "Area {0} × {1} → Generate {2} × {3}"
+  "inpaint.region.size": "Area {0} × {1} → Generate {2} × {3}",
+  "inpaint.region.select": "Drag to select a focused area",
+  "inpaint.region.context": "Minimum context area",
+  "tooltip.inpaint_context": "Context margin inside the selected area, in pixels. Default: 96. An empty inner area is filled automatically."
 }
