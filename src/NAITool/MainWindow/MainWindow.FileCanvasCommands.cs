@@ -809,6 +809,8 @@ public sealed partial class MainWindow
 
     private void SetupPreviewScrollZoomAndDrag()
     {
+        ToolTipService.SetToolTip(GenPreviewImage, L("image.drag.hint"));
+        ToolTipService.SetToolTip(InspectPreviewImage, L("image.drag.hint"));
         GenImageScroller.AddHandler(UIElement.PointerWheelChangedEvent,
             new PointerEventHandler(OnPreviewWheelZoom), true);
         GenPreviewImage.AddHandler(UIElement.PointerWheelChangedEvent,
@@ -886,6 +888,8 @@ public sealed partial class MainWindow
         var ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(
             Windows.System.VirtualKey.Control);
         if (!useMiddle && ctrl.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down)) return;
+        // File previews use left-drag to share; middle or Space+left still pans.
+        if (!useMiddle && el.CanDrag && !IsImageDragModifierDown(Windows.System.VirtualKey.Space)) return;
         var sv = GetPreviewScroller(el);
         if (sv == null || !el.CapturePointer(e.Pointer)) return;
         var start = e.GetCurrentPoint(sv).Position;

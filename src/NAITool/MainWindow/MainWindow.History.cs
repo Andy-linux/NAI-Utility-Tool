@@ -416,28 +416,25 @@ public sealed partial class MainWindow
         return menu;
     }
 
-    private void OnHistoryItemClick(object sender, PointerRoutedEventArgs e)
+    private void OnHistoryItemClick(object sender, TappedRoutedEventArgs e)
     {
+        // Finish a click before navigating; pointer press must remain available for file drag.
         // The overlay star is its own action, including Ctrl-click and touch input.
         for (var source = e.OriginalSource as DependencyObject; source != null && !ReferenceEquals(source, sender);
              source = VisualTreeHelper.GetParent(source))
             if (source is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase) return;
         if (sender is Border border && border.Tag is string filePath)
         {
-            var pt = e.GetCurrentPoint(border);
-            if (pt.Properties.IsLeftButtonPressed)
-            {
-                var ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(
-                    Windows.System.VirtualKey.Control);
-                if (_currentMode == AppMode.Gallery)
-                    SwitchMode(AppMode.ImageGeneration);
+            var ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(
+                Windows.System.VirtualKey.Control);
+            if (_currentMode == AppMode.Gallery)
+                SwitchMode(AppMode.ImageGeneration);
 
-                if (ctrl.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down))
-                    _ = ApplyHistoryParamsNoSeedAsync(filePath);
-                else
-                    _ = ShowHistoryImageAsync(filePath);
-                e.Handled = true;
-            }
+            if (ctrl.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down))
+                _ = ApplyHistoryParamsNoSeedAsync(filePath);
+            else
+                _ = ShowHistoryImageAsync(filePath);
+            e.Handled = true;
         }
     }
 

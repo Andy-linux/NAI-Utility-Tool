@@ -155,7 +155,8 @@
                         Margin="8,2,8,2"
                         Width="{x:Bind ThumbnailWidth, Mode=OneWay}"
                         Tag="{x:Bind FilePath, Mode=OneWay}"
-                        PointerPressed="OnHistoryItemClick"
+                        CanDrag="True" DragStarting="OnImageFileDragStarting" DropCompleted="OnImageFileDropCompleted"
+                        Tapped="OnHistoryItemClick"
                         PointerEntered="OnHistoryThumbnailPointerEntered"
                         PointerExited="OnHistoryThumbnailPointerExited"
                         Loaded="OnHistoryThumbnailHostLoaded"
@@ -1651,7 +1652,8 @@
                                   VerticalScrollBarVisibility="Auto"
                                   ZoomMode="Enabled" MinZoomFactor="0.1" MaxZoomFactor="5"
                                   HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                        <Image x:Name="GenPreviewImage" Stretch="Uniform"/>
+                        <Image x:Name="GenPreviewImage" Stretch="Uniform"
+                               CanDrag="True" DragStarting="OnImageFileDragStarting" DropCompleted="OnImageFileDropCompleted"/>
                     </ScrollViewer>
                     <Button x:Name="BtnShowGenResultBar"
                             Click="OnShowGenResultBar"
@@ -1828,7 +1830,8 @@
                               VerticalScrollBarVisibility="Auto"
                               ZoomMode="Enabled" MinZoomFactor="0.1" MaxZoomFactor="5"
                               HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                    <Image x:Name="InspectPreviewImage" Stretch="None"/>
+                    <Image x:Name="InspectPreviewImage" Stretch="None"
+                           CanDrag="True" DragStarting="OnImageFileDragStarting" DropCompleted="OnImageFileDropCompleted"/>
                 </ScrollViewer>
             </Grid>
 

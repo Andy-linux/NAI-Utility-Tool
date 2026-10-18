@@ -1213,6 +1213,8 @@
   "oobe.api.settings_hint": "You can also change the request Base URL and add multiple API tokens in Settings.",
   "help.highlights.multi_api.title": "Multiple API support",
   "help.highlights.multi_api.body": "Add multiple API tokens in Settings, share one request Base URL, and test all accounts together.\n\nChoose round robin, most quota, least quota, or random routing. Accounts are selected according to the V5 allowance or Anlas the request consumes; free requests use round robin. The main view shows combined quotas, and Quota Management lets you inspect each API number. Duplicate tokens do not gain extra calls or inflate totals.",
+  "image.drag.hint": "Drag out to copy the image file with Info. Pan with the middle button or Space+left drag; scroll to zoom.",
+  "image.drag.failed": "Could not prepare image for dragging: {0}",
   "dialog.advanced.legacy_uc": "Legacy negative prompt (V4)",
   "file.error.png_conversion_failed": "Unable to encode the image as PNG.",
   "references.error.encode_inputs_changed": "Reference inputs changed during encoding. The completed encoding is cached; review the inputs and generate again."

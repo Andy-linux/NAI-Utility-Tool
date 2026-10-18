@@ -398,7 +398,7 @@ public sealed partial class MainWindow
 
     private bool TryAcceptSuperDropDrag(DragEventArgs e)
     {
-        if (!IsSuperDropEnabled || !e.DataView.Contains(StandardDataFormats.StorageItems))
+        if (_imageFileDragInProgress || !IsSuperDropEnabled || !e.DataView.Contains(StandardDataFormats.StorageItems))
             return false;
 
         _superDropDragVersion++;
