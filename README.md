@@ -8,46 +8,41 @@ NAI Utility Tool is a Windows desktop client for NovelAI image workflows. It is 
 
 The fork version remains `1.3.0_fork.1`. This document describes the **dev stage**, not a new official release.
 
-## Dev goal and status (2026-10-17)
+## Dev goal and status (2026-10-18)
 
-**The dev branch aims to align original-client interactions, effective generation requests, generated results and original-image Info reproduction with the NovelAI website, while retaining local extensions.** Recorded references include website builds `78a367e` and `b50892a`. Completing this cleanup does not establish identical behavior for every model, input and backend result.
+**The dev branch aligns client interactions, effective generation requests, image processing and Info round trips with the NovelAI frontend while retaining local extensions.** Recorded references include website builds `78a367e` and `b50892a`. This is a local development candidate, not a complete parity claim or a new release.
 
-### Local import / Vibe / Reset update
+### Current update
 
-- Import: selected explicit-empty prompts or character lists replace stale input. Unchecked/missing fields and an empty append retain existing values; images without importable references retain the attached Vibes.
-- Vibe: distinguish source extraction from encoded-reference generation strength. Encoded-only entries expose no ineffective extraction slider and preserve their bytes. Source-backed files use exact model/extraction cache slots; new V4.5 Full sources default to `0.7`. Multiple encoded strengths can use the observed website normalization rule, while single-reference imports preserve the toggle.
-- Reset: the sidebar button restores fresh V5 Full Medium generation input, 832x1216 and a random seed. It clears generation characters/references and old High drafts without deleting API configuration, saved outputs or history, and prevents pending advanced-control text from restoring stale values.
+- Models: normalize disabled character text before filtering outgoing characters; retain up to 32 V5 characters (V4/V4.5 request limit 6). Correct V3 sampler choices, DDIM/SMEA/schedule and stream capability handling, V3 Inpaint DDIM resolution, V4 Legacy UC defaults/imports, and destination-model selection before workspace synchronization.
+- References: retain separate V3/V4 collections and normalization state across restarts. Disabled cards do not consume the active-reference limit or disappear at restart. Source/model/extraction identity is fixed during asynchronous encoding; changed inputs stop the pending generation while preserving the paid encoding in its correct cache. Thumbnail matches expose extraction only when the original source is hash-verified.
+- V3 references: match the observed website's 448x448 aspect-preserving resize, black background, rounding and stealth-alpha cleanup.
+- Image editing: load pixels and Info from one file snapshot; reload updates the reusable bytes without discarding the mask/offset policy. New images clear stale candidates. Offset Apply caches carry the edited image's Info. Stealth Info alpha bits are removed from display/canvas copies before WinUI premultiplication; original bytes stay available for saves and sharing.
+- Saving: Settings > Local Storage offers Original (compatibility default) or PNG for new generations and Enhance results. WebP results can also be saved manually as WebP or PNG. PNG conversion preserves decoded pixels and generation metadata; stripping takes precedence, and conversion failure cannot silently write WebP under a PNG extension.
+- Sharing: left-drag the main generated image, history/gallery thumbnail or Inspect image to copy a real image file with Info. Unsaved Inspect Info edits produce a separate snapshot, with Description synchronized to the edited prompt. Middle-drag or Space+left-drag pans; the wheel zooms. External applications control any subsequent compression.
+- Settings: controls wrap below their labels when the settings viewport is narrow.
 
-Live validation: one official original completed native import -> generation through the configured API gateway -> returned-image import -> generation again. Both raw response images and saved outputs matched the original RGB pixel-for-pixel, with identical encoded references and effective strength. Bounded native sequences also exercised empty/append/unchecked character imports, no-reference retention, Reset and High re-entry.
+### Executed verification
 
-Limits: this validates the recorded sample/states, not every model or combination. Native new-source extraction-control automation remains incomplete and no new encoding was sampled. Separate persisted V3/V4 reference collections are not implemented; normalization preference is session-scoped. Dirty i2i/cross-workspace combinations remain targeted verification work.
+| Evidence | Bounded result |
+| --- | --- |
+| Native client, existing API configuration | Four actual POSTs returned HTTP 200: one V4.5 Full source encoding and three generations (V4.5 Full, V3 DDIM, V4.5 Full offset Infill). |
+| Actual WebP response to saved PNG | Decoded RGBA and the six checked Info fields match. The raw response remains separate. |
+| Freshly generated main preview to independent FileDrop receiver | Received file SHA and Info match the saved PNG. History, gallery and Inspect file drags were also exercised. |
+| Vibe state | Native model-family switches and a restart preserve the tested 17-card fixture, including 16 disabled cards and the active card's extraction/strength. |
+| V3 preprocessing | Four nontrivial fixtures match the actual website runtime function in all 448x448 RGBA pixels. |
+| Offset Apply precision fix | Native replay of an already captured response produces zero RGB differences from source to request and from candidate to saved candidate region. This replay is not another live generation. |
+| Final production-DLL harness | 33 checks pass, including 16 service invocations with a synthetic HTTP response and no network transport. These are not API successes. |
 
-### Stage changelog
+Earlier import/Vibe/Reset evidence remains valid: one original -> generation -> re-import -> generation sequence reproduced the recorded original RGB and encoded reference strength; explicit-empty, unchecked/append and no-reference import behavior was separately checked.
 
-- Official hash/effort and Info import without embedded local drafts or sidecars; in-session High/Medium drafts and adjustable Medium CFG Scale remain.
-- Complete Quality/UC presets and reversible Text/automatic dialogue, mix and LF handling across editing, import and requests; unused legacy preset code removed.
-- Simple/Debug business diagnostics with credential redaction and safe startup ordering. Simple keeps at most seven UTC dates and 8 MiB; Debug records input, effective requests, responses and parse/save stages, without equating HTTP success with saved output.
-- Original output bytes retained separately from temporary WebP-to-PNG display conversion; monthly folders and creation-time history, independent of previous-image/send-to navigation and prompt/seed naming.
-- Model defaults, legal schedules, independent advanced settings, effective duplicate protection and character action/filter/coordinate handling.
-- I2I/Inpaint seed behavior, full-size API masks, feathered composition and raw/derived candidates; selected-source Enhance bytes; aspect-aware Precise Lanczos resizing and stealth cleanup.
+### Remaining parity work
 
-### Confirmed fixes and confidence
+The tested paths are not a full cross-product of models and actions. V1/V2 are not exposed; Furry3 and several other model/operation combinations have only method-level coverage. Official focused-region Inpaint cropping, coordinate reprojection and placement are not implemented by the full-canvas offset workflow. Brush-unit mapping, complex dirty-canvas/Undo/Redo transitions, Text/history combinations, cancellation/retry/stream failures and concurrent workloads still need targeted acceptance.
 
-- **Verified on bounded captured samples:** non-zoom Inpaint API-mask RGBA and composed RGB match; opaque same-source Precise pixels and real stealth cleanup; WebP response and offline display paths. These do not prove every transparency, size or mode.
-- **Implemented / method-level checked, not fully live-validated:** Medium hash restoration, preset/Text direct reuse and selective import, LF, Enhance source bytes, defaults/schedules, duplicate guards and character actions. Info reproduction is not signature verification; modified pixels or Info must not be presented as verified signed originals.
+Some earlier same-condition image comparisons remain unexplained; do not attribute them to a checkpoint or prompt rule without evidence. PNG is available but the default remains Original for compatibility, unlike the observed website PNG preference. Info round trips do not verify an official signature, and modified Info/pixels are marked unofficial. Do not treat local FileDrop success as proof that every chat application preserves metadata after upload.
 
-### Confirmed unresolved
-
-Disabled characters are still filtered before the website-style state rewrite. Some recorded same-condition generation comparisons still differ; the cause has not been fully isolated, so they are not attributed to prompt handling or a different checkpoint without evidence.
-
-### Not deeply investigated / next TODO
-
-- Character/Text/history: provide model/effort, enabled states, exact action order and one shareable minimal prompt with expected/actual results.
-- Remaining generation differences: provide the same source image, seed, dimensions, model/effort, effective parameters and both original outputs.
-- Brush/ROI: provide source dimensions, canvas zoom, brush value, ROI rectangle, character coordinates and expected final image.
-- Transparency/reference/role-count boundaries: provide one minimal original sample, model, relevant settings/count and observed failure. Full transparency and website role-limit disagreements remain insufficiently investigated.
-
-Website mask units have been measured, but their mapping to the client brush UI needs confirmation. Focused-region sampling/cropping, character reprojection and final placement, plus some Text/history combinations, have not completed full live verification. Reuse existing evidence before collecting only the missing conditions. Website-only PixelSnap/3D capabilities are not automatically in scope. Debug records never include API keys, but business records can contain prompts, images and paths: sanitize reports again and share only the minimal reproduction, not private logs, HARs or credentials.
+Reuse captured evidence before paying for new samples. Website-only PixelSnap/3D is not automatically in scope. Business logs can contain prompts, images and paths even when credentials are redacted; share only a sanitized minimal reproduction.
 
 <img width="1455" height="940" alt="Preview" src="https://github.com/user-attachments/assets/88c9a0d3-5fcb-464f-80bf-98075fc9f3f6" />
 
@@ -58,10 +53,10 @@ Website mask units have been measured, but their mapping to the client brush UI 
 - Supports NovelAI Diffusion 5, 4.5, 4, and 3 model families.
 - Supports common samplers and schedulers, with incompatible options filtered according to the selected model.
 - Supports separate positive, negative, and style prompt inputs.
-- Supports NAI v4+ character prompts, character negative prompts, and character positions: up to 22 characters for V5 and 6 for V4/V4.5.
+- Supports NAI v4+ character prompts, character negative prompts, and character positions: up to 32 characters for V5 and 6 for V4/V4.5.
 - Main, style, and character prompt boxes support custom heights through a bottom-right corner shown on hover. Drag to resize or double-click to restore automatic height. Main and style heights are saved automatically; character heights follow the remembered-character setting. Restore all default prompt heights with one click under Settings > Usage.
 - Supports seed management, Variety+, quality tags, UC presets, CFG Scale, CFG Rescale, steps, and other advanced parameters.
-- Supports post-generation preview, save, copy, delete, routing to other workspaces, and generation history management.
+- Supports post-generation preview, save, copy, file drag with Info, delete, routing to other workspaces, and generation history management.
 - Favorite saved output images using the star in gallery/history thumbnails or the history/preview context menu. Stars follow the system accent color; favorites are retained across restarts.
 - The gallery provides a date picker, image-size slider, and Favorites only filter. Unfavoriting an image keeps it in the current filtered view until you reload favorites by toggling the filter, changing the date, or returning to the gallery.
 - Enhance supports upscale amounts, five magnitude levels, individual strength/noise settings, and V5 Max; its confirmation button shows the Anlas cost for the current settings.
@@ -90,6 +85,7 @@ Website mask units have been measured, but their mapping to the client brush UI 
 - Supports local Vibe pre-encode caching to avoid repeated encoding cost.
 - Includes a Vibe pre-encode manager for viewing, cleaning, relocating source images, and exporting encoded files.
 - Can optionally copy Vibe source images into the local workspace for long-term reference management.
+- Remembers independent V3/V4 reference collections and normalization with the prompt-memory setting; reference payloads are stored outside settings JSON.
 
 ### Automation
 
@@ -166,11 +162,8 @@ Samplers:
 - `k_dpmpp_2m`
 - `k_dpmpp_sde`
 - `k_dpmpp_2s_ancestral`
-- `k_dpm_2`
-- `k_dpm_fast`
 - `k_dpmpp_2m_sde`
-- `ddim`
-- `ddim_v3`
+- `ddim_v3` (V3 families; Inpaint resolves it to Euler ancestral)
 
 Schedulers:
 
@@ -303,6 +296,7 @@ The app writes runtime data beside the executable so development and published l
 - `user/wildcards/`
 - `user/automation/`
 - `user/vibe/`
+- `user/reference-drafts/`
 - `output/`
 - `logs/`
 - `build/`
