@@ -463,7 +463,11 @@ public static class ImageMetadataService
         if (newComment == null)
             textChunks.Remove("Comment");
         else
+        {
             textChunks["Comment"] = newComment;
+            if (TryParseJson(newComment) is { HasPositivePrompt: true } metadata)
+                textChunks["Description"] = metadata.PositivePrompt;
+        }
         using var bitmap = DecodeRgbaUnpremulBitmap(pngData);
         if (bitmap == null) throw new ArgumentException("Invalid PNG image.", nameof(pngData));
         return ReapplyNovelAiMetadata(pngData, textChunks, bitmap.Width, bitmap.Height);
