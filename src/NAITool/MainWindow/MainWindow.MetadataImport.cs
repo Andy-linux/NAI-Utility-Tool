@@ -27,7 +27,7 @@ public sealed partial class MainWindow
             if (selection.ToI2I)
             {
                 if (selection.Image && sourceImage != null &&
-                    !await SendImageToI2IAsync(sourceImage, sourcePath, importMetadata: false))
+                    !await SendImageToI2IAsync(sourceImage, sourcePath))
                 {
                     diagnostic.Stage("import_image_failed");
                     return;

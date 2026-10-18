@@ -270,11 +270,10 @@ public sealed partial class MainWindow
         await SendImageToI2IAsync(imageBytes, sourcePath);
     }
 
-    private async Task<bool> SendImageToI2IAsync(byte[] imageBytes, string? sourcePath = null, bool importMetadata = true)
+    private async Task<bool> SendImageToI2IAsync(byte[] imageBytes, string? sourcePath = null)
     {
         int workspaceVersion = MaskCanvas.BeginWorkspaceReplacement();
         int importVersion = _i2iImageImportVersion;
-        string fallbackPositive = _genPositivePrompt, fallbackNegative = _genNegativePrompt, fallbackStyle = _genStylePrompt;
         CanvasBitmap? bitmap = null;
         bool applying = false;
         bool OwnsImport() => workspaceVersion == MaskCanvas.WorkspaceVersion && importVersion == _i2iImageImportVersion;
@@ -282,17 +281,7 @@ public sealed partial class MainWindow
         {
             var device = MaskCanvas.GetDevice() ?? CanvasDevice.GetSharedDevice();
             bitmap = await LoadI2IDisplayBitmapAsync(device, imageBytes);
-            var prepared = await Task.Run(() =>
-            {
-                var text = ImageMetadataService.ReadRoundTripTextChunks(imageBytes);
-                var metadata = importMetadata ? ImageMetadataService.ReadFromBytes(imageBytes) : null;
-                if (metadata != null)
-                {
-                    foreach (var reference in metadata.VibeTransfers) Convert.FromBase64String(reference.ImageBase64);
-                    foreach (var reference in metadata.PreciseReferences) Convert.FromBase64String(reference.ImageBase64);
-                }
-                return (Text: text, Metadata: metadata);
-            });
+            var textChunks = await Task.Run(() => ImageMetadataService.ReadRoundTripTextChunks(imageBytes));
             if (!OwnsImport()) return false;
 
             applying = true;
@@ -313,24 +302,6 @@ public sealed partial class MainWindow
             int imgW = (int)bitmap.SizeInPixels.Width;
             int imgH = (int)bitmap.SizeInPixels.Height;
             SwitchMode(AppMode.I2I);
-            var meta = prepared.Metadata;
-            if (meta != null && (meta.IsNaiParsed || meta.IsSdFormat))
-            {
-                ApplyMetadataToI2I(meta, Path.GetFileName(sourcePath) ?? L("image.preview_label"), new MetadataImportSelection
-                {
-                    Settings = false,
-                    Seed = false,
-                    Size = false,
-                    References = meta.VibeTransfers.Count > 0 || meta.PreciseReferences.Count > 0,
-                });
-            }
-            else if (importMetadata)
-            {
-                _i2iPositivePrompt = fallbackPositive;
-                _i2iNegativePrompt = fallbackNegative;
-                _i2iStylePrompt = fallbackStyle;
-            }
-
             var importSize = MaskCanvasControl.ResolveImportCanvasSize(
                 imgW, imgH, IsAssetProtectionSizeLimitEnabled());
             int canvasW = importSize.W;
@@ -352,7 +323,7 @@ public sealed partial class MainWindow
             MaskCanvas.LoadImageFromBitmap(bitmap, reloadPath);
             bitmap = null;
             _lastGeneratedImageBytes = imageBytes;
-            _i2iImageTextChunks = prepared.Text;
+            _i2iImageTextChunks = textChunks;
             _i2iPreviewDirty = false;
             MaskCanvas.FitToScreen();
             UpdatePromptHighlights();
