@@ -6,9 +6,11 @@
 
 NAI Utility Tool 是一个面向 NovelAI 图像工作流的 Windows 桌面客户端。它基于 .NET 9、WinUI 3、Windows App SDK、Win2D、SkiaSharp 和 ONNX Runtime 构建，目标不是替代 NovelAI 官方站点，而是把日常高频操作整合到一个本地工具里：生成、重绘、遮罩编辑、提示词管理、参考图工作流、批量自动化、后期处理、超分、元数据检视和本地反推。
 
-当前版本：[**1.3.0_fork.2**](https://github.com/Andy-linux/NAI-Utility-Tool/releases/tag/1.3.0_fork.2)，Windows x64 自包含便携版。
+当前版本：[**1.3.0_fork.2**](https://github.com/Andy-linux/NAI-Utility-Tool/releases/tag/1.3.0_fork.2)，提供 Windows x64 自包含安装器、ZIP 和 7z 便携包。
 
-## dev 后续改进（尚未收入发布包）
+## fork.2 更新构建：安装升级与流式修正
+
+本次更新覆盖旧 fork.2 附件，并纳入已完成的 dev 修正。新增双语安装器，支持全新安装、fork.1/旧 fork.2 原目录覆盖升级和便携模式。
 
 流式预览遵循官网默认起点（`step_ix >= 5`）；缺少步数的网关帧保留兼容预览。收到有效最终图后忽略迟到预览，同一样本的重复 final 保留最新有效结果，避免结果已返回却被后续预览或重复帧判为失败。定向回归见 [tests/Seeds](tests/Seeds)，验证范围为生产接收器的离线调用。
 
@@ -30,7 +32,19 @@ NAI Utility Tool 是一个面向 NovelAI 图像工作流的 Windows 桌面客户
 
 使用原图复现时，请同时核对型号／Effort、种子、参考图和导入选项。官网 **Clean Imports** 会改变括号权重与逗号空格；保留原提示词语法进行对照时应关闭它。ROI 回贴图的单张 Info 不包含原始输入图与遮罩，不能独自恢复完整重绘条件。
 
-更新时将发布包解压到新目录，再迁移需要的 `user/` 数据。首次启动直接进入主界面，API、语言和本地模型可在设置中配置。
+### 安装与覆盖升级
+
+| 场景 | 操作 |
+|---|---|
+| fork.1 或旧 fork.2 便携版升级 | 退出客户端，运行 `Setup.exe`，选“便携版”，选择旧版根目录（直接包含启动器、`bin/`、`user/`），不要选 `bin/` 子目录。 |
+| 全新安装／安装版升级 | 选“安装版”；默认当前用户安装，不请求管理员权限，带开始菜单和卸载入口。升级时沿用旧目录。 |
+| 全新便携使用 | 安装器选“便携版”，或解压 ZIP/7z 到可写目录，运行根目录 `NAI Utility Tool.exe`。 |
+
+安装器替换程序文件，保留 `user/`、`output/`、`logs/`；`assets/` 和 `models/` 仅补缺，不覆盖自改资源。卸载安装版也保留用户数据与这些资源。便携模式不创建快捷方式或卸载登记。
+
+ZIP/7z 不再携带任何 `user/` 文件；默认预设和通配词由应用从 `assets/` 按缺失补齐。覆盖解压不会覆盖用户目录，但可能覆盖同名内置资源；修改过 `assets/` 或 `models/` 请使用安装器升级。API 凭据沿用 Windows DPAPI，同机同用户升级可继续使用，跨电脑或用户需要重新输入。
+
+首次启动直接进入主界面，API、语言和本地模型在设置中配置。完整说明与静默参数见 [INSTALL.txt](installer/INSTALL.txt)。
 
 <img width="1455" height="940" alt="Preview" src="https://github.com/user-attachments/assets/88c9a0d3-5fcb-464f-80bf-98075fc9f3f6" />
 
@@ -250,9 +264,8 @@ publish/candidate-yyyyMMdd-HHmmss/NAI Utility Tool/
 |-- bin/                     主应用与依赖
 |-- assets/                  运行所需资源
 |-- models/                  内置超分模型
-|-- user/                    默认用户数据目录和预设
-|-- output/
-`-- logs/
+|-- LICENSE
+`-- INSTALL.txt              安装与升级说明
 ```
 
 可指定配置和运行时：
@@ -260,6 +273,16 @@ publish/candidate-yyyyMMdd-HHmmss/NAI Utility Tool/
 ```powershell
 .\publish.ps1 -Configuration Release -Runtime win-x64
 ```
+
+发布目录不包含用户配置、预设副本、缓存、日志或输出；这些由应用按需创建。
+
+构建双语安装器需要 Inno Setup 7（包含官方简体中文语言文件）：
+
+```powershell
+.\build-installer.ps1 -PortableDirectory "发布目录" -OutputDirectory "安装器输出目录" -Compiler "ISCC.exe 的完整路径"
+```
+
+安装器和 ZIP/7z 使用同一份干净的 `publish.ps1` 产物。源代码身份由 Git commit/tree 记录，不维护逐文件源码哈希。
 
 项目声明的运行时包括：
 

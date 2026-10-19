@@ -6,9 +6,11 @@ Language: English | [简体中文](README-CN.md)
 
 NAI Utility Tool is a Windows desktop client for NovelAI image workflows. It is built with .NET 9, WinUI 3, Windows App SDK, Win2D, SkiaSharp, and ONNX Runtime. It is not intended to replace the official NovelAI website; instead, it brings day-to-day local workflows into one tool: generation, image-to-image editing, mask editing, prompt management, reference-image workflows, batch automation, post-processing, upscaling, metadata inspection, and local reverse tagging.
 
-Current release: [**1.3.0_fork.2**](https://github.com/Andy-linux/NAI-Utility-Tool/releases/tag/1.3.0_fork.2), a self-contained Windows x64 portable build.
+Current release: [**1.3.0_fork.2**](https://github.com/Andy-linux/NAI-Utility-Tool/releases/tag/1.3.0_fork.2), with a self-contained Windows x64 installer and ZIP/7z portable packages.
 
-## Subsequent dev changes (not yet in release assets)
+## Refreshed fork.2 build: installation, upgrades and streaming
+
+This build replaces the previous fork.2 assets and includes the completed dev fixes. A bilingual installer supports fresh installations, in-place fork.1/older fork.2 upgrades, and portable mode.
 
 Streaming previews follow the website's default starting point (`step_ix >= 5`), while gateway frames without step metadata keep their compatible preview behavior. After a valid final image arrives, late previews are ignored and repeated final frames for the same sample retain the latest valid result. This prevents preview or duplicate traffic from turning a received result into a failure. Targeted checks in [tests/Seeds](tests/Seeds) exercise the built receiver offline.
 
@@ -30,7 +32,19 @@ A representative V5 Medium round trip with two characters, quoted dialogue and w
 
 For reproduction, match model/Effort, seed, references and import options. Website **Clean Imports** changes weighting brackets and comma spacing; disable it when comparing the original prompt syntax. A composited ROI image does not carry its original input image and mask, so its Info alone cannot reconstruct the entire inpainting request.
 
-Extract updates into a new directory, then migrate the `user/` data you need. First launch opens the main interface; configure the API, language and local models in Settings.
+### Install or upgrade in place
+
+| Scenario | Action |
+|---|---|
+| Upgrade an extracted fork.1 or older fork.2 | Close the client, run `Setup.exe`, choose Portable and select the existing ROOT folder containing the launcher, `bin/` and `user/`, not the `bin/` subfolder. |
+| New/updated installed edition | Choose Installed. It defaults to a writable current-user folder without elevation and provides Start menu/uninstall entries. Select the existing installation folder when upgrading. |
+| New portable copy | Choose Portable, or extract ZIP/7z to a writable folder and run the root `NAI Utility Tool.exe`. |
+
+Setup replaces program files but leaves `user/`, `output/` and `logs/` untouched. It only adds missing `assets/` and `models/` files, retaining customized resources. Uninstall also keeps user data and these resources. Portable mode adds no shortcuts or uninstall registration.
+
+ZIP/7z no longer includes any `user/` files. The app seeds missing presets/wildcards from `assets/` without overwriting edits. Archive overlays preserve user directories but may overwrite same-named bundled resources; use Setup if you customized `assets/` or `models/`. Credentials remain bound to the Windows user and machine by DPAPI; an in-place upgrade on the same account preserves access, while moving to another user/PC requires entering credentials again.
+
+First launch opens the main interface; configure the API, language and local models in Settings. See [INSTALL.txt](installer/INSTALL.txt) for complete instructions and silent options.
 
 <img width="1455" height="940" alt="Preview" src="https://github.com/user-attachments/assets/88c9a0d3-5fcb-464f-80bf-98075fc9f3f6" />
 
@@ -257,9 +271,8 @@ publish/candidate-yyyyMMdd-HHmmss/NAI Utility Tool/
 |-- bin/                     Main application and dependencies
 |-- assets/                  Runtime assets
 |-- models/                  Bundled upscaler models
-|-- user/                    Default user data directories and presets
-|-- output/
-`-- logs/
+|-- LICENSE
+`-- INSTALL.txt              Installation and upgrade guide
 ```
 
 You can specify configuration and runtime:
@@ -267,6 +280,16 @@ You can specify configuration and runtime:
 ```powershell
 .\publish.ps1 -Configuration Release -Runtime win-x64
 ```
+
+The payload contains no user configuration, preset copies, caches, logs or outputs. The application creates these as needed.
+
+Build the bilingual installer with Inno Setup 7 (including its official Simplified Chinese language file):
+
+```powershell
+.\build-installer.ps1 -PortableDirectory "published folder" -OutputDirectory "installer output" -Compiler "full path to ISCC.exe"
+```
+
+The installer and archives consume the same clean `publish.ps1` output. Git commit/tree identifiers track sources; there is no per-source-file hash inventory.
 
 Declared project runtimes include:
 
