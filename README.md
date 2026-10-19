@@ -239,7 +239,7 @@ First launch opens the main interface. Configure language, the NovelAI API token
 
 ## Publish
 
-Use the included script to create a local publish package:
+Run the included script in PowerShell 7 to create a local publish package:
 
 ```powershell
 .\publish.ps1

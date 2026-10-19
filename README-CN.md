@@ -232,7 +232,7 @@ dotnet build .\src\NAITool\NAITool.csproj -c Debug -p:Platform=x64
 
 ## 发布
 
-使用仓库内脚本创建本地发布包：
+使用 PowerShell 7 运行仓库内脚本，创建本地发布包：
 
 ```powershell
 .\publish.ps1
