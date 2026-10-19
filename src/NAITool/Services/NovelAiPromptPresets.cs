@@ -84,6 +84,7 @@ internal static class NovelAiPromptPresets
 
     internal static string StripAutoText(string prompt, ImageMetadata metadata, MetadataImportSelection? selection = null)
     {
+        // File roles identify generated dialogue even when character import is unchecked.
         var captions = selection?.CharacterPromptsFrom(metadata) ?? metadata.CharacterPrompts;
         var centers = selection?.CharacterCentersFrom(metadata) ?? metadata.CharacterCenters;
         var roles = captions.Select((text, i) => new CharacterPromptInfo

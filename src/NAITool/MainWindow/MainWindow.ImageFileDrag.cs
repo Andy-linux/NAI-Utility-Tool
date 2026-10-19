@@ -63,8 +63,7 @@ public sealed partial class MainWindow
                     return;
                 }
 
-                // Drag the displayed image snapshot with its Info, including unsaved edits.
-                // Its saved path may have been overwritten or saved with metadata stripped.
+                // Export the captured image bytes, including unsaved Info edits, as an OLE file.
                 string directory = Path.Combine(AppRootDir, "temp", "drag",
                     Convert.ToHexString(SHA256.HashData(bytes)));
                 Directory.CreateDirectory(directory);
@@ -85,6 +84,7 @@ public sealed partial class MainWindow
 
             var file = await StorageFile.GetFileFromPathAsync(Path.GetFullPath(path));
             args.Data.SetStorageItems(new[] { file }, readOnly: true);
+            // Only the drag cursor uses this 160 px thumbnail; the transferred file stays full size.
             var pixels = await HistoryThumbnailService.DecodeAsync(path, 160, 160, CancellationToken.None);
             _imageFileDragPreview = SoftwareBitmap.CreateCopyFromBuffer(pixels.Pixels.AsBuffer(),
                 BitmapPixelFormat.Bgra8, pixels.Width, pixels.Height, BitmapAlphaMode.Premultiplied);

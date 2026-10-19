@@ -19,6 +19,7 @@ internal static class ImportedPromptPresets
 {
     private sealed record QualityCandidate(string Id, string Text, bool Transparent);
 
+    // Interpret text with the source model; map the resulting UC choice to the target model.
     internal static ImportedPromptPresetMatch Read(
         string positive, string negative, string sourceModel, string targetModel, ImageMetadata metadata)
     {
@@ -84,6 +85,7 @@ internal static class ImportedPromptPresets
         };
     }
 
+    // Hints order the candidates; restoring a preset still requires its exact text.
     private static List<QualityCandidate> QualityCandidates(string model, ImageMetadata metadata)
     {
         string[] ids = NovelAiPromptPresets.SupportsLightQuality(model) ? ["standard", "light"] : ["standard"];

@@ -5,6 +5,7 @@ using SkiaSharp;
 
 namespace NAITool.Services;
 
+// Canvas/request dimensions use full pixels; MaskBase64 remains at one eighth of request size.
 internal sealed record InpaintRequestImage(
     string SourceBase64, string ImageBase64, string MaskBase64,
     int CanvasWidth, int CanvasHeight, int Width, int Height, InpaintRegion? Region);
@@ -23,6 +24,7 @@ internal static partial class InpaintImageProcessing
         using var output = new SKBitmap(mask.Width, mask.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
         using var canvas = new SKCanvas(output);
         canvas.Clear(SKColors.Transparent);
+        // ROI and context are canvas pixels; the editable mask uses one pixel per 8 canvas pixels.
         var inner = new SKRect((float)((region.X + minimumContextArea) / 8),
             (float)((region.Y + minimumContextArea) / 8),
             (float)((region.X + region.Width - minimumContextArea) / 8),
@@ -86,6 +88,7 @@ internal static partial class InpaintImageProcessing
     internal static List<CharacterPromptInfo>? RemapCharacters(List<CharacterPromptInfo>? characters, InpaintRequestImage request)
     {
         if (characters == null || request.Region is not { } region) return characters;
+        // Convert normalized full-canvas centers to normalized centers within the cropped region.
         var result = new List<CharacterPromptInfo>(characters.Count);
         foreach (var character in characters)
             result.Add(new CharacterPromptInfo
@@ -121,6 +124,7 @@ internal static partial class InpaintImageProcessing
         int width = Math.Max(1, InpaintRegion.Round(region.Width)), height = Math.Max(1, InpaintRegion.Round(region.Height));
         using var patch = LanczosImageResize.Resize(raw, width, height);
         using var resizedMask = LanczosImageResize.Resize(alphaMask, width, height);
+        // Scale the sampled patch back to the selected canvas region before compositing.
         PlacePatch(source, patch, region, resizedMask);
         return ImageMetadataService.ReapplyNovelAiMetadata(EncodePng(source), generated, source.Width, source.Height);
     }
