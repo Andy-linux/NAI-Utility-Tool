@@ -90,21 +90,10 @@ function Copy-TrackedResource([string]$Relative, [string]$TargetRelative) {
     New-Item -ItemType Directory -Force (Split-Path $target -Parent) | Out-Null
     Copy-Item -LiteralPath $source -Destination $target
 }
-function Get-ReleaseSourceFingerprint {
-    $paths = @(& git -C $RootDir ls-files --cached --others --exclude-standard -- src/NAITool src/NAIToolLauncher assets models Directory.Build.props global.json LICENSE publish.ps1)
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot fingerprint release sources.' }
-    $lines = foreach ($relative in $paths | Sort-Object -Unique) {
-        $file = Join-Path $RootDir $relative
-        if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing source: $relative" }
-        "$relative $((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash)"
-    }
-    $sha = [Security.Cryptography.SHA256]::Create()
-    try { return [Convert]::ToHexString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes(($lines -join "`n")))) }
-    finally { $sha.Dispose() }
-}
+# Git identifies source history; file checksums belong to the distributed binaries.
 $SourceSha = (& git -C $RootDir rev-parse HEAD).Trim()
-$SourceDirty = @(& git -C $RootDir status --porcelain).Count -gt 0
-$SourceFingerprint = Get-ReleaseSourceFingerprint
+$SourceTree = (& git -C $RootDir rev-parse 'HEAD^{tree}').Trim()
+$SourceDirty = @(& git -C $RootDir diff --name-only HEAD -- src assets models installer publish.ps1 Directory.Build.props global.json LICENSE).Count -gt 0
 New-Item -ItemType Directory -Force $PublishDir | Out-Null
 New-Item -ItemType Directory -Force $BinDir | Out-Null
 
@@ -122,7 +111,7 @@ New-Item -ItemType Directory -Force (Join-Path $AssetsDir "tagsheet") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $AssetsDir "wildcards") | Out-Null
 
 foreach ($relative in $TrackedResources) {
-    if ($relative -match '^assets/(tagsheet|wildcards)/' -or
+    if ($relative -match '^assets/(tagsheet|wildcards|fxpresets)/' -or
         ($relative -match '^assets/img/.*\.png$' -and $relative -notmatch '/MaidAeka')) {
         Copy-TrackedResource $relative $relative
     }
@@ -134,32 +123,16 @@ foreach ($relative in $TrackedResources | Where-Object { $_ -match '^models/upsc
     Copy-TrackedResource $relative $relative
 }
 
-# ── 创建 user/ 目录结构并填入默认数据 ──
-$UserDir = Join-Path $PublishDir "user"
-New-Item -ItemType Directory -Force (Join-Path $UserDir "config")             | Out-Null
-New-Item -ItemType Directory -Force (Join-Path $UserDir "fxpresets")          | Out-Null
-New-Item -ItemType Directory -Force (Join-Path $UserDir "userprompts")        | Out-Null
-New-Item -ItemType Directory -Force (Join-Path $UserDir "wildcards")          | Out-Null
-New-Item -ItemType Directory -Force (Join-Path $UserDir "automation\presets") | Out-Null
-New-Item -ItemType Directory -Force (Join-Path $UserDir "vibe")              | Out-Null
-
-foreach ($relative in $TrackedResources) {
-    if ($relative -match '^assets/fxpresets/.*\.json$' -or $relative -match '^assets/wildcards/') {
-        Copy-TrackedResource $relative ($relative -replace '^assets/', 'user/')
-    }
-}
-
-# ── 其他根级目录 ──
-New-Item -ItemType Directory -Force (Join-Path $PublishDir "output") | Out-Null
-New-Item -ItemType Directory -Force (Join-Path $PublishDir "logs")   | Out-Null
+# Never ship user/, output/ or logs/: an archive overlay must not replace user data.
+# Startup already copies missing presets/wildcards from assets/ without overwriting edits.
 
 # Original GPL-3.0 license distributed with the binary.
 Copy-Item -LiteralPath (Join-Path $RootDir "LICENSE") -Destination (Join-Path $PublishDir "LICENSE")
+Copy-Item -LiteralPath (Join-Path $RootDir "installer\INSTALL.txt") -Destination (Join-Path $PublishDir "INSTALL.txt")
 
 # ── 清理不需要的文件 ──
 Remove-PublishBloat -Path $PublishDir
 
-if ((Get-ReleaseSourceFingerprint) -ne $SourceFingerprint) { throw 'Release sources changed during publication; rebuild from a stable revision.' }
-@{ sourceSha=$SourceSha; sourceDirty=$SourceDirty; sourceFingerprint=$SourceFingerprint; configuration=$Configuration; runtime=$Runtime; selfContained=$true; launcherSelfContained=$true; utc=[DateTime]::UtcNow.ToString('o') } |
+@{ sourceSha=$SourceSha; sourceTree=$SourceTree; sourceDirty=$SourceDirty; configuration=$Configuration; runtime=$Runtime; selfContained=$true; launcherSelfContained=$true; utc=[DateTime]::UtcNow.ToString('o') } |
     ConvertTo-Json | Set-Content -LiteralPath "$PublishDir.source.json" -Encoding utf8
 Write-Host "发布完成！文件位于: $PublishDir" -ForegroundColor Green
