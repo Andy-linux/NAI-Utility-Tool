@@ -81,7 +81,7 @@ public sealed partial class MainWindow
                 p.Schedule = NormalizeScheduleForModel(string.IsNullOrEmpty(meta.NoiseSchedule) ? defaults.Schedule : meta.NoiseSchedule, p.Model, sampler: p.Sampler);
             if (!meta.IsSdFormat)
             {
-                p.TagHintTransparentBackground = meta.TagHintTransparentBackground ?? false;
+                p.TagHintTransparentBackground = meta.IsNaiParsed ? presetMatch.TransparentBackground : meta.TagHintTransparentBackground ?? false;
                 p.DynamicThresholding = meta.DynamicThresholding;
                 p.LegacyUc = legacyUc;
                 p.Sm = meta.Sm || meta.SmDyn;
@@ -206,7 +206,7 @@ public sealed partial class MainWindow
                 p.Schedule = NormalizeScheduleForModel(string.IsNullOrEmpty(meta.NoiseSchedule) ? defaults.Schedule : meta.NoiseSchedule, p.Model, sampler: p.Sampler);
             if (!meta.IsSdFormat)
             {
-                p.TagHintTransparentBackground = meta.TagHintTransparentBackground ?? false;
+                p.TagHintTransparentBackground = meta.IsNaiParsed ? presetMatch.TransparentBackground : meta.TagHintTransparentBackground ?? false;
                 p.DynamicThresholding = meta.DynamicThresholding;
                 p.LegacyUc = legacyUc;
                 p.Sm = meta.Sm || meta.SmDyn;

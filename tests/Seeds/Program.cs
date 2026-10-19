@@ -79,3 +79,4 @@ Console.WriteLine($"Passed {checks} seed regression checks.");
 ModelMetadataChecks.Run();
 CharacterMetadataChecks.Run();
 SelectiveImportChecks.Run();
+PresetImportChecks.Run();

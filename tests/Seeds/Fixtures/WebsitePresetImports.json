@@ -1,0 +1,475 @@
+{
+  "deployment": "b50892a-38995131626-1",
+  "observed": "2026-10-19",
+  "method": "Actual website metadata-import callback, synthetic neutral metadata, Clean Imports disabled; no generation requests.",
+  "cases": [
+    {
+      "id": "transparency-hint-without-text",
+      "sourceModel": "nai-diffusion-5-full",
+      "targetModel": "nai-diffusion-5-full",
+      "metadata": {
+        "prompt": "blue cup",
+        "uc": "",
+        "width": 512,
+        "height": 512,
+        "steps": 23,
+        "scale": 5,
+        "seed": 246813621,
+        "sampler": "k_euler_ancestral",
+        "noise_schedule": "karras",
+        "tag_hint_qt": 0,
+        "tag_hint_uc_preset": 0,
+        "tag_hint_transparent_background": true,
+        "v4_prompt": {
+          "caption": {
+            "base_caption": "blue cup",
+            "char_captions": []
+          },
+          "use_coords": false
+        },
+        "v4_negative_prompt": {
+          "caption": {
+            "base_caption": "",
+            "char_captions": []
+          }
+        }
+      },
+      "expected": {
+        "prompt": "blue cup",
+        "uc": "",
+        "quality": "none",
+        "transparent": false,
+        "ucPreset": "none"
+      }
+    },
+    {
+      "id": "transparency-only",
+      "sourceModel": "nai-diffusion-5-full",
+      "targetModel": "nai-diffusion-5-full",
+      "metadata": {
+        "prompt": "blue cup, transparent background",
+        "uc": "",
+        "width": 512,
+        "height": 512,
+        "steps": 23,
+        "scale": 5,
+        "seed": 246813621,
+        "sampler": "k_euler_ancestral",
+        "noise_schedule": "karras",
+        "tag_hint_qt": 0,
+        "tag_hint_uc_preset": 0,
+        "tag_hint_transparent_background": true,
+        "v4_prompt": {
+          "caption": {
+            "base_caption": "blue cup, transparent background",
+            "char_captions": []
+          },
+          "use_coords": false
+        },
+        "v4_negative_prompt": {
+          "caption": {
+            "base_caption": "",
+            "char_captions": []
+          }
+        }
+      },
+      "expected": {
+        "prompt": "blue cup",
+        "uc": "",
+        "quality": "none",
+        "transparent": true,
+        "ucPreset": "none"
+      }
+    },
+    {
+      "id": "transparency-quality",
+      "sourceModel": "nai-diffusion-5-full",
+      "targetModel": "nai-diffusion-5-full",
+      "metadata": {
+        "prompt": "blue cup, transparent background, very aesthetic, masterpiece, no text",
+        "uc": "",
+        "width": 512,
+        "height": 512,
+        "steps": 23,
+        "scale": 5,
+        "seed": 246813621,
+        "sampler": "k_euler_ancestral",
+        "noise_schedule": "karras",
+        "tag_hint_qt": 1,
+        "tag_hint_uc_preset": 0,
+        "tag_hint_transparent_background": true,
+        "v4_prompt": {
+          "caption": {
+            "base_caption": "blue cup, transparent background, very aesthetic, masterpiece, no text",
+            "char_captions": []
+          },
+          "use_coords": false
+        },
+        "v4_negative_prompt": {
+          "caption": {
+            "base_caption": "",
+            "char_captions": []
+          }
+        }
+      },
+      "expected": {
+        "prompt": "blue cup",
+        "uc": "",
+        "quality": "standard",
+        "transparent": true,
+        "ucPreset": "none"
+      }
+    },
+    {
+      "id": "uc-hint-priority",
+      "sourceModel": "nai-diffusion-5-full",
+      "targetModel": "nai-diffusion-5-full",
+      "metadata": {
+        "prompt": "blue cup",
+        "uc": "lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page, @_@, mismatched pupils, glowing eyes, bad anatomy",
+        "width": 512,
+        "height": 512,
+        "steps": 23,
+        "scale": 5,
+        "seed": 246813621,
+        "sampler": "k_euler_ancestral",
+        "noise_schedule": "karras",
+        "tag_hint_qt": 0,
+        "tag_hint_uc_preset": 2,
+        "tag_hint_transparent_background": false,
+        "v4_prompt": {
+          "caption": {
+            "base_caption": "blue cup",
+            "char_captions": []
+          },
+          "use_coords": false
+        },
+        "v4_negative_prompt": {
+          "caption": {
+            "base_caption": "lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page, @_@, mismatched pupils, glowing eyes, bad anatomy",
+            "char_captions": []
+          }
+        }
+      },
+      "expected": {
+        "prompt": "blue cup",
+        "uc": "@_@, mismatched pupils, glowing eyes, bad anatomy",
+        "quality": "none",
+        "transparent": false,
+        "ucPreset": "heavy"
+      }
+    },
+    {
+      "id": "uc-prefix-without-delimiter",
+      "sourceModel": "nai-diffusion-5-full",
+      "targetModel": "nai-diffusion-5-full",
+      "metadata": {
+        "prompt": "blue cup",
+        "uc": "lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank pageartifact",
+        "width": 512,
+        "height": 512,
+        "steps": 23,
+        "scale": 5,
+        "seed": 246813621,
+        "sampler": "k_euler_ancestral",
+        "noise_schedule": "karras",
+        "tag_hint_qt": 0,
+        "tag_hint_uc_preset": 2,
+        "tag_hint_transparent_background": false,
+        "v4_prompt": {
+          "caption": {
+            "base_caption": "blue cup",
+            "char_captions": []
+          },
+          "use_coords": false
+        },
+        "v4_negative_prompt": {
+          "caption": {
+            "base_caption": "lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank pageartifact",
+            "char_captions": []
+          }
+        }
+      },
+      "expected": {
+        "prompt": "blue cup",
+        "uc": "artifact",
+        "quality": "none",
+        "transparent": false,
+        "ucPreset": "heavy"
+      }
+    },
+    {
+      "id": "text-boundary-comma",
+      "sourceModel": "nai-diffusion-5-full",
+      "targetModel": "nai-diffusion-5-full",
+      "metadata": {
+        "prompt": "blue cup, very aesthetic, masterpiece, no text, text: OPEN",
+        "uc": "",
+        "width": 512,
+        "height": 512,
+        "steps": 23,
+        "scale": 5,
+        "seed": 246813621,
+        "sampler": "k_euler_ancestral",
+        "noise_schedule": "karras",
+        "tag_hint_qt": 1,
+        "tag_hint_uc_preset": 0,
+        "tag_hint_transparent_background": false,
+        "v4_prompt": {
+          "caption": {
+            "base_caption": "blue cup, very aesthetic, masterpiece, no text, text: OPEN",
+            "char_captions": []
+          },
+          "use_coords": false
+        },
+        "v4_negative_prompt": {
+          "caption": {
+            "base_caption": "",
+            "char_captions": []
+          }
+        }
+      },
+      "expected": {
+        "prompt": "blue cup, very aesthetic, masterpiece, no text, text: OPEN",
+        "uc": "",
+        "quality": "none",
+        "transparent": false,
+        "ucPreset": "none"
+      }
+    },
+    {
+      "id": "text-boundary-exact",
+      "sourceModel": "nai-diffusion-5-full",
+      "targetModel": "nai-diffusion-5-full",
+      "metadata": {
+        "prompt": "blue cup, very aesthetic, masterpiece, no text text: OPEN",
+        "uc": "",
+        "width": 512,
+        "height": 512,
+        "steps": 23,
+        "scale": 5,
+        "seed": 246813621,
+        "sampler": "k_euler_ancestral",
+        "noise_schedule": "karras",
+        "tag_hint_qt": 1,
+        "tag_hint_uc_preset": 0,
+        "tag_hint_transparent_background": false,
+        "v4_prompt": {
+          "caption": {
+            "base_caption": "blue cup, very aesthetic, masterpiece, no text text: OPEN",
+            "char_captions": []
+          },
+          "use_coords": false
+        },
+        "v4_negative_prompt": {
+          "caption": {
+            "base_caption": "",
+            "char_captions": []
+          }
+        }
+      },
+      "expected": {
+        "prompt": "blue cup text: OPEN",
+        "uc": "",
+        "quality": "standard",
+        "transparent": false,
+        "ucPreset": "none"
+      }
+    },
+    {
+      "id": "historical-quality-is-literal",
+      "sourceModel": "nai-diffusion-4-curated-preview",
+      "targetModel": "nai-diffusion-4-curated-preview",
+      "metadata": {
+        "prompt": "blue cup, rating:general, amazing quality, very aesthetic, absurdres",
+        "uc": "",
+        "width": 512,
+        "height": 512,
+        "steps": 23,
+        "scale": 5,
+        "seed": 246813621,
+        "sampler": "k_euler_ancestral",
+        "noise_schedule": "karras",
+        "tag_hint_qt": 1,
+        "tag_hint_uc_preset": 0,
+        "tag_hint_transparent_background": false,
+        "v4_prompt": {
+          "caption": {
+            "base_caption": "blue cup, rating:general, amazing quality, very aesthetic, absurdres",
+            "char_captions": []
+          },
+          "use_coords": false
+        },
+        "v4_negative_prompt": {
+          "caption": {
+            "base_caption": "",
+            "char_captions": []
+          }
+        }
+      },
+      "expected": {
+        "prompt": "blue cup, rating:general, amazing quality, very aesthetic, absurdres",
+        "uc": "",
+        "quality": "none",
+        "transparent": false,
+        "ucPreset": "none"
+      }
+    },
+    {
+      "id": "quality-hint-none-with-tags",
+      "sourceModel": "nai-diffusion-5-full",
+      "targetModel": "nai-diffusion-5-full",
+      "metadata": {
+        "prompt": "blue cup, very aesthetic, masterpiece, no text",
+        "uc": "",
+        "width": 512,
+        "height": 512,
+        "steps": 23,
+        "scale": 5,
+        "seed": 246813621,
+        "sampler": "k_euler_ancestral",
+        "noise_schedule": "karras",
+        "tag_hint_qt": 0,
+        "tag_hint_uc_preset": 0,
+        "tag_hint_transparent_background": false,
+        "v4_prompt": {
+          "caption": {
+            "base_caption": "blue cup, very aesthetic, masterpiece, no text",
+            "char_captions": []
+          },
+          "use_coords": false
+        },
+        "v4_negative_prompt": {
+          "caption": {
+            "base_caption": "",
+            "char_captions": []
+          }
+        }
+      },
+      "expected": {
+        "prompt": "blue cup, very aesthetic, masterpiece, no text",
+        "uc": "",
+        "quality": "none",
+        "transparent": false,
+        "ucPreset": "none"
+      }
+    },
+    {
+      "id": "quality-first-mix",
+      "sourceModel": "nai-diffusion-5-full",
+      "targetModel": "nai-diffusion-5-full",
+      "metadata": {
+        "prompt": "blue cup, very aesthetic, masterpiece, no text|wooden table",
+        "uc": "",
+        "width": 512,
+        "height": 512,
+        "steps": 23,
+        "scale": 5,
+        "seed": 246813621,
+        "sampler": "k_euler_ancestral",
+        "noise_schedule": "karras",
+        "tag_hint_qt": 1,
+        "tag_hint_uc_preset": 0,
+        "tag_hint_transparent_background": false,
+        "v4_prompt": {
+          "caption": {
+            "base_caption": "blue cup, very aesthetic, masterpiece, no text|wooden table",
+            "char_captions": []
+          },
+          "use_coords": false
+        },
+        "v4_negative_prompt": {
+          "caption": {
+            "base_caption": "",
+            "char_captions": []
+          }
+        }
+      },
+      "expected": {
+        "prompt": "blue cup|wooden table",
+        "uc": "",
+        "quality": "standard",
+        "transparent": false,
+        "ucPreset": "none"
+      }
+    },
+    {
+      "id": "cross-model-human-uc",
+      "sourceModel": "nai-diffusion-5-full",
+      "targetModel": "nai-diffusion-4-full",
+      "metadata": {
+        "prompt": "blue cup",
+        "uc": "lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page, @_@, mismatched pupils, glowing eyes, bad anatomy",
+        "width": 512,
+        "height": 512,
+        "steps": 23,
+        "scale": 5,
+        "seed": 246813621,
+        "sampler": "k_euler_ancestral",
+        "noise_schedule": "karras",
+        "tag_hint_qt": 0,
+        "tag_hint_uc_preset": 4,
+        "tag_hint_transparent_background": false,
+        "v4_prompt": {
+          "caption": {
+            "base_caption": "blue cup",
+            "char_captions": []
+          },
+          "use_coords": false
+        },
+        "v4_negative_prompt": {
+          "caption": {
+            "base_caption": "lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page, @_@, mismatched pupils, glowing eyes, bad anatomy",
+            "char_captions": []
+          }
+        }
+      },
+      "expected": {
+        "prompt": "blue cup",
+        "uc": "",
+        "quality": "none",
+        "transparent": false,
+        "ucPreset": "heavy"
+      }
+    },
+    {
+      "id": "uc-literal-nsfw-with-preset",
+      "sourceModel": "nai-diffusion-5-full",
+      "targetModel": "nai-diffusion-5-full",
+      "metadata": {
+        "prompt": "nsfw ceramic sculpture",
+        "uc": "nsfw, lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page",
+        "width": 512,
+        "height": 512,
+        "steps": 23,
+        "scale": 5,
+        "seed": 246813621,
+        "sampler": "k_euler_ancestral",
+        "noise_schedule": "karras",
+        "tag_hint_qt": 0,
+        "tag_hint_uc_preset": 2,
+        "tag_hint_transparent_background": false,
+        "v4_prompt": {
+          "caption": {
+            "base_caption": "nsfw ceramic sculpture",
+            "char_captions": []
+          },
+          "use_coords": false
+        },
+        "v4_negative_prompt": {
+          "caption": {
+            "base_caption": "nsfw, lowres, artistic error, film grain, scan artifacts, worst quality, bad quality, jpeg artifacts, very displeasing, chromatic aberration, dithering, halftone, screentone, multiple views, logo, too many watermarks, negative space, blank page",
+            "char_captions": []
+          }
+        }
+      },
+      "expected": {
+        "prompt": "nsfw ceramic sculpture",
+        "uc": "",
+        "quality": "none",
+        "transparent": false,
+        "ucPreset": "heavy"
+      }
+    }
+  ]
+}

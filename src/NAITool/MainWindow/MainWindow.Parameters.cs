@@ -132,16 +132,6 @@ public sealed partial class MainWindow
         }).Schedule;
     }
 
-    private sealed class ImportedPromptPresetMatch
-    {
-        public string PositivePrompt { get; init; } = "";
-        public string NegativePrompt { get; init; } = "";
-        public bool QualityMatched { get; init; }
-        public string QualityPreset { get; init; } = "standard";
-        public int? UcPresetMatched { get; init; }
-        public string? UcPresetId { get; init; }
-    }
-
     private void ApplyImportedImageModel(ImageMetadata meta, NAIParameters parameters, string[] availableModels)
     {
         if (meta.IsModelInference) return;
@@ -170,8 +160,9 @@ public sealed partial class MainWindow
     {
         string? sourceModel = ImportedImageModel.ResolveForTarget(meta.Source, GenerationModels)
             ?? ImportedImageModel.ResolveForTarget(meta.ModelDisplayName, GenerationModels);
-        var models = meta.IsNaiParsed && sourceModel != null
-            ? new[] { sourceModel } : GetPromptPresetRecognitionModelCandidates(model);
+        if (meta.IsNaiParsed && sourceModel != null)
+            return ImportedPromptPresets.Read(positivePrompt, negativePrompt, sourceModel, model, meta);
+        var models = GetPromptPresetRecognitionModelCandidates(model);
         var qualityMatch = meta.QualityToggle == false ? null : FindBestQualityPresetMatch(positivePrompt, models);
         string importedPositive = qualityMatch?.StrippedPrompt ?? positivePrompt;
         if (meta.TagHintTransparentBackground == true && TryStripPromptPreset(importedPositive, "transparent background", out var withoutBackground))

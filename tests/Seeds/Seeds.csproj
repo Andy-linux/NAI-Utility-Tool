@@ -8,6 +8,7 @@
     <NaitoolBuildDirectory Condition="'$(NaitoolBuildDirectory)' == ''">$(MSBuildThisFileDirectory)../../build/$(Configuration)/bin</NaitoolBuildDirectory>
   </PropertyGroup>
   <ItemGroup>
+    <None Update="Fixtures/*.json" CopyToOutputDirectory="PreserveNewest" />
     <Reference Include="NAI Utility Tool">
       <HintPath>$(NaitoolBuildDirectory)/NAI Utility Tool.dll</HintPath>
     </Reference>
