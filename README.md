@@ -8,6 +8,10 @@ NAI Utility Tool is a Windows desktop client for NovelAI image workflows. It is 
 
 Current release: [**1.3.0_fork.2**](https://github.com/Andy-linux/NAI-Utility-Tool/releases/tag/1.3.0_fork.2), a self-contained Windows x64 portable build.
 
+## Subsequent dev changes (not yet in release assets)
+
+Streaming previews follow the website's default starting point (`step_ix >= 5`), while gateway frames without step metadata keep their compatible preview behavior. After a valid final image arrives, late previews are ignored and repeated final frames for the same sample retain the latest valid result. This prevents preview or duplicate traffic from turning a received result into a failure. Targeted checks in [tests/Seeds](tests/Seeds) exercise the built receiver offline.
+
 ## 1.3.0_fork.2 changes (2026-10-19)
 
 This release continues aligning image imports, effective requests, references, saving and file dragging with NovelAI while retaining the client's local workflows.

@@ -8,6 +8,10 @@ NAI Utility Tool 是一个面向 NovelAI 图像工作流的 Windows 桌面客户
 
 当前版本：[**1.3.0_fork.2**](https://github.com/Andy-linux/NAI-Utility-Tool/releases/tag/1.3.0_fork.2)，Windows x64 自包含便携版。
 
+## dev 后续改进（尚未收入发布包）
+
+流式预览遵循官网默认起点（`step_ix >= 5`）；缺少步数的网关帧保留兼容预览。收到有效最终图后忽略迟到预览，同一样本的重复 final 保留最新有效结果，避免结果已返回却被后续预览或重复帧判为失败。定向回归见 [tests/Seeds](tests/Seeds)，验证范围为生产接收器的离线调用。
+
 ## 1.3.0_fork.2 更新（2026-10-19）
 
 本版继续对齐 NovelAI 的图像导入、有效请求、参考图处理、保存与拖拽流程，保留客户端已有的本地工作流。

@@ -80,3 +80,4 @@ ModelMetadataChecks.Run();
 CharacterMetadataChecks.Run();
 SelectiveImportChecks.Run();
 PresetImportChecks.Run();
+await StreamResultChecks.RunAsync();

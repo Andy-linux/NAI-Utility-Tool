@@ -16,6 +16,12 @@ internal static class NovelAIImageStream
             if (type != "intermediate" && type != "final") return;
             if (frame.TryGetValue("samp_ix", out var sample) && sample is not (0L or 0UL))
                 throw new InvalidDataException("Unexpected image sample index for a single-result request.");
+            if (type == "intermediate")
+            {
+                // The website hides step_ix < 5 by default. Gateways without step metadata retain their previews.
+                // Once a final is received, preview-only traffic cannot replace or invalidate that result.
+                if (final != null || (frame.TryGetValue("step_ix", out var step) && step is < 5L or < 5UL)) return;
+            }
             if (!frame.TryGetValue("image", out var value)) throw new InvalidDataException("Image stream frame has no image.");
             byte[] bytes = value switch
             {
@@ -27,12 +33,11 @@ internal static class NovelAIImageStream
                 throw new InvalidDataException("Stream image is not decodable.");
             if (type == "final")
             {
-                if (final != null) throw new InvalidDataException("Multiple final images are unsupported.");
+                // A single sample may repeat its final frame; keep the latest validated result.
                 final = bytes;
             }
             else
             {
-                if (final != null) throw new InvalidDataException("Preview received after final image.");
                 progress?.Report(bytes);
             }
         }
