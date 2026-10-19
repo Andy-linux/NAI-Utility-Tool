@@ -166,14 +166,18 @@ public sealed partial class MainWindow
         public string? UcPresetId { get; init; }
     }
 
-    private ImportedPromptPresetMatch ExtractImportedPromptPresetMatch(string positivePrompt, string negativePrompt, string model, bool transparent = false, bool ucNone = false, bool qualityNone = false)
+    private ImportedPromptPresetMatch ExtractImportedPromptPresetMatch(string positivePrompt, string negativePrompt, string model, ImageMetadata meta)
     {
-        var qualityMatch = qualityNone ? null : FindBestQualityPresetMatch(positivePrompt, model);
+        string? sourceModel = ImportedImageModel.ResolveForTarget(meta.Source, GenerationModels)
+            ?? ImportedImageModel.ResolveForTarget(meta.ModelDisplayName, GenerationModels);
+        var models = meta.IsNaiParsed && sourceModel != null
+            ? new[] { sourceModel } : GetPromptPresetRecognitionModelCandidates(model);
+        var qualityMatch = meta.QualityToggle == false ? null : FindBestQualityPresetMatch(positivePrompt, models);
         string importedPositive = qualityMatch?.StrippedPrompt ?? positivePrompt;
-        if (transparent && TryStripPromptPreset(importedPositive, "transparent background", out var withoutBackground))
+        if (meta.TagHintTransparentBackground == true && TryStripPromptPreset(importedPositive, "transparent background", out var withoutBackground))
             importedPositive = withoutBackground;
         string ucBody = negativePrompt.StartsWith("nsfw, ", StringComparison.Ordinal) ? negativePrompt[6..] : negativePrompt;
-        var ucMatch = ucNone ? null : FindBestUcPresetMatch(ucBody, model);
+        var ucMatch = meta.UcPresetId == "none" ? null : FindBestUcPresetMatch(ucBody, models);
         string importedNegative = ucMatch?.StrippedPrompt ?? negativePrompt;
         if (ucMatch != null && negativePrompt.StartsWith("nsfw, ", StringComparison.Ordinal) &&
             !NovelAiPromptPresets.AddsAutomaticNsfw(model, ucMatch.UcPresetId ?? "none", positivePrompt))
@@ -190,10 +194,10 @@ public sealed partial class MainWindow
         };
     }
 
-    private PromptPresetCandidateMatch? FindBestQualityPresetMatch(string prompt, string currentModel)
+    private PromptPresetCandidateMatch? FindBestQualityPresetMatch(string prompt, IEnumerable<string> models)
     {
         PromptPresetCandidateMatch? bestMatch = null;
-        foreach (string candidateModel in GetPromptPresetRecognitionModelCandidates(currentModel))
+        foreach (string candidateModel in models)
         foreach (string qualityPreset in NovelAiPromptPresets.SupportsLightQuality(candidateModel) ? new[] { "standard", "light" } : new[] { "standard" })
         {
             string presetText = NovelAiPromptPresets.QualityTags(candidateModel, qualityPreset);
@@ -228,10 +232,10 @@ public sealed partial class MainWindow
         return bestMatch;
     }
 
-    private PromptPresetCandidateMatch? FindBestUcPresetMatch(string prompt, string currentModel)
+    private PromptPresetCandidateMatch? FindBestUcPresetMatch(string prompt, IEnumerable<string> models)
     {
         PromptPresetCandidateMatch? bestMatch = null;
-        foreach (string candidateModel in GetPromptPresetRecognitionModelCandidates(currentModel))
+        foreach (string candidateModel in models)
         {
             foreach (string ucId in NovelAiPromptPresets.UcIds(candidateModel).Where(id => id != "none"))
             {

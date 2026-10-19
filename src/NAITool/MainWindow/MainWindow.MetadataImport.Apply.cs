@@ -35,7 +35,7 @@ public sealed partial class MainWindow
         if (options.Model) ApplyImportedImageModel(meta, p, GenerationModels);
         if (options.Settings && ModelCapabilities.SupportsEffort(p.Model))
             p.Effort = meta.Effort ?? (meta.ModelDisplayName.Contains("-medium", System.StringComparison.Ordinal) ? "medium" : "high");
-        var presetMatch = ExtractImportedPromptPresetMatch(positivePrompt, negativePrompt, p.Model, meta.TagHintTransparentBackground == true, meta.UcPresetId == "none", meta.QualityToggle == false);
+        var presetMatch = ExtractImportedPromptPresetMatch(positivePrompt, negativePrompt, p.Model, meta);
         if (options.Settings || meta.IsNaiParsed)
         {
             positivePrompt = presetMatch.PositivePrompt;
@@ -61,12 +61,6 @@ public sealed partial class MainWindow
             }
             p.QualityToggle = meta.QualityToggle ?? presetMatch.QualityMatched;
             p.QualityPreset = meta.QualityPreset ?? presetMatch.QualityPreset;
-            if (!ModelCapabilities.IsMedium(p))
-            {
-                p.UcPreset = meta.UcPresetId == "none" ? 2 : presetMatch.UcPresetMatched ?? 2;
-                p.UcPresetId = meta.UcPresetId == "none" ? "none" : presetMatch.UcPresetId ?? "none";
-            }
-
             int steps = meta.HasSteps ? meta.Steps : defaults.Steps;
             if ((meta.HasSteps || meta.IsNaiParsed) && !ModelCapabilities.IsMedium(p))
             {
@@ -97,6 +91,11 @@ public sealed partial class MainWindow
 
             p.Sampler = NormalizeSamplerForModel(p.Sampler, p.Model);
             p.Schedule = NormalizeScheduleForModel(p.Schedule, p.Model, sampler: p.Sampler);
+        }
+        if (options.Settings || options.NegativePrompt && meta.IsNaiParsed)
+        {
+            p.UcPreset = meta.UcPresetId == "none" ? 2 : presetMatch.UcPresetMatched ?? 2;
+            p.UcPresetId = meta.UcPresetId == "none" ? "none" : presetMatch.UcPresetId ?? "none";
         }
         if (options.Seed && !string.IsNullOrEmpty(meta.Seed)) p.Seed = meta.Seed;
 
@@ -164,7 +163,7 @@ public sealed partial class MainWindow
         if (options.Model) ApplyImportedImageModel(meta, p, _i2iEditMode == I2IEditMode.Denoise ? GenerationModels : I2IModels);
         if (options.Settings && ModelCapabilities.SupportsEffort(p.Model))
             p.Effort = meta.Effort ?? (meta.ModelDisplayName.Contains("-medium", System.StringComparison.Ordinal) ? "medium" : "high");
-        var presetMatch = ExtractImportedPromptPresetMatch(positivePrompt, negativePrompt, p.Model, meta.TagHintTransparentBackground == true, meta.UcPresetId == "none", meta.QualityToggle == false);
+        var presetMatch = ExtractImportedPromptPresetMatch(positivePrompt, negativePrompt, p.Model, meta);
         if (options.Settings || meta.IsNaiParsed)
         {
             positivePrompt = presetMatch.PositivePrompt;
@@ -190,12 +189,6 @@ public sealed partial class MainWindow
             }
             p.QualityToggle = meta.QualityToggle ?? presetMatch.QualityMatched;
             p.QualityPreset = meta.QualityPreset ?? presetMatch.QualityPreset;
-            if (!ModelCapabilities.IsMedium(p))
-            {
-                p.UcPreset = meta.UcPresetId == "none" ? 2 : presetMatch.UcPresetMatched ?? 2;
-                p.UcPresetId = meta.UcPresetId == "none" ? "none" : presetMatch.UcPresetId ?? "none";
-            }
-
             int steps = meta.HasSteps ? meta.Steps : defaults.Steps;
             if ((meta.HasSteps || meta.IsNaiParsed) && !ModelCapabilities.IsMedium(p))
             {
@@ -223,6 +216,11 @@ public sealed partial class MainWindow
 
             p.Sampler = NormalizeSamplerForModel(p.Sampler, p.Model);
             p.Schedule = NormalizeScheduleForModel(p.Schedule, p.Model, sampler: p.Sampler);
+        }
+        if (options.Settings || options.NegativePrompt && meta.IsNaiParsed)
+        {
+            p.UcPreset = meta.UcPresetId == "none" ? 2 : presetMatch.UcPresetMatched ?? 2;
+            p.UcPresetId = meta.UcPresetId == "none" ? "none" : presetMatch.UcPresetId ?? "none";
         }
         if (options.Seed && !string.IsNullOrEmpty(meta.Seed)) p.Seed = meta.Seed;
 
