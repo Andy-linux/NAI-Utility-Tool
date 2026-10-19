@@ -6,43 +6,27 @@ Language: English | [简体中文](README-CN.md)
 
 NAI Utility Tool is a Windows desktop client for NovelAI image workflows. It is built with .NET 9, WinUI 3, Windows App SDK, Win2D, SkiaSharp, and ONNX Runtime. It is not intended to replace the official NovelAI website; instead, it brings day-to-day local workflows into one tool: generation, image-to-image editing, mask editing, prompt management, reference-image workflows, batch automation, post-processing, upscaling, metadata inspection, and local reverse tagging.
 
-The fork version remains `1.3.0_fork.1`. This document describes the **dev stage**, not a new official release.
+Current release: [**1.3.0_fork.2**](https://github.com/Andy-linux/NAI-Utility-Tool/releases/tag/1.3.0_fork.2), a self-contained Windows x64 portable build.
 
-## Dev goal and status (2026-10-18)
+## 1.3.0_fork.2 changes (2026-10-19)
 
-**The dev branch aligns client interactions, effective generation requests, image processing and Info round trips with the NovelAI frontend while retaining local extensions.** Recorded references include website builds `78a367e` and `b50892a`. This is a local development candidate, not a complete parity claim or a new release.
+This release continues aligning image imports, effective requests, references, saving and file dragging with NovelAI while retaining the client's local workflows.
 
-### Current update
+- **Info and prompt imports:** explicit empty captions and character lists replace previous content. Normal and Actual Captions, character order and coordinates follow the selected import options. Generation and inpainting share source-model Quality, UC and transparency preset interpretation based on matching text, fixing duplicate tags, excess cleanup and stale transparency settings.
+- **Models, characters and text:** restore V5 High/Medium through base model and Effort, and align model defaults, samplers and schedules. Support up to 32 V5 characters and 6 V4/V4.5 characters; align disabled-character processing, quoted-dialogue extraction and newline conversion.
+- **Vibe and Precise references:** persist separate V3/V4 collections, normalization preferences and disabled cards. Bind encoded caches to their source image, model family and extraction amount. Align V3 448x448 preprocessing and Precise resizing, including state ownership during reference switches and asynchronous encoding.
+- **Inpainting and ROI:** add focused regions, context margins, crop/request resizing, character-coordinate remapping and result placement. Keep source, mask and candidate snapshots consistent through image replacement, Apply, Undo/Redo and saves.
+- **Original images, saving and history:** retain response bytes separately from display copies. Choose Original or PNG output; PNG conversion preserves generation Info. Correct metadata-carrier precedence, ordinary transparency and stealth-alpha rendering. Organize output by month and sort history by creation time.
+- **File dragging and UI:** drag full image files with Info from the generated preview, history/gallery and Inspect, with a compact 160 px drag preview. Unsaved Inspect Info edits use the current snapshot. Skip the automatic first-run tour, clarify the reset action and keep settings controls visible in narrow windows.
+- **Business logs and APIs:** provide Simple/Debug logs and fix the Debug initialization startup stall. Record request, response, parsing and saving stages separately. Retain custom Base URLs, generation timeouts, balance refresh and final stream-result handling.
 
-- Models: normalize disabled character text before filtering outgoing characters; retain up to 32 V5 characters (V4/V4.5 request limit 6). Correct V3 sampler choices, DDIM/SMEA/schedule and stream capability handling, V3 Inpaint DDIM resolution, V4 Legacy UC defaults/imports, and destination-model selection before workspace synchronization.
-- References: retain separate V3/V4 collections and normalization state across restarts. Disabled cards do not consume the active-reference limit or disappear at restart. Source/model/extraction identity is fixed during asynchronous encoding; changed inputs stop the pending generation while preserving the paid encoding in its correct cache. Thumbnail matches expose extraction only when the original source is hash-verified.
-- V3 references: match the observed website's 448x448 aspect-preserving resize, black background, rounding and stealth-alpha cleanup.
-- Image editing: load pixels and Info from one file snapshot; reload updates the reusable bytes without discarding the mask/offset policy. New images clear stale candidates. Offset Apply caches carry the edited image's Info. Stealth Info alpha bits are removed from display/canvas copies before WinUI premultiplication; original bytes stay available for saves and sharing.
-- Saving: Settings > Local Storage offers Original (compatibility default) or PNG for new generations and Enhance results. WebP results can also be saved manually as WebP or PNG. PNG conversion preserves decoded pixels and generation metadata; stripping takes precedence, and conversion failure cannot silently write WebP under a PNG extension.
-- Sharing: left-drag the main generated image, history/gallery thumbnail or Inspect image to copy a real image file with Info. Unsaved Inspect Info edits produce a separate snapshot, with Description synchronized to the edited prompt. Middle-drag or Space+left-drag pans; the wheel zooms. External applications control any subsequent compression.
-- Settings: controls wrap below their labels when the settings viewport is narrow.
+### Usage and verification scope
 
-### Executed verification
+A representative V5 Medium round trip with two characters, quoted dialogue and weighting syntax, plus 12 preset-import comparisons, has been verified. Further model/reference combinations and asynchronous interactions remain under targeted validation.
 
-| Evidence | Bounded result |
-| --- | --- |
-| Native client, existing API configuration | Four actual POSTs returned HTTP 200: one V4.5 Full source encoding and three generations (V4.5 Full, V3 DDIM, V4.5 Full offset Infill). |
-| Actual WebP response to saved PNG | Decoded RGBA and the six checked Info fields match. The raw response remains separate. |
-| Freshly generated main preview to independent FileDrop receiver | Received file SHA and Info match the saved PNG. History, gallery and Inspect file drags were also exercised. |
-| Vibe state | Native model-family switches and a restart preserve the tested 17-card fixture, including 16 disabled cards and the active card's extraction/strength. |
-| V3 preprocessing | Four nontrivial fixtures match the actual website runtime function in all 448x448 RGBA pixels. |
-| Offset Apply precision fix | Native replay of an already captured response produces zero RGB differences from source to request and from candidate to saved candidate region. This replay is not another live generation. |
-| Final production-DLL harness | 33 checks pass, including 16 service invocations with a synthetic HTTP response and no network transport. These are not API successes. |
+For reproduction, match model/Effort, seed, references and import options. Website **Clean Imports** changes weighting brackets and comma spacing; disable it when comparing the original prompt syntax. A composited ROI image does not carry its original input image and mask, so its Info alone cannot reconstruct the entire inpainting request.
 
-Earlier import/Vibe/Reset evidence remains valid: one original -> generation -> re-import -> generation sequence reproduced the recorded original RGB and encoded reference strength; explicit-empty, unchecked/append and no-reference import behavior was separately checked.
-
-### Remaining parity work
-
-The tested paths are not a full cross-product of models and actions. V1/V2 are not exposed; Furry3 and several other model/operation combinations have only method-level coverage. Official focused-region Inpaint cropping, coordinate reprojection and placement are not implemented by the full-canvas offset workflow. Brush-unit mapping, complex dirty-canvas/Undo/Redo transitions, Text/history combinations, cancellation/retry/stream failures and concurrent workloads still need targeted acceptance.
-
-Some earlier same-condition image comparisons remain unexplained; do not attribute them to a checkpoint or prompt rule without evidence. PNG is available but the default remains Original for compatibility, unlike the observed website PNG preference. Info round trips do not verify an official signature, and modified Info/pixels are marked unofficial. Do not treat local FileDrop success as proof that every chat application preserves metadata after upload.
-
-Reuse captured evidence before paying for new samples. Website-only PixelSnap/3D is not automatically in scope. Business logs can contain prompts, images and paths even when credentials are redacted; share only a sanitized minimal reproduction.
+Extract updates into a new directory, then migrate the `user/` data you need. First launch opens the main interface; configure the API, language and local models in Settings.
 
 <img width="1455" height="940" alt="Preview" src="https://github.com/user-attachments/assets/88c9a0d3-5fcb-464f-80bf-98075fc9f3f6" />
 
@@ -68,6 +52,7 @@ Reuse captured evidence before paying for new samples. Website-only PixelSnap/3D
 - Includes a Win2D canvas with brush, eraser, rectangle mask, undo, redo, zoom, and pan tools.
 - Supports mask preview, invert, expand, shrink, clear, fill transparent area, crop canvas, and image alignment.
 - Can restore parameters from image metadata and send them back to the image-to-image workspace.
+- Supports focused inpainting regions (ROI), context margins, character-coordinate remapping and result placement.
 - Supports canvas and mask export.
 
 ### Prompt Workflow
@@ -250,7 +235,7 @@ After a full build, run the launcher from the repository root:
 
 You can also open `NAITool.sln` in Visual Studio or Rider and run `src/NAITool/NAITool.csproj` for debugging.
 
-On first launch, the quick tour can configure language, NovelAI API token, asset-protection mode, and the optional reverse tagger model directory.
+First launch opens the main interface. Configure language, the NovelAI API token, asset-protection mode and the optional reverse tagger model directory in Settings.
 
 ## Publish
 
@@ -263,7 +248,7 @@ Use the included script to create a local publish package:
 By default, it publishes `Release`, `win-x64` to:
 
 ```text
-publish/NAI Utility Tool/
+publish/candidate-yyyyMMdd-HHmmss/NAI Utility Tool/
 |-- NAI Utility Tool.exe     Launcher entry point
 |-- bin/                     Main application and dependencies
 |-- assets/                  Runtime assets
