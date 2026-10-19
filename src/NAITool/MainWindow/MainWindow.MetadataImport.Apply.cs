@@ -18,7 +18,7 @@ public sealed partial class MainWindow
         var notes = new List<string>();
 
         string positivePrompt = options.PositivePromptFrom(meta);
-        if (options.Characters && !options.AppendCharacters && !options.ActualPrompt && NovelAIService.IsV5Model(meta.ModelDisplayName))
+        if (meta.IsNaiParsed && !options.ActualPrompt)
             positivePrompt = NovelAiPromptPresets.StripAutoText(positivePrompt, meta);
         string negativePrompt = options.NegativePromptFrom(meta);
         if (meta.IsNaiParsed && negativePrompt == "lowres") negativePrompt = "";
@@ -147,7 +147,7 @@ public sealed partial class MainWindow
         bool blockOversizedSteps = IsAssetProtectionStepLimitEnabled();
 
         string positivePrompt = options.PositivePromptFrom(meta);
-        if (options.Characters && !options.AppendCharacters && !options.ActualPrompt && NovelAIService.IsV5Model(meta.ModelDisplayName))
+        if (meta.IsNaiParsed && !options.ActualPrompt)
             positivePrompt = NovelAiPromptPresets.StripAutoText(positivePrompt, meta);
         string negativePrompt = options.NegativePromptFrom(meta);
         if (meta.IsNaiParsed && negativePrompt == "lowres") negativePrompt = "";
