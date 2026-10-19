@@ -59,8 +59,8 @@ public sealed partial class MainWindow
                 p.DenoiseNoise = meta.Noise ?? defaults.DenoiseNoise;
                 p.InpaintStrength = defaults.InpaintStrength;
             }
-            p.QualityToggle = meta.QualityToggle ?? presetMatch.QualityMatched;
-            p.QualityPreset = meta.QualityPreset ?? presetMatch.QualityPreset;
+            p.QualityToggle = meta.IsNaiParsed ? presetMatch.QualityMatched : meta.QualityToggle ?? presetMatch.QualityMatched;
+            p.QualityPreset = meta.IsNaiParsed ? presetMatch.QualityPreset : meta.QualityPreset ?? presetMatch.QualityPreset;
             int steps = meta.HasSteps ? meta.Steps : defaults.Steps;
             if ((meta.HasSteps || meta.IsNaiParsed) && !ModelCapabilities.IsMedium(p))
             {
@@ -187,8 +187,8 @@ public sealed partial class MainWindow
                 p.DenoiseNoise = meta.Noise ?? defaults.DenoiseNoise;
                 p.InpaintStrength = defaults.InpaintStrength;
             }
-            p.QualityToggle = meta.QualityToggle ?? presetMatch.QualityMatched;
-            p.QualityPreset = meta.QualityPreset ?? presetMatch.QualityPreset;
+            p.QualityToggle = meta.IsNaiParsed ? presetMatch.QualityMatched : meta.QualityToggle ?? presetMatch.QualityMatched;
+            p.QualityPreset = meta.IsNaiParsed ? presetMatch.QualityPreset : meta.QualityPreset ?? presetMatch.QualityPreset;
             int steps = meta.HasSteps ? meta.Steps : defaults.Steps;
             if ((meta.HasSteps || meta.IsNaiParsed) && !ModelCapabilities.IsMedium(p))
             {
