@@ -65,7 +65,7 @@ Check(JsonSerializer.Serialize(SeedValue.ToRequestValue("004294967295")) == "429
 Check(SeedValue.ToWildcardSeed("中文种子") == SeedValue.ToWildcardSeed("中文种子"), "Text wildcard seed is repeatable");
 
 // Real PNG text-chunk path, not just the JSON parser entry point.
-byte[] png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9l8AAAAASUVORK5CYII=");
+byte[] png = TestImage.CreatePng();
 foreach (string seedJson in new[] { "4294967295", "\"中文种子\"" })
 {
     string comment = $$"""{"prompt":"test","seed":{{seedJson}},"sampler":"k_euler"}""";

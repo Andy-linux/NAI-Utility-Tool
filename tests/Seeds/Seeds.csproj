@@ -4,17 +4,14 @@
     <TargetFramework>net9.0-windows10.0.22621.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PlatformTarget>x64</PlatformTarget>
+    <NaitoolBuildDirectory Condition="'$(NaitoolBuildDirectory)' == ''">$(MSBuildThisFileDirectory)../../build/$(Configuration)/bin</NaitoolBuildDirectory>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../src/NAITool/Services/SeedValue.cs" Link="SeedValue.cs" />
-    <Compile Include="../../src/NAITool/Services/NAIParameters.cs" Link="NAIParameters.cs" />
-    <Compile Include="../../src/NAITool/Services/ImageMetadataService.cs" Link="ImageMetadataService.cs" />
+    <Reference Include="NAI Utility Tool">
+      <HintPath>$(NaitoolBuildDirectory)/NAI Utility Tool.dll</HintPath>
+    </Reference>
     <Compile Include="../../src/NAITool/Services/MetadataImportSelection.cs" Link="MetadataImportSelection.cs" />
-    <Compile Include="../../src/NAITool/Services/CharacterPromptRules.cs" Link="CharacterPromptRules.cs" />
-    <Compile Include="../../src/NAITool/Services/NovelAiAnlasCalculator.cs" Link="NovelAiAnlasCalculator.cs" />
-    <Compile Include="../../src/NAITool/Services/ImportedImageModel.cs" Link="ImportedImageModel.cs" />
-    <Compile Include="../../src/NAITool/Services/NovelAIReferenceModels.cs" Link="NovelAIReferenceModels.cs" />
-    <Compile Include="../../src/NAITool/Services/LocalizationService.cs" Link="LocalizationService.cs" />
     <PackageReference Include="SkiaSharp" Version="3.119.2" />
   </ItemGroup>
 </Project>

@@ -5,6 +5,21 @@ internal static class SelectiveImportChecks
     public static int Run()
     {
         int checks = 0;
+        var assembly = typeof(ImageMetadataService).Assembly;
+        var strip = assembly.GetType("NAITool.Services.NovelAiPromptPresets", true)!.GetMethods(
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
+            .Single(m => m.Name == "StripAutoText" && m.GetParameters().Length == 3);
+        string StripText(string prompt, ImageMetadata metadata, MetadataImportSelection? selection = null)
+        {
+            object? options = null;
+            if (selection != null)
+            {
+                options = Activator.CreateInstance(assembly.GetType("NAITool.Services.MetadataImportSelection", true)!, true)!;
+                foreach (var property in typeof(MetadataImportSelection).GetProperties().Where(p => p.CanWrite))
+                    options.GetType().GetProperty(property.Name)!.SetValue(options, property.GetValue(selection));
+            }
+            return (string)strip.Invoke(null, [prompt, metadata, options])!;
+        }
         void Check(bool condition, string message)
         {
             checks++;
@@ -30,12 +45,12 @@ internal static class SelectiveImportChecks
             "Actual prompts are opt-in; the original randomization syntax is preserved by default");
         Check(actual.PositivePromptFrom(metadata) == "blue sky" && actual.NegativePromptFrom(metadata) == "snow",
             "Actual base captions are imported when explicitly selected");
-        Check(actual.CharacterPromptsFrom(metadata).SequenceEqual(new[] { "角色一", "{two|2}", "" }),
-            "Malformed actual character entries fall back in place, while explicitly empty captions remain empty");
+        Check(actual.CharacterPromptsFrom(metadata).SequenceEqual(new[] { "角色一", "", "" }),
+            "Actual character entries retain their own slots, including missing or empty captions");
         Check(actual.CharacterPromptsFrom(metadata, negative: true).SequenceEqual(new[] { "negative one", "negative two", "negative three" }),
             "Actual negative character prompts retain ordering");
         Check(metadata.CharacterCenters.SequenceEqual(new[] { (0.1, 0.2), (0.3, 0.4), (0.5, 0.6) }) && metadata.UseCharacterCoordinates == true,
-            "Choosing actual text does not replace original character coordinates or their usage flag");
+            "Original metadata remains available independently of the selected import");
         Check(original.CharacterPromptsFrom(metadata).SequenceEqual(new[] { "{one|1}", "{two|2}", "{three|3}" }),
             "Selecting actual prompts does not mutate the metadata used by later imports");
 
@@ -43,12 +58,12 @@ internal static class SelectiveImportChecks
         {
             var captions = negative ? metadata.ActualCharacterNegativePrompts : metadata.ActualCharacterPrompts;
             captions.RemoveAt(0);
-            Check(actual.CharacterPromptsFrom(metadata, negative).SequenceEqual(original.CharacterPromptsFrom(metadata, negative)),
-                "A shorter actual character list falls back to the full original list rather than shifting coordinates");
+            Check(actual.CharacterPromptsFrom(metadata, negative).SequenceEqual(captions.Select(x => x ?? "")),
+                "A shorter actual character list replaces the original list");
             captions.Add("extra");
             captions.Add("extra");
-            Check(actual.CharacterPromptsFrom(metadata, negative).SequenceEqual(original.CharacterPromptsFrom(metadata, negative)),
-                "A longer actual character list cannot overflow or change the original slot layout");
+            Check(actual.CharacterPromptsFrom(metadata, negative).SequenceEqual(captions.Select(x => x ?? "")),
+                "A longer actual character list preserves its own entries");
         }
 
         foreach (string actualJson in new[] { "null", "[]", "1", "{}", "{\"prompt\":null,\"negative_prompt\":false}" })
@@ -64,15 +79,42 @@ internal static class SelectiveImportChecks
             "{\"prompt\":{\"base_caption\":\"resolved\"},\"negative_prompt\":{\"base_caption\":\"\"}}",
         })
         {
-            byte[] png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9l8AAAAASUVORK5CYII=");
+            byte[] png = TestImage.CreatePng();
             string comment = "{\"prompt\":\"original\",\"uc\":\"negative\",\"actual_prompts\":" + actualJson + "}";
-            var parsed = ImageMetadataService.ReadFromBytes(ImageMetadataService.ReplacePngComment(png, comment));
+            var parsed = ImageMetadataService.ReadFromBytes(ImageMetadataService.ReplacePngTextChunks(png, new Dictionary<string, string>
+            { ["Comment"] = comment, ["Description"] = "original" }));
             Check(parsed != null && actual.PositivePromptFrom(parsed) == "resolved" && actual.NegativePromptFrom(parsed) == "",
                 "PNG import supports both string and structured actual prompts, including explicitly empty negatives");
             Check(original.PositivePromptFrom(parsed!) == "original" && original.NegativePromptFrom(parsed!) == "negative",
                 "PNG import keeps original prompts available independently of actual prompts");
         }
 
+        var empty = ImageMetadataService.TryParseJson("""
+            {"v4_prompt":{"caption":{"char_captions":[{"char_caption":"old role"}]}},
+             "actual_prompts":{"prompt":{"base_caption":"new prompt","char_captions":[]}}}
+            """)!;
+        Check(actual.CharacterPromptsFrom(empty).Count == 0, "An explicit empty actual list clears roles");
+        var positioned = ImageMetadataService.TryParseJson("""
+            {"actual_prompts":{"prompt":{"char_captions":[
+                {"char_caption":"adult artist","centers":[{"x":0.8,"y":0.2}]}]}},
+             "v4_prompt":{"caption":{"char_captions":[
+                {"char_caption":"old role","centers":[{"x":0.1,"y":0.9}]}]}}}
+            """)!;
+        Check(actual.CharacterCentersFrom(positioned).Single() == (0.8, 0.2), "Actual captions use their own positions");
+        Check(original.CharacterCentersFrom(positioned).Single() == (0.1, 0.9), "Original positions remain available");
+        var text = ImageMetadataService.TryParseJson("""
+            {"prompt":"shop \"OPEN\", teXt: OPEN\n\nHELLO",
+             "v4_prompt":{"caption":{"char_captions":[{"char_caption":"adult artist, \"HELLO\""}]}}}
+            """)!;
+        foreach (var selection in new[]
+        {
+            new MetadataImportSelection { Characters = false },
+            new MetadataImportSelection { AppendCharacters = true },
+        })
+            Check(StripText(text.PositivePrompt, text, selection) == "shop \"OPEN\"",
+                "Automatic text is removed using source roles before partial or appended imports");
+        Check(StripText("shop \"OPEN\", text: custom", text) == "shop \"OPEN\", text: custom",
+            "Explicit text markers are not removed");
         Console.WriteLine($"Passed {checks} selective import metadata checks.");
         return checks;
     }

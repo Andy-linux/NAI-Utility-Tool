@@ -6,6 +6,11 @@ internal static class CharacterMetadataChecks
     public static int Run()
     {
         int checks = 0;
+        var rules = typeof(ImageMetadataService).Assembly.GetType("NAITool.Services.CharacterPromptRules", true)!;
+        int MaxForModel(string model) => (int)rules.GetMethod("MaxForModel",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.Invoke(null, [model])!;
+        int retained = (int)rules.GetField("MaxRetainedCount",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.GetRawConstantValue()!;
         void Check(bool condition, string message)
         {
             checks++;
@@ -14,12 +19,12 @@ internal static class CharacterMetadataChecks
 
         foreach (string model in new[] { "nai-diffusion-5", "nai-diffusion-5-full", "nai-diffusion-5-curated",
                      "nai-diffusion-5-inpainting", "nai-diffusion-5-full-inpainting", "nai-diffusion-5-curated-inpainting" })
-            Check(CharacterPromptRules.MaxForModel(model) == 22, "V5 generation and inpainting allow 22 characters");
+            Check(MaxForModel(model) == 32, "V5 generation and inpainting allow 32 characters");
         foreach (string model in new[] { "nai-diffusion-4-full", "nai-diffusion-4-curated-preview",
                      "nai-diffusion-4-5-full", "nai-diffusion-4-5-curated", "nai-diffusion-4-full-inpainting",
                      "nai-diffusion-4-curated-inpainting", "nai-diffusion-4-5-full-inpainting", "nai-diffusion-4-5-curated-inpainting" })
-            Check(CharacterPromptRules.MaxForModel(model) == 6, "V4/V4.5 retain their six-character request limit");
-        Check(CharacterPromptRules.MaxRetainedCount >= 22, "Imports and saved workspaces retain all V5 characters");
+            Check(MaxForModel(model) == 6, "V4/V4.5 retain their six-character request limit");
+        Check(retained == 32, "Imports and saved workspaces retain all V5 characters");
 
         foreach (var (json, expected) in new (string, bool?)[]
         {
@@ -51,7 +56,7 @@ internal static class CharacterMetadataChecks
             v4_prompt = new { use_coords = true, caption = new { char_captions = positive } },
             v4_negative_prompt = new { caption = new { char_captions = negative } },
         });
-        byte[] png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9l8AAAAASUVORK5CYII=");
+        byte[] png = TestImage.CreatePng();
         var imported = ImageMetadataService.ReadFromBytes(ImageMetadataService.ReplacePngComment(png, comment));
         Check(imported != null && imported.CharacterPrompts.Count == 22 && imported.CharacterNegativePrompts.Count == 22 &&
               imported.CharacterCenters.Count == 22, "PNG import preserves all 22 character slots");

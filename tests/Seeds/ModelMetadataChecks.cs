@@ -25,8 +25,8 @@ internal static class ModelMetadataChecks
 
         foreach (var (name, expected) in new[]
         {
-            ("NovelAI Diffusion V5", "nai-diffusion-5-full"),
-            ("NovelAI Diffusion V4.5", "nai-diffusion-4-5-full"),
+            ("NovelAI Diffusion V5", "nai-diffusion-5-curated"),
+            ("NovelAI Diffusion V4.5", "nai-diffusion-4-5-curated"),
             ("NovelAI Diffusion V4.5 Curated", "nai-diffusion-4-5-curated"),
             ("NovelAI Diffusion V4 Full", "nai-diffusion-4-full"),
             ("NovelAI Diffusion V4 Curated", "nai-diffusion-4-curated-preview"),
@@ -37,13 +37,14 @@ internal static class ModelMetadataChecks
         })
         {
             Check(ImportedImageModel.ResolveForTarget(name, generation) == expected, "Named models resolve for generation");
-            string inpaintExpected = expected.Replace("-preview", "") + "-inpainting";
+            string inpaintExpected = expected == "nai-diffusion-5-curated" ? "nai-diffusion-4-5-curated-inpainting"
+                : expected.Replace("-preview", "") + "-inpainting";
             Check(ImportedImageModel.ResolveForTarget(name, inpaint) == inpaintExpected, "Named models resolve for inpainting");
         }
         Check(ImportedImageModel.ResolveForTarget("NovelAI Diffusion V4.5 4BDE2A90", generation) == "nai-diffusion-4-5-full",
             "Source can contain a trailing hash");
-        Check(ImportedImageModel.ResolveForTarget("nai-diffusion-5-curated", inpaint) == null,
-            "Unavailable variants must not silently switch to a different model");
+        Check(ImportedImageModel.ResolveForTarget("nai-diffusion-5-curated", inpaint) == "nai-diffusion-4-5-curated-inpainting",
+            "V5 Curated uses the official V4.5 Curated inpainting target");
 
         foreach (var name in new[] { "", "Unknown", "my-NovelAI Diffusion V4.5", "nai-diffusion-4-5-full.safetensors",
                      "Stable Diffusion XL", "NovelAI Diffusion V40", "NovelAI Diffusion V99", "NovelAI Diffusion Furry V5", "其他模型" })
@@ -62,7 +63,7 @@ internal static class ModelMetadataChecks
         Check(ImageMetadataService.TryParseJson("{\"model\":null,\"model_name\":\"external model\"}")?.Model == "external model",
             "Invalid optional model field must not discard metadata");
 
-        byte[] png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9l8AAAAASUVORK5CYII=");
+        byte[] png = TestImage.CreatePng();
         byte[] image = ImageMetadataService.ReplacePngTextChunks(png, new Dictionary<string, string>
         {
             ["Source"] = "NovelAI Diffusion V4.5 4BDE2A90",
