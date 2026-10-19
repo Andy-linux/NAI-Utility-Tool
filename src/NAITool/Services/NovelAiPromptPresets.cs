@@ -82,13 +82,15 @@ internal static class NovelAiPromptPresets
         return string.Join("|", mix);
     }
 
-    internal static string StripAutoText(string prompt, ImageMetadata metadata)
+    internal static string StripAutoText(string prompt, ImageMetadata metadata, MetadataImportSelection? selection = null)
     {
-        var roles = metadata.CharacterPrompts.Select((text, i) => new CharacterPromptInfo
+        var captions = selection?.CharacterPromptsFrom(metadata) ?? metadata.CharacterPrompts;
+        var centers = selection?.CharacterCentersFrom(metadata) ?? metadata.CharacterCenters;
+        var roles = captions.Select((text, i) => new CharacterPromptInfo
         {
             PositivePrompt = text,
-            CenterX = i < metadata.CharacterCenters.Count ? metadata.CharacterCenters[i].X : 0.5,
-            CenterY = i < metadata.CharacterCenters.Count ? metadata.CharacterCenters[i].Y : 0.5,
+            CenterX = i < centers.Count ? centers[i].X : 0.5,
+            CenterY = i < centers.Count ? centers[i].Y : 0.5,
             UseCustomPosition = metadata.UseCharacterCoordinates == true,
         }).ToList();
         return StripAutoText(prompt, roles);

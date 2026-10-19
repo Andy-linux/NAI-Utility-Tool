@@ -620,6 +620,7 @@ public sealed partial class MainWindow
         if (!selection.AppendCharacters) target.Clear();
         var positivePrompts = selection.CharacterPromptsFrom(meta);
         var negativePrompts = selection.CharacterPromptsFrom(meta, negative: true);
+        var centers = selection.CharacterCentersFrom(meta);
         int capacity = Math.Max(0, CharacterPromptRules.MaxRetainedCount - target.Count);
         int count = Math.Min(positivePrompts.Count, capacity);
         for (int i = 0; i < count; i++)
@@ -628,11 +629,9 @@ public sealed partial class MainWindow
             {
                 PositivePrompt = positivePrompts[i],
                 NegativePrompt = i < negativePrompts.Count ? negativePrompts[i] : "",
-                CenterX = i < meta.CharacterCenters.Count
-                    ? CharacterPromptRules.NormalizeCoordinate(meta.CharacterCenters[i].X) : 0.5,
-                CenterY = i < meta.CharacterCenters.Count
-                    ? CharacterPromptRules.NormalizeCoordinate(meta.CharacterCenters[i].Y) : 0.5,
-                UseCustomPosition = meta.UseCharacterCoordinates == true,
+                CenterX = i < centers.Count ? CharacterPromptRules.NormalizeCoordinate(centers[i].X) : 0.5,
+                CenterY = i < centers.Count ? CharacterPromptRules.NormalizeCoordinate(centers[i].Y) : 0.5,
+                UseCustomPosition = !(selection.ActualPrompt && meta.HasActualPrompts) && meta.UseCharacterCoordinates == true,
             };
             target.Add(entry);
         }

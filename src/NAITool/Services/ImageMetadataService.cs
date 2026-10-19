@@ -20,6 +20,8 @@ public class ImageMetadata
     public bool HasCharacterPrompts { get; set; }
     public string PositivePrompt { get; set; } = "";
     public string NegativePrompt { get; set; } = "";
+    public bool HasActualPrompts { get; set; }
+    public List<(double X, double Y)> ActualCharacterCenters { get; set; } = new();
     public string? ActualPositivePrompt { get; set; }
     public string? ActualNegativePrompt { get; set; }
     public List<string?> ActualCharacterPrompts { get; set; } = new();
@@ -857,7 +859,8 @@ public static class ImageMetadataService
             if (root.TryGetProperty("actual_prompts", out var actualPrompts) &&
                 actualPrompts.ValueKind == JsonValueKind.Object)
             {
-                meta.ActualPositivePrompt = ReadActualCaption(actualPrompts, "prompt", meta.ActualCharacterPrompts);
+                meta.HasActualPrompts = true;
+                meta.ActualPositivePrompt = ReadActualCaption(actualPrompts, "prompt", meta.ActualCharacterPrompts, meta.ActualCharacterCenters);
                 meta.ActualNegativePrompt = ReadActualCaption(actualPrompts, "negative_prompt", meta.ActualCharacterNegativePrompts);
             }
 
@@ -897,7 +900,8 @@ public static class ImageMetadataService
         catch { return null; }
     }
 
-    private static string? ReadActualCaption(JsonElement actualPrompts, string key, List<string?> characters)
+    private static string? ReadActualCaption(JsonElement actualPrompts, string key, List<string?> characters,
+        List<(double X, double Y)>? centers = null)
     {
         if (!actualPrompts.TryGetProperty(key, out var caption)) return null;
         if (caption.ValueKind == JsonValueKind.String) return caption.GetString();
@@ -907,9 +911,12 @@ public static class ImageMetadataService
             characterCaptions.ValueKind == JsonValueKind.Array)
         {
             foreach (var character in characterCaptions.EnumerateArray())
+            {
                 characters.Add(character.ValueKind == JsonValueKind.Object &&
                     character.TryGetProperty("char_caption", out var prompt) && prompt.ValueKind == JsonValueKind.String
                         ? prompt.GetString() : null);
+                centers?.Add(ReadCharacterCenter(character));
+            }
         }
         return caption.TryGetProperty("base_caption", out var baseCaption) && baseCaption.ValueKind == JsonValueKind.String
             ? baseCaption.GetString() : null;
@@ -928,20 +935,16 @@ public static class ImageMetadataService
             // Keep empty entries so prompts, negatives and positions retain the same indexes.
             bool isObject = character.ValueKind == JsonValueKind.Object;
             captions.Add(isObject ? TryReadString(character, "char_caption") : "");
-            if (centers == null)
-                continue;
-
-            double x = 0.5, y = 0.5;
-            if (isObject && character.TryGetProperty("centers", out var positions) &&
-                positions.ValueKind == JsonValueKind.Array && positions.GetArrayLength() > 0 &&
-                positions[0].ValueKind == JsonValueKind.Object)
-            {
-                x = ReadCharacterCoordinate(positions[0], "x");
-                y = ReadCharacterCoordinate(positions[0], "y");
-            }
-            centers.Add((x, y));
+            centers?.Add(ReadCharacterCenter(character));
         }
     }
+
+    private static (double X, double Y) ReadCharacterCenter(JsonElement character) =>
+        character.ValueKind == JsonValueKind.Object && character.TryGetProperty("centers", out var positions) &&
+        positions.ValueKind == JsonValueKind.Array && positions.GetArrayLength() > 0 &&
+        positions[0].ValueKind == JsonValueKind.Object
+            ? (ReadCharacterCoordinate(positions[0], "x"), ReadCharacterCoordinate(positions[0], "y"))
+            : (0.5, 0.5);
 
     private static double ReadCharacterCoordinate(JsonElement position, string axis) =>
         position.TryGetProperty(axis, out var value) && value.ValueKind == JsonValueKind.Number &&

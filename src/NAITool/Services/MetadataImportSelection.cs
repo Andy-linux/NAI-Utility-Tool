@@ -29,13 +29,15 @@ internal sealed class MetadataImportSelection
     {
         var original = negative ? meta.CharacterNegativePrompts : meta.CharacterPrompts;
         var actual = negative ? meta.ActualCharacterNegativePrompts : meta.ActualCharacterPrompts;
-        // Different lengths cannot be safely associated with the original positions.
-        if (!ActualPrompt || actual.Count != original.Count)
+        if (!ActualPrompt || !meta.HasActualPrompts)
             return original;
 
-        var result = new List<string>(original.Count);
-        for (int i = 0; i < original.Count; i++)
-            result.Add(actual[i] ?? original[i]);
+        var result = new List<string>(actual.Count);
+        foreach (var prompt in actual)
+            result.Add(prompt ?? "");
         return result;
     }
+
+    public IReadOnlyList<(double X, double Y)> CharacterCentersFrom(ImageMetadata meta) =>
+        ActualPrompt && meta.HasActualPrompts ? meta.ActualCharacterCenters : meta.CharacterCenters;
 }
