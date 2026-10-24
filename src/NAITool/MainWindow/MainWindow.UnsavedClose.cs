@@ -24,24 +24,28 @@ public sealed partial class MainWindow
 
     private void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
+        if (!PrepareWorkspaceClose()) args.Cancel = true;
+    }
+
+    private void RequestWorkspaceClose()
+    {
+        // Window.Close() destroys WinUI windows without raising AppWindow.Closing.
+        if (PrepareWorkspaceClose()) Close();
+    }
+
+    private bool PrepareWorkspaceClose()
+    {
         if (!_historyFavoriteWritesCompleted.IsCompleted)
         {
-            args.Cancel = true;
             _ = CloseAfterHistoryFavoriteWritesAsync();
-            return;
+            return false;
         }
         if (_allowCloseWithUnsavedWorkspace || !HasUnsavedWorkspaceChanges(out _))
-        {
-            StartPendingUpdateInstaller(args);
-            return;
-        }
+            return TryStartPendingUpdateInstaller();
 
-        args.Cancel = true;
-
-        if (_closeConfirmationOpen)
-            return;
-
-        _ = ConfirmCloseWithUnsavedWorkspaceAsync();
+        if (!_closeConfirmationOpen)
+            _ = ConfirmCloseWithUnsavedWorkspaceAsync();
+        return false;
     }
 
     private async Task ConfirmCloseWithUnsavedWorkspaceAsync()
@@ -74,7 +78,7 @@ public sealed partial class MainWindow
 
             _allowCloseWithUnsavedWorkspace = true;
             CloseAdvancedParamsWindow();
-            Close();
+            RequestWorkspaceClose();
         }
         finally
         {

@@ -170,7 +170,7 @@ public sealed partial class MainWindow
         {
             while (!_historyFavoriteWritesCompleted.IsCompleted)
                 await _historyFavoriteWritesCompleted;
-            Close();
+            RequestWorkspaceClose();
         }
         finally { _historyFavoritesClosePending = false; }
     }

@@ -4,7 +4,6 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using NAITool.Services;
@@ -143,32 +142,30 @@ public sealed partial class MainWindow
         if (installRequested && installerPath != null)
         {
             _pendingUpdateInstaller = installerPath;
-            Close();
+            RequestWorkspaceClose();
         }
     }
 
-    private void StartPendingUpdateInstaller(AppWindowClosingEventArgs args)
+    private bool TryStartPendingUpdateInstaller()
     {
-        if (_pendingUpdateInstaller == null) return;
+        if (_pendingUpdateInstaller == null) return true;
         try
         {
             if (!SaveClosingWorkspaceState())
             {
-                args.Cancel = true;
-                _pendingUpdateInstaller = null;
-                _allowCloseWithUnsavedWorkspace = false;
                 TxtStatus.Text = L("update.save_failed");
-                return;
+                _allowCloseWithUnsavedWorkspace = false;
+                return false;
             }
             Process.Start(ReleaseUpdateService.CreateInstallerStartInfo(_pendingUpdateInstaller, AppRootDir, Environment.ProcessId));
-            _pendingUpdateInstaller = null;
+            return true;
         }
         catch (Exception ex)
         {
-            args.Cancel = true;
-            _pendingUpdateInstaller = null;
             _allowCloseWithUnsavedWorkspace = false;
             TxtStatus.Text = Lf("update.failed", ex.Message);
+            return false;
         }
+        finally { _pendingUpdateInstaller = null; }
     }
 }
