@@ -3,7 +3,7 @@
   #error Supply /DReleaseDir with a clean publish.ps1 output directory.
 #endif
 #ifndef AppVersion
-  #define AppVersion "1.3.0_fork.3"
+  #define AppVersion "1.3.0_fork.2.1"
 #endif
 #ifndef AppFileVersion
   #define AppFileVersion "1.3.0.3"

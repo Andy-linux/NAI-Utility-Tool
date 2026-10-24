@@ -6,15 +6,15 @@ Language: English | [简体中文](README-CN.md)
 
 NAI Utility Tool is a Windows desktop client for NovelAI image workflows. It is built with .NET 9, WinUI 3, Windows App SDK, Win2D, SkiaSharp, and ONNX Runtime. It is not intended to replace the official NovelAI website; instead, it brings day-to-day local workflows into one tool: generation, image-to-image editing, mask editing, prompt management, reference-image workflows, batch automation, post-processing, upscaling, metadata inspection, and local reverse tagging.
 
-Current release: [**1.3.0_fork.2**](https://github.com/Andy-linux/NAI-Utility-Tool/releases/tag/1.3.0_fork.2), with a self-contained Windows x64 installer and ZIP/7z portable packages.
+Current release: [**1.3.0_fork.2.1**](https://github.com/Andy-linux/NAI-Utility-Tool/releases/tag/1.3.0_fork.2.1), with a self-contained Windows x64 installer and ZIP/7z portable packages.
 
-## fork.3 candidate: browser originals and optional maintenance updates
+## fork.2.1: browser originals and optional maintenance updates
 
 Fix image drops that fail with an empty `path`. A browser may supply a readable virtual file without a local path. Generation, inpainting-parameter, Inspect, Effects and Upscale inputs now read the original stream, preserving all Info bytes for the existing metadata parser.
 
 Use **Help → Check for updates** to manually inspect this fork's stable releases, choose a newer version, download and verify its SHA-256, then confirm closing the client to install. Failed settings saves and active generation/inference tasks block installation. Existing close confirmations, installation root and portable/installed mode are retained; Setup waits for the client to exit without terminating it.
 
-The first upgrade from fork.2 to fork.3 still requires running the new installer once. Later maintenance releases can be selected in the client. The source is fixed to `Andy-linux/NAI-Utility-Tool`; maintainers integrate and validate changes from Aeka0 before releasing them in this fork. Each maintenance release gets a new version and tag instead of replacing same-tag assets. See the [maintenance release contract](installer/UPDATES.md).
+The first upgrade from fork.2 to fork.2.1 still requires running the new installer once. Later maintenance releases can be selected in the client. The source is fixed to `Andy-linux/NAI-Utility-Tool`; maintainers integrate and validate changes from Aeka0 before releasing them in this fork. Each maintenance release gets a new version and tag instead of replacing same-tag assets. See the [maintenance release contract](installer/UPDATES.md).
 
 ## Refreshed fork.2 build: installation, upgrades and streaming
 

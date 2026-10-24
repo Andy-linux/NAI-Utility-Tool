@@ -1,8 +1,8 @@
-NAI Utility Tool 1.3.0_fork.3 — 安装、覆盖升级与便携使用
+NAI Utility Tool 1.3.0_fork.2.1 — 安装、覆盖升级与便携使用
 
 覆盖旧版本（fork.2 首次迁移也使用此流程）
 1. 保存正在编辑的内容，退出要升级的客户端。
-2. 运行 NAI.Utility.Tool.1.3.0_fork.3.Setup.exe。
+2. 运行 NAI.Utility.Tool.1.3.0_fork.2.1.Setup.exe。
 3. 旧版为 ZIP/7z 解压版时选“便携版”；已经用安装器安装则选“安装版”。
 4. 选择旧版根目录：其中应直接包含 NAI Utility Tool.exe、bin 和 user。
    不要选择 bin 子目录，也不要在旧目录里面再新建一层 NAI Utility Tool。
@@ -28,11 +28,11 @@ ZIP/7z 不包含 user/、output/、logs/，覆盖解压不会覆盖这些数据�
 复制到其他电脑或用户不保证能够解密已有凭据，需重新输入 API Token。
 安装器不会强制终止客户端。遇到“文件正在使用”请先保存退出，然后重试。
 
-fork.3 起的可选更新
+fork.2.1 起的可选更新
 帮助 → 检查更新：手动查看发行说明，选择新版本并下载，校验通过后确认关闭并安装。
 更新仅来自 Andy-linux/NAI-Utility-Tool 的正式 GitHub Releases，不自动下载或安装。
 安装器沿用当前根目录和便携／安装模式，等待客户端保存并退出。
-fork.2 尚无更新入口，第一次升级到 fork.3 需按上面的手动流程操作。
+fork.2 尚无更新入口，第一次升级到 fork.2.1 需按上面的手动流程操作。
 
 ----- English -----
 
@@ -57,11 +57,11 @@ Windows 10/11 x64; runtimes are included. This installation batch is tested on W
 Encrypted credentials are tied to the Windows user and machine (DPAPI), not made
 cross-machine portable by moving the folder. Re-enter credentials on another user/PC.
 
-Optional updates from fork.3 onward:
+Optional updates from fork.2.1 onward:
 Help > Check for updates lists stable releases from Andy-linux/NAI-Utility-Tool.
 Choose a newer version, download and verify it, then confirm closing the client to
 install. Updates are manual; Setup retains the root folder and installation mode.
-The first fork.2-to-fork.3 upgrade requires running Setup manually once.
+The first fork.2-to-fork.2.1 upgrade requires running Setup manually once.
 
 Silent deployment examples (close the client first):
 Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /PORTABLE=1 /DIR="D:\NAI Utility Tool"
