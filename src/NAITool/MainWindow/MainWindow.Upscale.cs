@@ -257,7 +257,7 @@ public sealed partial class MainWindow
         var file = await GetFirstDroppedImageFileAsync(e, includeBmp: true);
         if (file != null)
         {
-            await LoadUpscaleImageAsync(file.Path);
+            await LoadUpscaleImageAsync(file);
             return;
         }
 
@@ -279,6 +279,30 @@ public sealed partial class MainWindow
             TxtStatus.Text = preserveDirtyState
                 ? Lf("image.reload.loaded", Path.GetFileName(filePath), _upscaleSourceWidth, _upscaleSourceHeight)
                 : Lf("upscale.loaded", Path.GetFileName(filePath), _upscaleSourceWidth, _upscaleSourceHeight);
+        }
+        catch (Exception ex) { TxtStatus.Text = Lf("common.load_failed", ex.Message); }
+        finally
+        {
+            _upscaleLoading = false;
+            UpdateUpscaleStartButtonState();
+        }
+    }
+
+    private async Task LoadUpscaleImageAsync(StorageFile file)
+    {
+        if (!string.IsNullOrEmpty(file.Path))
+        {
+            await LoadUpscaleImageAsync(file.Path);
+            return;
+        }
+        if (_upscaleRunning || _upscaleLoading) return;
+        _upscaleLoading = true;
+        UpdateUpscaleStartButtonState();
+        try
+        {
+            if (!await SetUpscaleImageAsync(await StorageFileReader.ReadAllBytesAsync(file), null)) return;
+            MarkUpscaleWorkspaceClean();
+            TxtStatus.Text = Lf("upscale.loaded", file.Name, _upscaleSourceWidth, _upscaleSourceHeight);
         }
         catch (Exception ex) { TxtStatus.Text = Lf("common.load_failed", ex.Message); }
         finally

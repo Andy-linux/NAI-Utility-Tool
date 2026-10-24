@@ -38,7 +38,7 @@ public sealed partial class MainWindow
 {
     private async Task ApplySuperDropGenerationPromptAsync(StorageFile file)
     {
-        byte[] bytes = await File.ReadAllBytesAsync(file.Path);
+        byte[] bytes = await StorageFileReader.ReadAllBytesAsync(file);
         var meta = await Task.Run(() => ImageMetadataService.ReadFromBytes(bytes));
         if (meta != null && (meta.IsNaiParsed || meta.IsSdFormat || meta.IsModelInference))
             await ImportMetadataAsync(meta);
@@ -48,7 +48,7 @@ public sealed partial class MainWindow
 
     private async Task ApplySuperDropI2IPromptAsync(StorageFile file)
     {
-        byte[] bytes = await File.ReadAllBytesAsync(file.Path);
+        byte[] bytes = await StorageFileReader.ReadAllBytesAsync(file);
         var meta = await Task.Run(() => ImageMetadataService.ReadFromBytes(bytes));
         if (meta != null && (meta.IsNaiParsed || meta.IsSdFormat))
             await ImportMetadataAsync(meta, toI2I: true, fileName: file.Name);

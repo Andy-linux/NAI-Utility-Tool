@@ -74,7 +74,7 @@ public sealed partial class MainWindow
         var file = await GetFirstDroppedImageFileAsync(e, includeBmp: false);
         if (file != null)
         {
-            await LoadInspectImageAsync(file.Path);
+            await LoadInspectImageAsync(file);
             return;
         }
 
@@ -94,7 +94,7 @@ public sealed partial class MainWindow
         var file = await GetFirstDroppedImageFileAsync(e, includeBmp: true);
         if (file != null)
         {
-            await LoadEffectsImageAsync(file.Path);
+            await LoadEffectsImageAsync(file);
             return;
         }
 

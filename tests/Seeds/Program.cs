@@ -81,3 +81,4 @@ CharacterMetadataChecks.Run();
 SelectiveImportChecks.Run();
 PresetImportChecks.Run();
 await StreamResultChecks.RunAsync();
+await StorageFileChecks.RunAsync();

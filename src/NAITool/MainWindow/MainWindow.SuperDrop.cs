@@ -540,15 +540,15 @@ public sealed partial class MainWindow
                     break;
                 case SuperDropAction.Upscale:
                     SwitchMode(AppMode.Upscale);
-                    await LoadUpscaleImageAsync(file.Path);
+                    await LoadUpscaleImageAsync(file);
                     break;
                 case SuperDropAction.Effects:
                     SwitchMode(AppMode.Effects);
-                    await LoadEffectsImageAsync(file.Path);
+                    await LoadEffectsImageAsync(file);
                     break;
                 case SuperDropAction.Inspect:
                     SwitchMode(AppMode.Inspect);
-                    await LoadInspectImageAsync(file.Path);
+                    await LoadInspectImageAsync(file);
                     break;
             }
         }

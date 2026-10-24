@@ -112,15 +112,15 @@ public sealed partial class MainWindow
         {
             if (_currentMode == AppMode.Inspect)
             {
-                await LoadInspectImageAsync(file.Path);
+                await LoadInspectImageAsync(file);
             }
             else if (_currentMode == AppMode.Effects)
             {
-                await LoadEffectsImageAsync(file.Path);
+                await LoadEffectsImageAsync(file);
             }
             else if (_currentMode == AppMode.Upscale)
             {
-                await LoadUpscaleImageAsync(file.Path);
+                await LoadUpscaleImageAsync(file);
             }
             else if (_currentMode == AppMode.I2I)
             {
@@ -130,7 +130,7 @@ public sealed partial class MainWindow
             {
                 try
                 {
-                    var bytes = await File.ReadAllBytesAsync(file.Path);
+                    var bytes = await StorageFileReader.ReadAllBytesAsync(file);
                     var meta = await Task.Run(() => ImageMetadataService.ReadFromBytes(bytes));
                     if (meta != null && (meta.IsNaiParsed || meta.IsSdFormat || meta.IsModelInference))
                         await ImportMetadataAsync(meta);

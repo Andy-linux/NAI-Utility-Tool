@@ -757,7 +757,7 @@ public sealed partial class MainWindow
         if (file == null)
             return;
 
-        var bytes = await File.ReadAllBytesAsync(file.Path);
+        var bytes = await StorageFileReader.ReadAllBytesAsync(file);
         await ApplyDroppedImageMetadata(bytes, file.Name, promptForOptions: true);
     }
 

@@ -40,9 +40,27 @@ public sealed partial class MainWindow
     {
         try
         {
-            var bytes = await File.ReadAllBytesAsync(filePath);
+            await LoadInspectImageFromBytesAsync(await File.ReadAllBytesAsync(filePath), Path.GetFileName(filePath), filePath);
+        }
+        catch (Exception ex) { TxtStatus.Text = Lf("common.load_failed", ex.Message); }
+    }
+
+    private async Task LoadInspectImageAsync(StorageFile file)
+    {
+        try
+        {
+            await LoadInspectImageFromBytesAsync(await StorageFileReader.ReadAllBytesAsync(file), file.Name,
+                string.IsNullOrEmpty(file.Path) ? null : file.Path);
+        }
+        catch (Exception ex) { TxtStatus.Text = Lf("common.load_failed", ex.Message); }
+    }
+
+    private async Task LoadInspectImageFromBytesAsync(byte[] bytes, string? sourceName = null, string? sourcePath = null)
+    {
+        try
+        {
             _inspectImageBytes = bytes;
-            _inspectImagePath = filePath;
+            _inspectImagePath = sourcePath;
             _inspectRawModified = false;
 
             var bitmapImage = new BitmapImage();
@@ -68,44 +86,6 @@ public sealed partial class MainWindow
                 ReplaceEditMenu();
                 ReplaceToolMenu();
             }
-
-            TxtStatus.Text = meta != null
-                ? Lf("inspect.loaded_with_metadata", Path.GetFileName(filePath))
-                : Lf("inspect.loaded_without_metadata", Path.GetFileName(filePath));
-        }
-        catch (Exception ex)
-        {
-            TxtStatus.Text = Lf("common.load_failed", ex.Message);
-        }
-    }
-
-    private async Task LoadInspectImageFromBytesAsync(byte[] bytes, string? sourceName = null)
-    {
-        try
-        {
-            _inspectImageBytes = bytes;
-            _inspectImagePath = null;
-            _inspectRawModified = false;
-
-            var bitmapImage = new BitmapImage();
-            using var ms = new Windows.Storage.Streams.InMemoryRandomAccessStream();
-            using var writer = new Windows.Storage.Streams.DataWriter(ms);
-            writer.WriteBytes(GetWinUiDisplayBytes(bytes));
-            await writer.StoreAsync();
-            writer.DetachStream();
-            ms.Seek(0);
-            await bitmapImage.SetSourceAsync(ms);
-            InspectPreviewImage.Source = bitmapImage;
-            InspectImagePlaceholder.Visibility = Visibility.Collapsed;
-
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-                () => FitInspectPreviewToScreen());
-
-            var meta = await Task.Run(() => ImageMetadataService.ReadFromBytes(bytes));
-            _inspectMetadata = meta;
-            DisplayInspectMetadata(meta);
-            UpdateInspectSaveState();
-            if (_currentMode == AppMode.Inspect) ReplaceEditMenu();
 
             TxtStatus.Text = meta != null
                 ? Lf("inspect.loaded_with_metadata", sourceName ?? L("image.preview_label"))

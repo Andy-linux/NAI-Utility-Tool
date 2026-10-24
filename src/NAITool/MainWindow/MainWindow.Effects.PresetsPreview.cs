@@ -450,6 +450,17 @@ public sealed partial class MainWindow
         }
     }
 
+    private async Task LoadEffectsImageAsync(StorageFile file)
+    {
+        try
+        {
+            await LoadEffectsImageFromBytesAsync(await StorageFileReader.ReadAllBytesAsync(file),
+                string.IsNullOrEmpty(file.Path) ? null : file.Path);
+            TxtStatus.Text = Lf("post.status.loaded_source", file.Name);
+        }
+        catch (Exception ex) { TxtStatus.Text = Lf("common.load_failed", ex.Message); }
+    }
+
     private Task LoadEffectsImageFromBytesAsync(byte[] bytes, string? filePath = null)
     {
         PushEffectsUndoState();

@@ -179,7 +179,7 @@ public sealed partial class MainWindow
     {
         if (file.FileType.Equals(".naiv4vibe", StringComparison.OrdinalIgnoreCase))
         {
-            byte[] bytes = await File.ReadAllBytesAsync(file.Path);
+            byte[] bytes = await StorageFileReader.ReadAllBytesAsync(file);
             if (bytes.Length == 0)
             {
                 TxtStatus.Text = Lf("references.error.cannot_read_encoded_vibe", file.Name);
