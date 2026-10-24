@@ -543,7 +543,7 @@ public sealed partial class MainWindow
         });
         aboutPanel.Children.Add(new TextBlock
         {
-            Text = L("about.version"),
+            Text = Lf("about.version_format", ReleaseUpdateService.CurrentVersion),
             Opacity = 0.7
         });
         aboutPanel.Children.Add(new TextBlock

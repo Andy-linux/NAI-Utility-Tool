@@ -447,6 +447,11 @@
                             <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xE71B;"/>
                         </MenuFlyoutItem.Icon>
                     </MenuFlyoutItem>
+                    <MenuFlyoutItem x:Name="MenuCheckUpdates" Text="" Click="OnCheckUpdates">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xE895;"/>
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
                     <MenuFlyoutItem x:Name="MenuAbout" Text="" Click="OnAbout">
                         <MenuFlyoutItem.Icon>
                             <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xE946;"/>

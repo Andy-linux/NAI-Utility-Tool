@@ -415,13 +415,7 @@ public sealed partial class MainWindow : Window
             ResetGenerationPreviewPulseVisuals();
             _effectsPreviewCts?.Cancel();
             _effectsPreviewCts?.Dispose();
-            if (IsPromptMode(_currentMode))
-            {
-                SaveCurrentPromptToBuffer();
-                SyncUIToParams();
-            }
-            SyncRememberedPromptAndParameterState();
-            _settings.Save();
+            SaveClosingWorkspaceState();
             _reverseTaggerService.Dispose();
         };
 

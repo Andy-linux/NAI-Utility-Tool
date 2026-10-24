@@ -988,6 +988,6 @@ public sealed partial class MainWindow
 
     private static string GetAppVersionText()
     {
-        return "1.3.0";
+        return ReleaseUpdateService.CurrentVersion;
     }
 }

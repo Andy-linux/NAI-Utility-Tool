@@ -31,7 +31,10 @@ public sealed partial class MainWindow
             return;
         }
         if (_allowCloseWithUnsavedWorkspace || !HasUnsavedWorkspaceChanges(out _))
+        {
+            StartPendingUpdateInstaller(args);
             return;
+        }
 
         args.Cancel = true;
 
@@ -64,7 +67,10 @@ public sealed partial class MainWindow
             };
 
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                _pendingUpdateInstaller = null;
                 return;
+            }
 
             _allowCloseWithUnsavedWorkspace = true;
             CloseAdvancedParamsWindow();
@@ -74,6 +80,17 @@ public sealed partial class MainWindow
         {
             _closeConfirmationOpen = false;
         }
+    }
+
+    private bool SaveClosingWorkspaceState()
+    {
+        if (IsPromptMode(_currentMode))
+        {
+            SaveCurrentPromptToBuffer();
+            SyncUIToParams();
+        }
+        SyncRememberedPromptAndParameterState();
+        return _settings.Save();
     }
 
     private bool HasUnsavedWorkspaceChanges(out string workspaceName)

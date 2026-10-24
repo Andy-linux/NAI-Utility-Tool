@@ -186,6 +186,7 @@ public sealed partial class MainWindow
         MenuHelpOverview.Text = L("menu.help.overview");
         MenuHelpHighlights.Text = L("menu.help.highlights");
         MenuHelpLinks.Text = L("menu.help.links");
+        MenuCheckUpdates.Text = L("update.title");
         MenuAbout.Text = L("menu.help.about");
 
         WorkspaceModeGenerateTitle.Text = L("mode.generate");
