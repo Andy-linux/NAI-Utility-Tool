@@ -15,3 +15,5 @@ dotnet run --project tests/Seeds -c Debug
 原有 Seed、型号、角色和部分导入检查仍使用同一入口执行。
 
 `StreamResultChecks` 通过网关 SSE 调用同一生产帧处理器和图片解码器，检查默认预览起点、缺少步数的兼容帧、最终图后预览、重复 final、缺失最终图、服务端错误及取消。它验证接收结果，不代表真实网络、计费、重试或界面时序已验收。
+
+`StorageFileChecks` 使用没有本地路径的 Windows 虚拟文件及普通磁盘文件，验证原始字节完整并进入真实 Info 解析器；实际浏览器拖拽另做原生界面验证。
