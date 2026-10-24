@@ -14,7 +14,19 @@ using System.Threading.Tasks;
 namespace NAITool.Services;
 
 public sealed record ReleaseAsset(string Name, Uri DownloadUri, long Size, string? Digest);
-public sealed record ClientRelease(string Tag, Version Version, string Notes, DateTimeOffset PublishedAt,
+public sealed record ClientReleaseVersion(Version BaseVersion, int Fork, int? Patch) : IComparable<ClientReleaseVersion>
+{
+    public int CompareTo(ClientReleaseVersion? other)
+    {
+        if (other == null) return 1;
+        int result = BaseVersion.CompareTo(other.BaseVersion);
+        if (result != 0) return result;
+        result = Fork.CompareTo(other.Fork);
+        return result != 0 ? result : Nullable.Compare(Patch, other.Patch);
+    }
+}
+
+public sealed record ClientRelease(string Tag, ClientReleaseVersion Version, string Notes, DateTimeOffset PublishedAt,
     Uri PageUri, ReleaseAsset Installer, ReleaseAsset? Checksums)
 {
     public override string ToString() => Tag;
@@ -30,15 +42,21 @@ public sealed class ReleaseUpdateService
 
     public ReleaseUpdateService(HttpClient client) => _client = client;
 
-    // The fork's tag is not SemVer: compare its numeric revision (fork.10 > fork.2).
-    public static Version? ParseVersion(string tag)
+    // Compare each numeric component: fork.2 < fork.2.1 < fork.2.10 < fork.3.
+    public static ClientReleaseVersion? ParseVersion(string tag)
     {
-        var match = Regex.Match(tag, @"^v?(\d+)\.(\d+)\.(\d+)[_-]fork\.(\d+)$", RegexOptions.CultureInvariant);
+        var match = Regex.Match(tag, @"^v?(\d+)\.(\d+)\.(\d+)[_-]fork\.(\d+)(?:\.(\d+))?$", RegexOptions.CultureInvariant);
         if (!match.Success) return null;
         var parts = new int[4];
         for (int i = 0; i < parts.Length; i++)
             if (!int.TryParse(match.Groups[i + 1].Value, out parts[i])) return null;
-        return new Version(parts[0], parts[1], parts[2], parts[3]);
+        int? patch = null;
+        if (match.Groups[5].Success)
+        {
+            if (!int.TryParse(match.Groups[5].Value, out int value)) return null;
+            patch = value;
+        }
+        return new ClientReleaseVersion(new Version(parts[0], parts[1], parts[2]), parts[3], patch);
     }
 
     private static HttpRequestMessage Request(Uri uri)

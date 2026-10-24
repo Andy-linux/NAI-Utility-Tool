@@ -12,7 +12,7 @@ void Check(bool value, string name)
 }
 byte[] payload = Encoding.UTF8.GetBytes("Maintenance installer fixture: unchanged binary bytes.\n");
 string digest = Convert.ToHexStringLower(SHA256.HashData(payload));
-const string tag = "1.3.0_fork.3";
+const string tag = "1.3.0_fork.2.1";
 string assetName = $"NAI.Utility.Tool.{tag}.Setup.exe";
 object Release(string version, bool draft = false, bool prerelease = false, bool installer = true) => new
 {
@@ -21,14 +21,20 @@ object Release(string version, bool draft = false, bool prerelease = false, bool
         browser_download_url = $"https://github.com/{ReleaseUpdateService.Repository}/releases/download/{version}/NAI.Utility.Tool.{version}.Setup.exe",
         size = payload.Length, digest = "sha256:" + digest } } : []
 };
-Check(ReleaseUpdateService.ParseVersion("1.3.0_fork.10") > ReleaseUpdateService.ParseVersion("1.3.0_fork.2"), "Fork revisions use numeric ordering");
-Check(ReleaseUpdateService.ParseVersion("1.4.0_fork.1") > ReleaseUpdateService.ParseVersion("1.3.0_fork.99"), "Base version precedes fork revision");
-Check(ReleaseUpdateService.ParseVersion("v1.3.0-fork.3") == ReleaseUpdateService.ParseVersion(tag), "Display and assembly tag forms agree");
-foreach (string value in new[] { "1.3.0", "main", "dev", "1.3.0_fork.9999999999999", "1.3.0_fork.4-preview" })
+string[] orderedTags = ["1.3.0_fork.2", "1.3.0_fork.2.0", tag, "1.3.0_fork.2.2",
+    "1.3.0_fork.2.10", "1.3.0_fork.3", "1.3.0_fork.10", "1.3.1_fork.1", "1.4.0_fork.1", "2.0.0_fork.1"];
+for (int i = 1; i < orderedTags.Length; i++)
+    Check(ReleaseUpdateService.ParseVersion(orderedTags[i])!.CompareTo(ReleaseUpdateService.ParseVersion(orderedTags[i - 1])) > 0,
+        $"Numeric version ordering: {orderedTags[i - 1]} < {orderedTags[i]}");
+Check(ReleaseUpdateService.ParseVersion("v1.3.0-fork.2.1") == ReleaseUpdateService.ParseVersion(tag), "Display and assembly tag forms agree");
+foreach (string value in new[] { "1.3.0", "main", "dev", "1.3.0_fork.9999999999999", "1.3.0_fork.2.9999999999999",
+    "1.3.0_fork.2.1.1", "1.3.0_fork.4-preview" })
     Check(ReleaseUpdateService.ParseVersion(value) == null, "Reject a non-release version: " + value);
-string json = JsonSerializer.Serialize(new[] { Release(tag), Release("1.3.0_fork.10"), Release("1.3.0_fork.12", draft: true), Release("1.3.0_fork.11", prerelease: true), Release("1.3.0_fork.20", installer: false) });
+string json = JsonSerializer.Serialize(new[] { Release(tag), Release("1.3.0_fork.2"), Release("1.3.0_fork.2.10"),
+    Release("1.3.0_fork.10"), Release("1.3.0_fork.12", draft: true), Release("1.3.0_fork.11", prerelease: true),
+    Release("1.3.0_fork.2.2", prerelease: true), Release("1.3.0_fork.20", installer: false) });
 var parsed = ReleaseUpdateService.ParseReleases(json);
-Check(parsed.Select(r => r.Tag).SequenceEqual(new[] { "1.3.0_fork.10", tag }), "Only stable releases with a compatible installer are offered");
+Check(parsed.Select(r => r.Tag).SequenceEqual(new[] { "1.3.0_fork.10", "1.3.0_fork.2.10", tag, "1.3.0_fork.2" }), "Only stable releases with a compatible installer are offered");
 var release = parsed.Single(r => r.Tag == tag);
 string sumsText = digest + "  " + assetName + Environment.NewLine;
 using var handler = new FixtureHandler((request, token) =>
@@ -41,8 +47,9 @@ using var handler = new FixtureHandler((request, token) =>
 });
 using var client = new HttpClient(handler);
 var service = new ReleaseUpdateService(client);
-Check((await service.GetReleasesAsync(default)).Count == 2, "GitHub discovery sends and parses its release request");
+Check((await service.GetReleasesAsync(default)).Count == 4, "GitHub discovery sends and parses its release request");
 string downloaded = await service.DownloadAsync(release, null, default);
+Check(Path.GetFileName(downloaded) == assetName, "A patch release selects its exact installer asset");
 Check(File.ReadAllBytes(downloaded).SequenceEqual(payload), "Validated installer is byte exact");
 Directory.Delete(Path.GetDirectoryName(downloaded)!, true);
 var sums = new ReleaseAsset("SHA256SUMS.txt", new Uri($"https://github.com/{ReleaseUpdateService.Repository}/releases/download/{tag}/SHA256SUMS.txt"), 100, null);

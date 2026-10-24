@@ -74,7 +74,7 @@ public sealed partial class MainWindow
             notes.Text = release.Notes;
             details.Text = Lf("update.details", release.PublishedAt.ToLocalTime().ToString("yyyy-MM-dd"), release.Installer.Size / 1048576.0);
             releaseLink.NavigateUri = release.PageUri;
-            bool newer = current != null && release.Version > current;
+            bool newer = current != null && release.Version.CompareTo(current) > 0;
             downloadButton.IsEnabled = newer;
             status.Text = L(newer ? "update.available" : "update.current_or_older");
             progress.Visibility = Visibility.Collapsed;
