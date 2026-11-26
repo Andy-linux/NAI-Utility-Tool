@@ -20,7 +20,7 @@ public sealed class VibeTransferInfo
 
     public static string EncodingFamily(string model) => ImportedImageModel.ResolveForTarget(model,
         new[] { "nai-diffusion-4-full", "nai-diffusion-4-curated-preview", "nai-diffusion-4-5-full", "nai-diffusion-4-5-curated", "nai-diffusion-3", "nai-diffusion-furry-3" })
-        ?? ModelCapabilities.HighModel(model).Replace("-inpainting", "");
+        ?? ModelCapabilityRules.HighModel(model).Replace("-inpainting", "");
     public static bool IsCompatibleEncoding(string? encodedModel, string model) =>
         encodedModel != null && EncodingFamily(encodedModel) == EncodingFamily(model);
 

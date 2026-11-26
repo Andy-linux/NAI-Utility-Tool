@@ -6,6 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../src/NAITool/Services/NovelAiAnlasCalculator.cs" Link="NovelAiAnlasCalculator.cs" />
+    <ProjectReference Include="../../src/NAI.Parity.Core/NAI.Parity.Core.csproj" />
   </ItemGroup>
 </Project>

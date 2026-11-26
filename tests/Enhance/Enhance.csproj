@@ -8,6 +8,9 @@
     <NaitoolBuildDirectory Condition="'$(NaitoolBuildDirectory)' == ''">$(MSBuildThisFileDirectory)../../build/$(Configuration)/bin</NaitoolBuildDirectory>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="NAI.Parity.Core">
+      <HintPath>$(NaitoolBuildDirectory)/NAI.Parity.Core.dll</HintPath>
+    </Reference>
     <Reference Include="NAI Utility Tool">
       <HintPath>$(NaitoolBuildDirectory)/NAI Utility Tool.dll</HintPath>
     </Reference>

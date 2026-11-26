@@ -20,7 +20,7 @@ namespace NAITool.Services;
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-internal static class LanczosImageResize
+public static class LanczosImageResize
 {
     private static (int Start, short[] Weights)[] Filters(int source, int target)
     {
@@ -58,7 +58,7 @@ internal static class LanczosImageResize
         return result;
     }
 
-    internal static SKBitmap Resize(SKBitmap source, int width, int height)
+    public static SKBitmap Resize(SKBitmap source, int width, int height)
     {
         var output = new SKBitmap(width, height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
         if (source.Width == width && source.Height == height)

@@ -3,16 +3,16 @@ using System;
 namespace NAITool.Services;
 
 /// <summary>Single-image pricing for the V3/V4/V5 models supported by this client.</summary>
-internal static class NovelAiAnlasCalculator
+public static class NovelAiAnlasCalculator
 {
-    internal const int MaxBaseCost = 140;
+    public const int MaxBaseCost = 140;
 
-    internal static bool IsV5Model(string model) => model is
+    public static bool IsV5Model(string model) => model is
         "nai-diffusion-5" or "nai-diffusion-5-full" or "nai-diffusion-5-curated" or
         "nai-diffusion-5-inpainting" or "nai-diffusion-5-full-inpainting" or
         "nai-diffusion-5-curated-inpainting" or "nai-diffusion-5-full-medium" or "nai-diffusion-5-full-medium-inpainting";
 
-    internal static int PaidBaseCost(string model, int width, int height, int steps,
+    public static int PaidBaseCost(string model, int width, int height, int steps,
         bool sm = false, double strength = 1, bool smDyn = false)
     {
         if (width <= 0 || height <= 0 || steps <= 0)
@@ -25,14 +25,14 @@ internal static class NovelAiAnlasCalculator
         double cost = Math.Ceiling(2.951823174884865e-6 * pixels +
                                   5.753298233447344e-7 * pixels * steps *
                                   (model.Contains("-medium", StringComparison.Ordinal) ? 1 / 1.06521739 : 1));
-        bool supportsSm = ModelCapabilities.SupportsSmea(model);
+        bool supportsSm = ModelCapabilityRules.SupportsSmea(model);
         if (supportsSm) cost *= smDyn ? 1.4 : sm ? 1.2 : 1;
         if (IsV5Model(model)) cost *= 1.5;
         cost *= double.IsFinite(strength) ? Math.Clamp(strength, 0, 1) : 1;
         return (int)Math.Clamp(Math.Ceiling(cost), 2, int.MaxValue);
     }
 
-    internal static int BaseCost(string model, int width, int height, int steps,
+    public static int BaseCost(string model, int width, int height, int steps,
         bool activeOpus, bool? v5UsageIsNegative, bool sm = false, double strength = 1, bool smDyn = false)
     {
         int paidCost = PaidBaseCost(model, width, height, steps, sm, strength, smDyn);
@@ -45,7 +45,7 @@ internal static class NovelAiAnlasCalculator
         return free ? 0 : paidCost;
     }
 
-    internal static int ReferenceCost(int unencodedVibes, int activeVibes, int preciseReferences) =>
+    public static int ReferenceCost(int unencodedVibes, int activeVibes, int preciseReferences) =>
         Math.Max(0, unencodedVibes) * 2 + Math.Max(0, activeVibes - 4) * 2 +
         Math.Max(0, preciseReferences) * 5;
 }

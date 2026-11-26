@@ -8,6 +8,6 @@
   <ItemGroup>
     <Compile Include="../../src/NAITool/Services/ApiAccount.cs" Link="ApiAccount.cs" />
     <Compile Include="../../src/NAITool/Services/ApiAccountRouter.cs" Link="ApiAccountRouter.cs" />
-    <Compile Include="../../src/NAITool/Services/NovelAiAnlasCalculator.cs" Link="NovelAiAnlasCalculator.cs" />
+    <ProjectReference Include="../../src/NAI.Parity.Core/NAI.Parity.Core.csproj" />
   </ItemGroup>
 </Project>
