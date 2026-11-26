@@ -20,3 +20,8 @@ The user chooses a release, downloads it, then explicitly requests installation.
 `/PORTABLE` and `/UPDATEPID` are project-specific Inno script parameters. Setup waits up to 30 seconds for the initiating client to exit, then runs the existing destination and file-lock checks before copying. It never terminates a process. `user/`, `output/`, `logs/` and existing `assets/`/`models/` remain preserved. The wizard still lets the user review or cancel installation.
 
 fork.2 has no update UI. Its first upgrade to fork.2.1 requires downloading and running Setup once; subsequent versions can be selected inside the client. A local/mock check of a future release is not evidence of a published online upgrade.
+
+
+### fork.3 local candidate
+
+The next candidate uses informational version \`1.3.0_fork.3\`, file version \`1.3.0.4\`, and the existing maintenance update contract. Release assets and remote publication remain subject to local acceptance and owner approval.
