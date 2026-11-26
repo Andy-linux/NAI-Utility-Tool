@@ -67,7 +67,28 @@ internal static class V5ReferenceTransportChecks
         int posts=handler.Posts;
         var excess=await service.GenerateAsync(832,1216,"landscape","",preciseReferences:Enumerable.Repeat(a,17).ToList(),requestParameters:new NAIParameters());
         Check(excess.Error!=null && handler.Posts==posts, "17 effective cards rejected before HTTP");
-        Console.WriteLine($"Passed {checks} V5 request behavior assertions (synthetic HTTP).");
+        using (var archive = File.OpenRead(@"F:\nai\.runs\restart-20261126\website-reference_images.zip"))
+        {
+            var cards = PreciseReferenceArchive.Read(archive);
+            Check(cards.Count == 1 && cards[0].Strength == 6.1 && cards[0].Fidelity == 1 &&
+                cards[0].Enabled && cards[0].ReferenceType == PreciseReferenceType.CharacterAndStyle,
+                "Read actual website reference ZIP");
+            var original = Convert.ToBase64String(File.ReadAllBytes(@"F:\nai\.runs\restart-20261126\fixtures\reference-oracle\character.png"));
+            Check(cards[0].ImageBase64 == original, "ZIP keeps original image bytes");
+            cards[0].Strength = -.51;
+            cards[0].Fidelity = 1.2;
+            cards[0].Enabled = false;
+            using var memory = new MemoryStream();
+            PreciseReferenceArchive.Write(memory, cards);
+            memory.Position = 0;
+            var restored = PreciseReferenceArchive.Read(memory).Single();
+            Check(restored.ImageBase64 == original && restored.Strength == -.51 && restored.Fidelity == 1.2 && !restored.Enabled,
+                "ZIP roundtrip retains finite values and disabled state");
+        }
+        var remembered = new RememberedPromptState { GenPreciseReferences = [new() { ImageDataKey = "fixture", Strength = -.51, Fidelity = 1.2, IsDisabled = true, ReferenceType = PreciseReferenceType.Outfit }] };
+        var persisted = JsonSerializer.Deserialize<RememberedPromptState>(JsonSerializer.Serialize(remembered))!.GenPreciseReferences.Single();
+        Check(persisted.Strength == -.51 && persisted.Fidelity == 1.2 && persisted.IsDisabled && persisted.ReferenceType == PreciseReferenceType.Outfit, "Draft settings preserve exact values");
+        Console.WriteLine($"Passed {checks} V5 request and archive behavior assertions (synthetic HTTP).");
     }
 
     private sealed class Handler : HttpMessageHandler

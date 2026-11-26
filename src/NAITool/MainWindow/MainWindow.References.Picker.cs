@@ -49,14 +49,34 @@ public sealed partial class MainWindow
         if (TryReportPreciseReferenceUnavailable())
             return;
 
-        var newEntry = await CreatePreciseReferenceEntryAsync();
-        if (newEntry == null)
-            return;
-
-        _genPreciseReferences.Add(newEntry);
+        var picker = new FileOpenPicker();
+        foreach (var extension in new[] { ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".zip" }) picker.FileTypeFilter.Add(extension);
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
+        var file = await picker.PickSingleFileAsync();
+        if (file == null) return;
+        if (file.FileType.Equals(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                using var stream = await file.OpenStreamForReadAsync();
+                var cards = await Task.Run(() => PreciseReferenceArchive.Read(stream));
+                _genPreciseReferences.AddRange(cards.Select(card => new PreciseReferenceEntry
+                {
+                    FileName = card.FileName, ImageBase64 = card.ImageBase64, ReferenceType = card.ReferenceType,
+                    Strength = card.Strength, Fidelity = card.Fidelity, IsDisabled = !card.Enabled,
+                }));
+            }
+            catch (Exception ex) { TxtStatus.Text = ex.Message; return; }
+        }
+        else
+        {
+            var newEntry = CreatePreciseReferenceEntry(await CreateReferenceImagePickResultAsync(file));
+            if (newEntry == null) return;
+            _genPreciseReferences.Add(newEntry);
+        }
         RefreshReferencePanels();
         UpdateGenerateButtonWarning();
-        TxtStatus.Text = Lf("references.status.added_precise", newEntry.FileName);
+        TxtStatus.Text = Lf("references.status.added_precise", file.Name);
     }
 
     private async Task<VibeTransferEntry?> CreateVibeTransferEntryAsync()
@@ -124,14 +144,15 @@ public sealed partial class MainWindow
 
     private async Task<(string FileName, string ImageBase64)?> CreateReferenceImagePickResultAsync(StorageFile file)
     {
-        byte[]? pngBytes = await ReadImageFileAsPngAsync(file);
-        if (pngBytes == null || pngBytes.Length == 0)
+        byte[] originalBytes = (await FileIO.ReadBufferAsync(file)).ToArray();
+        using var codec = SKCodec.Create(new MemoryStream(originalBytes));
+        if (codec == null)
         {
             TxtStatus.Text = Lf("references.error.cannot_read_reference_image", file.Name);
             return null;
         }
 
-        return (file.Name, Convert.ToBase64String(pngBytes));
+        return (file.Name, Convert.ToBase64String(originalBytes));
     }
 
     private sealed record VibePickResult(

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
@@ -586,6 +586,7 @@ public sealed partial class MainWindow
         LoadRememberedCharacters(_i2iCharacters, remembered.I2ICharacters);
         LoadRememberedVibes(_genV3VibeTransfers, remembered.GenV3Vibes);
         LoadRememberedVibes(_genV4VibeTransfers, remembered.GenV4Vibes);
+        LoadRememberedPreciseReferences(remembered.GenPreciseReferences);
         _normalizeVibeStrengths = remembered.NormalizeVibeStrengths;
     }
 
@@ -638,6 +639,7 @@ public sealed partial class MainWindow
             I2ICharacters = _i2iCharacters.Select(CreateRememberedCharacterState).ToList(),
             GenV3Vibes = CreateRememberedVibes(_genV3VibeTransfers),
             GenV4Vibes = CreateRememberedVibes(_genV4VibeTransfers),
+            GenPreciseReferences = CreateRememberedPreciseReferences(),
             NormalizeVibeStrengths = _normalizeVibeStrengths,
         };
         _settings.Settings.RememberedCustomWidth = _customWidth;

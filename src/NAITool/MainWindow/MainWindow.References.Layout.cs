@@ -68,7 +68,7 @@ public sealed partial class MainWindow
             : Visibility.Collapsed;
         TxtPreciseReferenceHint.Visibility = IsCurrentInpaintOperation() && IsV5ModelKey(GetCurrentModelKey()) &&
             !PreciseReferenceRules.SupportsRequest(EffectiveSnapshot(CurrentParams).Model) && RawPreciseReferenceCardCount() > 0 ? Visibility.Visible : Visibility.Collapsed;
-        TxtPreciseReferenceHint.Text = "Precise references are not supported by this inpaint model.";
+        TxtPreciseReferenceHint.Text = L("references.precise.inpaint_unsupported");
 
         UpdateReferenceButtonRowLayout();
         UpdatePromptAreaHeight();

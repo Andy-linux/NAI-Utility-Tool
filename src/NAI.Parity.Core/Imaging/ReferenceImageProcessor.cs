@@ -203,13 +203,12 @@ public static class ReferenceImageProcessor
             }
             if (value != marker[i]) return bytes;
         }
-        for (int i = 0; i < pixels.Length; i++)
+        var rgba = bitmap.Bytes;
+        for (int i = 3; i < rgba.Length; i += 4)
         {
-            var pixel = pixels[i];
-            if (pixel.Alpha is 254 or 1)
-                pixels[i] = pixel.WithAlpha(pixel.Alpha == 254 ? (byte)255 : (byte)0);
+            if (rgba[i] is 254 or 1) rgba[i] = rgba[i] == 254 ? (byte)255 : (byte)0;
         }
-        bitmap.Pixels = pixels;
+        System.Runtime.InteropServices.Marshal.Copy(rgba, 0, bitmap.GetPixels(), rgba.Length);
         return Encode(bitmap);
     }
 

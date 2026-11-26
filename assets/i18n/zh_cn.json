@@ -1246,5 +1246,10 @@
   "update.install": "关闭客户端并安装",
   "update.busy": "请先完成或停止正在运行的任务，再安装更新。",
   "update.failed": "更新失败：{0}",
-  "about.version_format": "版本 {0}"
+  "about.version_format": "版本 {0}",
+  "references.precise.type.outfit": "服装",
+  "references.precise.prefer_same_outfit": "优先相同服装",
+  "references.precise.outfit_skipped": "当前模型会跳过服装参考。",
+  "references.precise.inpaint_unsupported": "当前局部重绘模型不支持精确参考。",
+  "references.precise.export_zip": "导出参考图 ZIP"
 }

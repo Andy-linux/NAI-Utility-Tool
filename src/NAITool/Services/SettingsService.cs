@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -522,7 +522,19 @@ public class RememberedPromptState
     public List<RememberedCharacterState> I2ICharacters { get; set; } = new();
     public List<RememberedVibeState> GenV3Vibes { get; set; } = new();
     public List<RememberedVibeState> GenV4Vibes { get; set; } = new();
+    public List<RememberedPreciseReferenceState> GenPreciseReferences { get; set; } = new();
     public bool NormalizeVibeStrengths { get; set; } = true;
+}
+
+public class RememberedPreciseReferenceState
+{
+    public string FileName { get; set; } = "";
+    public string ImageDataKey { get; set; } = "";
+    public PreciseReferenceType ReferenceType { get; set; }
+    public double Strength { get; set; } = 1;
+    public double Fidelity { get; set; }
+    public bool IsDisabled { get; set; }
+    public bool IsCollapsed { get; set; }
 }
 
 public class RememberedVibeState

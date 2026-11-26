@@ -1,4 +1,4 @@
-﻿{
+{
     "automation.dialog.cancel":  "取消",
     "automation.dialog.run":  "開始執行",
     "automation.dialog.title":  "自動化",
@@ -1163,5 +1163,10 @@
     "settings.api.clear": "清空 API Token",
     "oobe.api.settings_hint": "您也可以在設定頁面裡更改請求 Base URL 以及新增多個 API Token。",
     "help.highlights.multi_api.title": "多 API 支援",
-    "help.highlights.multi_api.body": "支援在設定中新增多個 API Token，共用一個請求 Base URL，並一併測試所有帳號。\n\n可選擇輪詢、最多額度、最少額度或隨機呼叫，依請求消耗的 V5 額度或 Anlas 自動分配帳號；不消耗額度時使用輪詢。主介面顯示額度總和，額度管理可依 API 編號查看各帳號，重複 Token 不會重複呼叫或累計額度。"
+    "help.highlights.multi_api.body": "支援在設定中新增多個 API Token，共用一個請求 Base URL，並一併測試所有帳號。\n\n可選擇輪詢、最多額度、最少額度或隨機呼叫，依請求消耗的 V5 額度或 Anlas 自動分配帳號；不消耗額度時使用輪詢。主介面顯示額度總和，額度管理可依 API 編號查看各帳號，重複 Token 不會重複呼叫或累計額度。",
+  "references.precise.type.outfit": "服裝",
+  "references.precise.prefer_same_outfit": "優先相同服裝",
+  "references.precise.outfit_skipped": "目前模型會略過服裝參考。",
+  "references.precise.inpaint_unsupported": "目前局部重繪模型不支援精確參考。",
+  "references.precise.export_zip": "匯出參考圖 ZIP"
 }

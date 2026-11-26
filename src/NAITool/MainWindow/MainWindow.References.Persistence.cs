@@ -6,6 +6,44 @@ namespace NAITool;
 
 public sealed partial class MainWindow
 {
+    private List<RememberedPreciseReferenceState> CreateRememberedPreciseReferences()
+    {
+        var result = new List<RememberedPreciseReferenceState>();
+        foreach (var card in _genPreciseReferences)
+        {
+            if (string.IsNullOrWhiteSpace(card.ImageBase64)) continue;
+            result.Add(new RememberedPreciseReferenceState
+            {
+                FileName = card.FileName,
+                ImageDataKey = ReferenceDraftStore.Save(AppRootDir, card.ImageBase64),
+                ReferenceType = card.ReferenceType,
+                Strength = card.Strength,
+                Fidelity = card.Fidelity,
+                IsDisabled = card.IsDisabled,
+                IsCollapsed = card.IsCollapsed,
+            });
+        }
+        return result;
+    }
+
+    private void LoadRememberedPreciseReferences(List<RememberedPreciseReferenceState>? saved)
+    {
+        _genPreciseReferences.Clear();
+        if (saved == null) return;
+        foreach (var card in saved)
+        {
+            var image = ReferenceDraftStore.Load(AppRootDir, card.ImageDataKey);
+            if (image == null) continue;
+            if (!double.IsFinite(card.Strength) || !double.IsFinite(card.Fidelity)) continue;
+            _genPreciseReferences.Add(new PreciseReferenceEntry
+            {
+                FileName = card.FileName, ImageBase64 = image,
+                ReferenceType = card.ReferenceType, Strength = card.Strength, Fidelity = card.Fidelity,
+                IsDisabled = card.IsDisabled, IsCollapsed = card.IsCollapsed,
+            });
+        }
+    }
+
     private List<RememberedVibeState> CreateRememberedVibes(List<VibeTransferEntry> entries)
     {
         var result = new List<RememberedVibeState>();

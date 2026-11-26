@@ -43,6 +43,31 @@ public sealed partial class MainWindow
             return;
 
         PreciseReferenceContainer.Children.Clear();
+        if (_genPreciseReferences.Count > 0)
+        {
+            var export = new Button { Content = L("references.precise.export_zip") };
+            export.Click += async (_, _) =>
+            {
+                var picker = new FileSavePicker { SuggestedFileName = "reference_images" };
+                picker.FileTypeChoices.Add("ZIP", new List<string> { ".zip" });
+                InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
+                var file = await picker.PickSaveFileAsync();
+                if (file == null) return;
+                var cards = _genPreciseReferences.Select(x => new PreciseReferenceInfo
+                {
+                    FileName = x.FileName, ImageBase64 = x.ImageBase64, ReferenceType = x.ReferenceType,
+                    Strength = x.Strength, Fidelity = x.Fidelity, Enabled = !x.IsDisabled,
+                }).ToList();
+                try
+                {
+                    using var stream = await file.OpenStreamForWriteAsync();
+                    stream.SetLength(0);
+                    await Task.Run(() => PreciseReferenceArchive.Write(stream, cards));
+                }
+                catch (Exception ex) { TxtStatus.Text = ex.Message; }
+            };
+            PreciseReferenceContainer.Children.Add(export);
+        }
         for (int i = 0; i < _genPreciseReferences.Count; i++)
             PreciseReferenceContainer.Children.Add(BuildPreciseReferenceUI(_genPreciseReferences[i], i));
 
@@ -375,7 +400,7 @@ public sealed partial class MainWindow
             typeCombo.Items.Add(CreateTextComboBoxItem(L("references.precise.type.character")));
             typeCombo.Items.Add(CreateTextComboBoxItem(L("references.precise.type.style")));
             if (v5 || entry.ReferenceType == PreciseReferenceType.Outfit)
-                typeCombo.Items.Add(CreateTextComboBoxItem("Outfit"));
+                typeCombo.Items.Add(CreateTextComboBoxItem(L("references.precise.type.outfit")));
             typeCombo.SelectedIndex = entry.ReferenceType switch
             {
                 PreciseReferenceType.Character or PreciseReferenceType.CharacterMainOutfit => 1,
@@ -402,7 +427,7 @@ public sealed partial class MainWindow
             {
                 var outfit = new CheckBox
                 {
-                    Content = "Prefer same outfit", IsEnabled = canEdit,
+                    Content = L("references.precise.prefer_same_outfit"), IsEnabled = canEdit,
                     IsChecked = entry.ReferenceType is PreciseReferenceType.CharacterAndStyle or PreciseReferenceType.CharacterMainOutfit
                 };
                 outfit.Click += (_, _) =>
@@ -426,7 +451,7 @@ public sealed partial class MainWindow
                 fidelityRow.Opacity = canEdit ? 1.0 : 0.72;
                 root.Children.Add(fidelityRow);
                 if (entry.ReferenceType == PreciseReferenceType.Outfit)
-                    root.Children.Add(new TextBlock { Text = "Outfit is skipped by this model.", TextWrapping = TextWrapping.Wrap });
+                    root.Children.Add(new TextBlock { Text = L("references.precise.outfit_skipped"), TextWrapping = TextWrapping.Wrap });
             }
         }
 
