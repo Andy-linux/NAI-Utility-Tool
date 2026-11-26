@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -1164,48 +1164,7 @@ public static class ImageMetadataService
 
     private static void ParsePreciseReferences(JsonElement root, ImageMetadata meta)
     {
-        if (root.TryGetProperty("director_reference_images", out var dirImageArray) &&
-            dirImageArray.ValueKind == JsonValueKind.Array)
-        {
-            var strengthValues = TryReadDoubleArray(root, "director_reference_strength_values");
-            var secondaryValues = TryReadDoubleArray(root, "director_reference_secondary_strength_values");
-            bool hasDescriptions = root.TryGetProperty("director_reference_descriptions", out var descArray)
-                && descArray.ValueKind == JsonValueKind.Array;
-
-            int index = 0;
-            foreach (var item in dirImageArray.EnumerateArray())
-            {
-                string imageBase64 = item.GetString() ?? "";
-                if (string.IsNullOrWhiteSpace(imageBase64))
-                {
-                    index++;
-                    continue;
-                }
-
-                string typeValue = "";
-                if (hasDescriptions)
-                {
-                    var descElements = descArray.EnumerateArray().ToList();
-                    if (index < descElements.Count &&
-                        descElements[index].TryGetProperty("caption", out var caption) &&
-                        caption.TryGetProperty("base_caption", out var baseCap))
-                    {
-                        typeValue = baseCap.GetString() ?? "";
-                    }
-                }
-
-                double secondaryStrength = index < secondaryValues.Count ? secondaryValues[index] : 0.0;
-                meta.PreciseReferences.Add(new PreciseReferenceInfo
-                {
-                    ImageBase64 = imageBase64,
-                    FileName = LocalizationService.Instance.Format("references.imported.precise_numbered", index + 1),
-                    ReferenceType = ParsePreciseReferenceType(typeValue),
-                    Strength = Math.Clamp(index < strengthValues.Count ? strengthValues[index] : 1.0, 0, 1),
-                    Fidelity = Math.Clamp(Math.Round(1.0 - secondaryStrength, 2), 0, 1),
-                });
-                index++;
-            }
-        }
+        meta.PreciseReferences.AddRange(PreciseReferenceMetadata.ReadDirector(root));
 
         if (meta.PreciseReferences.Count > 0)
             return;
@@ -1228,8 +1187,8 @@ public static class ImageMetadataService
                     ImageBase64 = imageBase64,
                     FileName = TryReadString(item, "fileName", "filename", "name", "label"),
                     ReferenceType = ParsePreciseReferenceType(TryReadString(item, "referenceType", "reference_type", "type")),
-                    Strength = Math.Clamp(TryReadDouble(item, "strength", 1.0, "reference_strength"), 0, 1),
-                    Fidelity = Math.Clamp(TryReadDouble(item, "fidelity", 0.0, "reference_fidelity"), 0, 1),
+                    Strength = TryReadDouble(item, "strength", 1.0, "reference_strength"),
+                    Fidelity = TryReadDouble(item, "fidelity", 0.0, "reference_fidelity"),
                 });
                 index++;
             }
@@ -1251,8 +1210,8 @@ public static class ImageMetadataService
             return;
         }
 
-        var legacyStrengthValues = TryReadDoubleArray(root, "reference_strength_multiple");
-        var fidelityValues = TryReadDoubleArray(root, "reference_fidelity_multiple");
+        var legacyStrengthValues = PreciseReferenceMetadata.Array(root, "reference_strength_multiple");
+        var fidelityValues = PreciseReferenceMetadata.Array(root, "reference_fidelity_multiple");
         int currentIndex = 0;
         foreach (var item in imageArray.EnumerateArray())
         {
@@ -1272,8 +1231,8 @@ public static class ImageMetadataService
                 ImageBase64 = imageBase64,
                 FileName = fileName,
                 ReferenceType = ParsePreciseReferenceType(typeValue),
-                Strength = Math.Clamp(currentIndex < legacyStrengthValues.Count ? legacyStrengthValues[currentIndex] : 1.0, 0, 1),
-                Fidelity = Math.Clamp(currentIndex < fidelityValues.Count ? fidelityValues[currentIndex] : 0.0, 0, 1),
+                Strength = PreciseReferenceMetadata.NumberAt(legacyStrengthValues, currentIndex, 1.0),
+                Fidelity = PreciseReferenceMetadata.NumberAt(fidelityValues, currentIndex, 0.0),
             });
             currentIndex++;
         }
@@ -1352,13 +1311,5 @@ public static class ImageMetadataService
     }
 
     private static PreciseReferenceType ParsePreciseReferenceType(string rawType) =>
-        rawType.Trim().ToLowerInvariant() switch
-        {
-            "character" => PreciseReferenceType.Character,
-            "style" => PreciseReferenceType.Style,
-            "character_style" => PreciseReferenceType.CharacterAndStyle,
-            "character&style" => PreciseReferenceType.CharacterAndStyle,
-            "character+style" => PreciseReferenceType.CharacterAndStyle,
-            _ => PreciseReferenceType.CharacterAndStyle,
-        };
+        PreciseReferenceRules.Parse(rawType);
 }
