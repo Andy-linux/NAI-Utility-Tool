@@ -5,6 +5,9 @@ public enum PreciseReferenceType
     CharacterAndStyle,
     Character,
     Style,
+    CharacterMainOutfit,
+    CharacterAndStyleAnyOutfit,
+    Outfit,
 }
 
 public sealed class VibeTransferInfo
@@ -34,5 +37,6 @@ public sealed class PreciseReferenceInfo
     public PreciseReferenceType ReferenceType { get; set; } = PreciseReferenceType.CharacterAndStyle;
     public double Strength { get; set; } = 1.0;
     public double Fidelity { get; set; }
+    public bool Enabled { get; set; } = true;
     public string FileName { get; set; } = "";
 }

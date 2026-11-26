@@ -38,5 +38,37 @@ else if (suite == "pricing")
     Check(NovelAiAnlasCalculator.ReferenceCost(2,6,0,3)==16, "Encoding once plus per-image surcharge");
     Check(NovelAiAnlasCalculator.ReferenceCost(0,0,3,2)==30, "Precise reference per image");
 }
+else if (suite == "references")
+{
+    foreach (var row in Load("reference-rules-oracle.json").GetProperty("vectors").EnumerateArray())
+    {
+        var cards = row.GetProperty("cards").EnumerateArray().Select(r => new PreciseReferenceInfo
+        {
+            ReferenceType = PreciseReferenceRules.Parse(r.GetProperty("description").GetString()),
+            Enabled = r.GetProperty("enabled").GetBoolean(),
+            Strength = r.GetProperty("strength").GetDouble(),
+            Fidelity = r.GetProperty("fidelity").GetDouble(),
+        }).ToList();
+        var filtered = PreciseReferenceRules.Filter(row.GetProperty("model").GetString()!, cards);
+        var expected = row.GetProperty("effective").EnumerateArray().ToArray();
+        Check(filtered.Count == expected.Length, $"Filter count: {row}");
+        for (int i=0; i<filtered.Count; i++)
+        {
+            Check(PreciseReferenceRules.Description(filtered[i].ReferenceType) == expected[i].GetProperty("description").GetString(), "Reference description");
+            Check(filtered[i].Strength == expected[i].GetProperty("strength").GetDouble(), "Reference strength");
+            Check(filtered[i].Fidelity == expected[i].GetProperty("fidelity").GetDouble(), "Reference fidelity");
+        }
+    }
+    var outfit = new PreciseReferenceInfo { ReferenceType = PreciseReferenceType.Outfit, Strength = 6.1 };
+    Check(PreciseReferenceRules.ForRequest("nai-diffusion-5-full", [outfit]).Count == 1, "V5 outfit");
+    Check(PreciseReferenceRules.ForRequest("nai-diffusion-4-5-full", [outfit]).Count == 0, "V4.5 outfit filter");
+    Check(PreciseReferenceRules.ForRequest("nai-diffusion-5-full-inpainting", [outfit]).Count == 0, "V5 inpaint ignores references");
+    Check(PreciseReferenceRules.ForRequest("nai-diffusion-4-5-full-inpainting", [new()]).Count == 1, "V4.5 inpaint references");
+    Check(PreciseReferenceRules.ForRequest("nai-diffusion-5-full", Enumerable.Repeat(new PreciseReferenceInfo{Enabled=false},17)).Count == 0, "Disabled excluded before limit");
+    bool rejected = false;
+    try { PreciseReferenceRules.ForRequest("nai-diffusion-5-full", Enumerable.Repeat(new PreciseReferenceInfo(),17)); }
+    catch (ArgumentException) { rejected = true; }
+    Check(rejected, "17 active references rejected");
+}
 else throw new ArgumentException($"Unknown suite {suite}");
 Console.WriteLine($"{suite}: {checks} behavior assertions passed.");
