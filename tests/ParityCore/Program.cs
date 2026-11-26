@@ -80,5 +80,34 @@ else if (suite == "metadata")
     Check(cards[0].Strength == -0.5 && cards[0].Fidelity == 1.2 && cards[0].ReferenceType == PreciseReferenceType.Outfit, "Negative and greater than one imported without clamp");
     Check(cards[1].Strength == 6.1 && cards[1].Fidelity == 0.625 && cards[1].ReferenceType == PreciseReferenceType.CharacterMainOutfit, "Preserve array positions and precision");
 }
+else if (suite == "imaging")
+{
+    foreach (var row in Load("v5-reference-buckets.json").GetProperty("vectors").EnumerateArray())
+    {
+        int I(string k) => row.GetProperty(k).GetInt32();
+        var actual = ReferenceImageProcessor.SelectBucket(I("inputWidth"), I("inputHeight"));
+        Check(actual.Width == I("width") && actual.Height == I("height") &&
+            actual.ResizeWidth == I("resizeWidth") && actual.ResizeHeight == I("resizeHeight") &&
+            actual.Left == I("left") && actual.Top == I("top") &&
+            actual.Unchanged == row.GetProperty("unchanged").GetBoolean(), $"Bucket: {row}, actual {actual}");
+    }
+    string fixtureDir = @"F:\nai\.runs\restart-20261126\fixtures\reference-oracle";
+    foreach (var row in Load("reference-image-oracle.json").GetProperty("vectors").EnumerateArray())
+    {
+        string id = row.GetProperty("id").GetString()!;
+        var input = File.ReadAllBytes(Path.Combine(fixtureDir, row.GetProperty("file").GetString()!));
+        var prepared = ReferenceImageProcessor.Clean(input);
+        Check(prepared.SequenceEqual(input) == row.GetProperty("preparedPassthrough").GetBoolean(), $"Clean: {id}");
+        var wire = ReferenceImageProcessor.Bucket(prepared);
+        Check(wire.SequenceEqual(prepared) == row.GetProperty("bucketPassthrough").GetBoolean(), $"Bucket passthrough: {id}");
+        using var image = ReferenceImageProcessor.Decode(wire);
+        Check(image.Width == row.GetProperty("expectedWidth").GetInt32() && image.Height == row.GetProperty("expectedHeight").GetInt32(), $"Dimensions: {id}");
+        byte[] actual = image.Bytes;
+        byte[] expected = File.ReadAllBytes(Path.Combine(fixtureDir, row.GetProperty("expectedRaw").GetString()!));
+        int differences = actual.Zip(expected).Count(p => p.First != p.Second);
+        Console.WriteLine($"{id}: {differences} differing channels / {expected.Length}");
+        Check(actual.SequenceEqual(expected), $"RGBA: {id}");
+    }
+}
 else throw new ArgumentException($"Unknown suite {suite}");
 Console.WriteLine($"{suite}: {checks} behavior assertions passed.");

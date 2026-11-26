@@ -119,7 +119,13 @@ public static class LanczosImageResize
             destination[y * width + x] = new SKColor(Clamp((r + 8192) >> 14),
                 Clamp((g + 8192) >> 14), Clamp((b + 8192) >> 14), finalAlpha);
         }
-        output.Pixels = destination;
+        var rgba = new byte[destination.Length * 4];
+        for (int i = 0; i < destination.Length; i++)
+        {
+            var pixel = destination[i];
+            rgba[i*4] = pixel.Red; rgba[i*4+1] = pixel.Green; rgba[i*4+2] = pixel.Blue; rgba[i*4+3] = pixel.Alpha;
+        }
+        System.Runtime.InteropServices.Marshal.Copy(rgba, 0, output.GetPixels(), rgba.Length);
         return output;
     }
 
