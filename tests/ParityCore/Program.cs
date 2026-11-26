@@ -70,5 +70,15 @@ else if (suite == "references")
     catch (ArgumentException) { rejected = true; }
     Check(rejected, "17 active references rejected");
 }
+else if (suite == "metadata")
+{
+    Check(ImportedImageModel.ResolveForTarget("NovelAI Diffusion V5 81E2A1BD", ["nai-diffusion-5-full"]) == "nai-diffusion-5-full", "New full source");
+    Check(ImportedImageModel.ResolveForTarget("NovelAI Diffusion V5 AD5A716B", ["nai-diffusion-5-curated"]) == "nai-diffusion-5-curated", "New curated source");
+    var json = JsonDocument.Parse("""{"director_reference_images":["a",null,"c"],"director_reference_strengths":[-0.5,0,6.1],"secondary_strengths":[-0.2,0,0.375],"director_reference_descriptions":[{"caption":{"base_caption":"costume"}},null,{"caption":{"base_caption":"character_mainoutfit"}}]}""");
+    var cards = PreciseReferenceMetadata.ReadDirector(json.RootElement);
+    Check(cards.Count == 2, "Null image skipped");
+    Check(cards[0].Strength == -0.5 && cards[0].Fidelity == 1.2 && cards[0].ReferenceType == PreciseReferenceType.Outfit, "Negative and greater than one imported without clamp");
+    Check(cards[1].Strength == 6.1 && cards[1].Fidelity == 0.625 && cards[1].ReferenceType == PreciseReferenceType.CharacterMainOutfit, "Preserve array positions and precision");
+}
 else throw new ArgumentException($"Unknown suite {suite}");
 Console.WriteLine($"{suite}: {checks} behavior assertions passed.");

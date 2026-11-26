@@ -45,11 +45,13 @@ public static class ImportedImageModel
         or "NOVELAI DIFFUSION V4.5 B5A2A797"
         or "NOVELAI DIFFUSION V4 5AB81C7C"
         or "NOVELAI DIFFUSION V4 B5A2A797" => "nai-diffusion-4-5-curated",
-        "NOVELAI DIFFUSION V5 657484A5"
+        "NOVELAI DIFFUSION V5 81E2A1BD"
+        or "NOVELAI DIFFUSION V5 657484A5"
         or "NOVELAI DIFFUSION V5 0ADF9AB7"
         or "NOVELAI DIFFUSION V5 93F4BD30"
         or "NOVELAI DIFFUSION V5 70AB5786" => "nai-diffusion-5-full",
-        "NOVELAI DIFFUSION V5 DB276663" => "nai-diffusion-5-curated",
+        "NOVELAI DIFFUSION V5 AD5A716B"
+        or "NOVELAI DIFFUSION V5 DB276663" => "nai-diffusion-5-curated",
         _ => null,
     };
 
