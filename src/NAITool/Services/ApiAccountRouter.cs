@@ -17,7 +17,7 @@ internal readonly record struct ApiRequestCost(
         NovelAiAnlasCalculator.IsV5Model(model),
         NovelAiAnlasCalculator.PaidBaseCost(model, width, height, steps, sm, strength, smDyn),
         referenceAnlas,
-        !characterReference && width > 0 && height > 0 && steps > 0 && steps <= 28 && (long)width * height <= 1048576);
+        width > 0 && height > 0 && steps > 0 && steps <= 28 && (long)width * height <= 1048576);
 }
 
 /// <summary>One cursor shared by every operation.</summary>

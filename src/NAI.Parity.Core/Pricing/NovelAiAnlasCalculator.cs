@@ -22,11 +22,11 @@ public static class NovelAiAnlasCalculator
         // Official client: round the pixel/step formula first, then apply model,
         // SMEA and img2img strength factors, and finally round again.
         // https://novelai.net/_next/static/chunks/1601-acc34459bdce34e2.js
-        double cost = Math.Ceiling(2.951823174884865e-6 * pixels +
-                                  5.753298233447344e-7 * pixels * steps *
-                                  (model.Contains("-medium", StringComparison.Ordinal) ? 1 / 1.06521739 : 1));
+        double cost = model is "nai-diffusion-5-full-medium" or "nai-diffusion-5-full-medium-inpainting"
+            ? (2.951823174884865e-6 * pixels + 5.753298233447344e-7 * pixels * 23) / 1.75
+            : Math.Ceiling(2.951823174884865e-6 * pixels + 5.753298233447344e-7 * pixels * steps);
         bool supportsSm = ModelCapabilityRules.SupportsSmea(model);
-        if (supportsSm) cost *= smDyn ? 1.4 : sm ? 1.2 : 1;
+        if (supportsSm) cost *= sm && smDyn ? 1.4 : sm ? 1.2 : 1;
         if (IsV5Model(model)) cost *= 1.5;
         cost *= double.IsFinite(strength) ? Math.Clamp(strength, 0, 1) : 1;
         return (int)Math.Clamp(Math.Ceiling(cost), 2, int.MaxValue);
@@ -45,7 +45,17 @@ public static class NovelAiAnlasCalculator
         return free ? 0 : paidCost;
     }
 
-    public static int ReferenceCost(int unencodedVibes, int activeVibes, int preciseReferences) =>
-        Math.Max(0, unencodedVibes) * 2 + Math.Max(0, activeVibes - 4) * 2 +
-        Math.Max(0, preciseReferences) * 5;
+    public static int QuoteBase(string model, int width, int height, int steps, int nSamples,
+        bool activeOpus, bool? v5UsageIsNegative, bool sm = false, double strength = 1, bool smDyn = false)
+    {
+        int paid = PaidBaseCost(model, width, height, steps, sm, strength, smDyn);
+        if (paid > MaxBaseCost) return -3;
+        bool free = activeOpus && steps <= 28 && (long)width * height <= 1048576 &&
+                    (!IsV5Model(model) || v5UsageIsNegative == false);
+        return paid * Math.Max(0, nSamples - (free ? 1 : 0));
+    }
+
+    public static int ReferenceCost(int unencodedVibes, int activeVibes, int preciseReferences, int nSamples = 1) =>
+        Math.Max(0, unencodedVibes) * 2 + (Math.Max(0, activeVibes - 4) * 2 +
+        Math.Max(0, preciseReferences) * 5) * nSamples;
 }
