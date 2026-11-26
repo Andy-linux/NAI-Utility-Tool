@@ -109,5 +109,44 @@ else if (suite == "imaging")
         Check(actual.SequenceEqual(expected), $"RGBA: {id}");
     }
 }
+else if (suite == "pricing-reference")
+{
+    var rows = Load("pricing-reference-hook-oracle.json").GetProperty("vectors").EnumerateArray().ToArray();
+    (string model, string operation, int n, int count, bool disabled, int vibes) Key(JsonElement row) =>
+        (row.GetProperty("model").GetString()!, row.GetProperty("operation").GetString()!,
+            row.GetProperty("nSamples").GetInt32(), row.GetProperty("count").GetInt32(),
+            row.GetProperty("disabled").GetBoolean(), row.GetProperty("vibeCount").GetInt32());
+    var oracle = rows.ToDictionary(Key);
+    int normalized = 0;
+    foreach (var row in rows)
+    {
+        var key = Key(row);
+        bool inpaint = key.operation == "infill";
+        var resolved = EffectiveGenerationResolver.Resolve(key.model, key.count, inpaint);
+        string comparison = resolved.EffectiveModel;
+        // The website quote hook evaluates capabilities before mapping Curated inpaint.
+        // Compare the transmitted model's contract rather than that stale editor quote.
+        if (inpaint && key.model == "nai-diffusion-5-curated")
+            comparison = ModelCapabilityRules.BaseModel(resolved.RequestModel);
+        if (comparison != key.model) normalized++;
+        var expected = oracle[(comparison, key.operation, key.n, key.count, key.disabled, key.vibes)].GetProperty("result");
+        var cards = Enumerable.Range(0, key.count).Select(i => new PreciseReferenceInfo {
+            ReferenceType = i % 3 == 0 ? PreciseReferenceType.Outfit : PreciseReferenceType.CharacterAndStyle,
+            Enabled = !key.disabled, Strength = 1, Fidelity = 1
+        }).ToList();
+        int activeReferences = PreciseReferenceRules.ForRequest(resolved.RequestModel, cards).Count;
+        string baseModel = ModelCapabilityRules.BaseModel(resolved.RequestModel);
+        bool encodedVibes = !inpaint && key.count == 0 && baseModel.StartsWith("nai-diffusion-4-", StringComparison.Ordinal);
+        int additional = NovelAiAnlasCalculator.ReferenceCost(encodedVibes ? row.GetProperty("unencodedVibes").GetInt32() : 0,
+            encodedVibes ? key.vibes : 0, activeReferences, key.n);
+        int steps = baseModel.Contains("-medium", StringComparison.Ordinal) ? 14 : 23;
+        int basic = NovelAiAnlasCalculator.QuoteBase(resolved.RequestModel, 832, 1216, steps, key.n, true, false,
+            false, key.operation == "generate" ? 1 : .7, false);
+        Check(additional == expected.GetProperty("additionalPrice").GetInt32(), $"Reference fee {additional}: {row}");
+        Check(basic + additional == expected.GetProperty("price").GetInt32(), $"Total {basic + additional}: {row}");
+    }
+    Console.WriteLine($"Compared {rows.Length} actual website quotes; {normalized} editor/request-model cases compared against the equivalent effective-model oracle.");
+}
+
 else throw new ArgumentException($"Unknown suite {suite}");
 Console.WriteLine($"{suite}: {checks} behavior assertions passed.");
