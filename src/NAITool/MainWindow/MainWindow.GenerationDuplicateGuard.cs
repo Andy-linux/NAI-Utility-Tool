@@ -115,7 +115,7 @@ public sealed partial class MainWindow
         List<VibeTransferInfo>? vibes,
         List<PreciseReferenceInfo>? preciseReferences)
     {
-        parameters = ModelCapabilities.CreateRequestSnapshot(parameters);
+        parameters = ModelCapabilities.CreateRequestSnapshot(parameters, preciseReferences?.Count ?? 0);
         if (ModelCapabilities.IsMedium(parameters)) negativePrompt = "";
         var payload = new
         {
@@ -144,8 +144,8 @@ public sealed partial class MainWindow
             Prompt = prompt,
             NegativePrompt = negativePrompt,
             Characters = CreateCharacterSignatureData(characters, ModelCapabilities.IsMedium(parameters)),
-            Vibes = CreateVibeSignatureData(NovelAiAnlasCalculator.IsV5Model(parameters.Model) ? null : vibes),
-            PreciseReferences = CreatePreciseReferenceSignatureData(IsV45ModelKey(parameters.Model) ? preciseReferences : null),
+            Vibes = CreateVibeSignatureData(NovelAiAnlasCalculator.IsV5Model(parameters.Model) || preciseReferences is { Count: > 0 } ? null : vibes),
+            PreciseReferences = CreatePreciseReferenceSignatureData(PreciseReferenceRules.ForRequest(parameters.Model, preciseReferences)),
         };
 
         return new GenerationRequestSignature
@@ -169,7 +169,7 @@ public sealed partial class MainWindow
         string? maskBase64,
         Vector2 imageOffset, InpaintRegion? region = null)
     {
-        parameters = ModelCapabilities.CreateRequestSnapshot(parameters);
+        parameters = ModelCapabilities.CreateRequestSnapshot(parameters, preciseReferences?.Count ?? 0);
         if (ModelCapabilities.IsMedium(parameters)) negativePrompt = "";
         var payload = new
         {
@@ -207,8 +207,8 @@ public sealed partial class MainWindow
             ImageOffsetX = imageOffset.X,
             ImageOffsetY = imageOffset.Y,
             Characters = CreateCharacterSignatureData(characters, ModelCapabilities.IsMedium(parameters)),
-            Vibes = CreateVibeSignatureData(NovelAiAnlasCalculator.IsV5Model(parameters.Model) ? null : vibes),
-            PreciseReferences = CreatePreciseReferenceSignatureData(IsV45ModelKey(parameters.Model) ? preciseReferences : null),
+            Vibes = CreateVibeSignatureData(NovelAiAnlasCalculator.IsV5Model(parameters.Model) || preciseReferences is { Count: > 0 } ? null : vibes),
+            PreciseReferences = CreatePreciseReferenceSignatureData(PreciseReferenceRules.ForRequest(parameters.Model, preciseReferences)),
         };
 
         return new GenerationRequestSignature

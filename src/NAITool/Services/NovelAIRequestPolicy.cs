@@ -23,13 +23,22 @@ internal static class NovelAIRequestPolicy
         402 => "Insufficient quota or payment required.", 404 => "Endpoint is unavailable or unsupported.",
         429 => "Request or queue limit reached.", 503 => "Service or queue unavailable.",
         504 => "Service timed out; generation billing outcome may be unknown. Do not automatically retry.",
-        _ => "API request failed. Response details are withheld to protect credentials.",
+        _ => "API request failed.",
     };
     public static string Exception(Exception error) => error switch
     {
         OperationCanceledException => "Request cancelled or timed out; billing outcome may be unknown. No automatic retry was made.",
         InvalidDataException or EndOfStreamException => "Invalid or incomplete API response; billing outcome may be unknown. No automatic retry was made.",
         ArgumentException => "Invalid API configuration or request.",
-        _ => "Request failed. Details are withheld to protect credentials. No automatic retry was made.",
+        _ => "Request failed. No automatic retry was made.",
     };
+    public static string Redact(string value, IEnumerable<string?> tokens)
+    {
+        foreach (var token in tokens.Where(t => !string.IsNullOrWhiteSpace(t)).Distinct().OrderByDescending(t => t!.Length))
+        {
+            value = value.Replace(token!, "[redacted]", StringComparison.Ordinal);
+            value = value.Replace(Uri.EscapeDataString(token!), "[redacted]", StringComparison.Ordinal);
+        }
+        return value;
+    }
 }

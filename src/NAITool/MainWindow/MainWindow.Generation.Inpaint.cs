@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
@@ -371,7 +371,7 @@ public sealed partial class MainWindow
         SetI2IRequestImageMoveLocked(true);
         UpdateBtnGenerateForApiKey();
         TxtStatus.Text = L("generate.status.generating");
-        var ip = ModelCapabilities.CreateRequestSnapshot(_settings.Settings.InpaintParameters);
+        var ip = EffectiveSnapshot(_settings.Settings.InpaintParameters, true);
         string restoreSeed = ip.Seed;
         int workspaceVersion = MaskCanvas.WorkspaceVersion;
         int canvasW = MaskCanvas.CanvasW, canvasH = MaskCanvas.CanvasH;
@@ -405,7 +405,7 @@ public sealed partial class MainWindow
                 var (prompt, negPrompt) = GetPrompts(wildcardContext);
                 var chars = (CurrentCharacterEntries.Count > 0 && !IsCurrentModelV3()) ? GetCharacterData(wildcardContext) : null;
                 var preciseReferences = GetPreciseReferenceData();
-                if (ActiveVibeTransferCount() > 0 && ActivePreciseReferenceCount() == 0)
+                if (ActiveVibeTransferCount() > 0 && RawPreciseReferenceCardCount() == 0)
                 {
                     string? encodeError = await EnsureVibesEncodedAsync(ip.Model, ct);
                     if (encodeError != null) { TxtStatus.Text = encodeError; return false; }
@@ -595,7 +595,7 @@ public sealed partial class MainWindow
         SetI2IRequestImageMoveLocked(true);
         UpdateBtnGenerateForApiKey();
         TxtStatus.Text = L("generate.status.generating");
-        var dp = ModelCapabilities.CreateRequestSnapshot(_settings.Settings.I2IDenoiseParameters);
+        var dp = EffectiveSnapshot(_settings.Settings.I2IDenoiseParameters, false);
         string restoreSeed = dp.Seed;
         int workspaceVersion = MaskCanvas.WorkspaceVersion;
         int canvasW = MaskCanvas.CanvasW, canvasH = MaskCanvas.CanvasH;
@@ -627,7 +627,7 @@ public sealed partial class MainWindow
                 var (prompt, negPrompt) = GetPrompts(wildcardContext);
                 var chars = (CurrentCharacterEntries.Count > 0 && !IsCurrentModelV3()) ? GetCharacterData(wildcardContext) : null;
                 var preciseReferences = GetPreciseReferenceData();
-                if (ActiveVibeTransferCount() > 0 && ActivePreciseReferenceCount() == 0)
+                if (ActiveVibeTransferCount() > 0 && RawPreciseReferenceCardCount() == 0)
                 {
                     string? encodeError = await EnsureVibesEncodedAsync(dp.Model, ct);
                     if (encodeError != null) { TxtStatus.Text = encodeError; return false; }
@@ -825,9 +825,9 @@ public sealed partial class MainWindow
         UpdateBtnGenerateForApiKey();
         SetResultBarEnabled(false);
         TxtStatus.Text = L("generate.status.regenerating");
-        var ip = ModelCapabilities.CreateRequestSnapshot(editMode == I2IEditMode.Denoise
+        var ip = EffectiveSnapshot(editMode == I2IEditMode.Denoise
             ? _settings.Settings.I2IDenoiseParameters
-            : _settings.Settings.InpaintParameters);
+            : _settings.Settings.InpaintParameters, editMode != I2IEditMode.Denoise);
         string restoreSeed = ip.Seed;
         int workspaceVersion = MaskCanvas.WorkspaceVersion;
         int canvasW = MaskCanvas.CanvasW, canvasH = MaskCanvas.CanvasH;
@@ -862,7 +862,7 @@ public sealed partial class MainWindow
                 var (prompt, negPrompt) = GetPrompts(wildcardContext);
                 var chars = (CurrentCharacterEntries.Count > 0 && !IsCurrentModelV3()) ? GetCharacterData(wildcardContext) : null;
                 var preciseReferences = GetPreciseReferenceData();
-                if (ActiveVibeTransferCount() > 0 && ActivePreciseReferenceCount() == 0)
+                if (ActiveVibeTransferCount() > 0 && RawPreciseReferenceCardCount() == 0)
                 {
                     string? encodeError = await EnsureVibesEncodedAsync(ip.Model, ct);
                     if (encodeError != null) { TxtStatus.Text = encodeError; return false; }

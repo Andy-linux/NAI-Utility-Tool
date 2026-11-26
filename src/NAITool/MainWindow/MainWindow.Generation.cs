@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
@@ -95,7 +95,7 @@ public sealed partial class MainWindow
         SetGenerationRequestRunning(true);
         UpdateBtnGenerateForApiKey();
         TxtStatus.Text = L("generate.status.generating");
-        var p = ModelCapabilities.CreateRequestSnapshot(_settings.Settings.GenParameters);
+        var p = EffectiveSnapshot(_settings.Settings.GenParameters, false);
         string restoreSeed = p.Seed;
         string? pendingHistoryId = null;
         bool previewsOpen = true;
@@ -161,7 +161,7 @@ public sealed partial class MainWindow
                 preciseReferences = GetPreciseReferenceData();
                 if (autoContext?.CurrentVibeOverride == null &&
                     ActiveVibeTransferCount() > 0 &&
-                    ActivePreciseReferenceCount() == 0)
+                    RawPreciseReferenceCardCount() == 0)
                 {
                     string? encodeError = await EnsureVibesEncodedAsync(p.Model, ct);
                     if (encodeError != null) { TxtStatus.Text = encodeError; return false; }

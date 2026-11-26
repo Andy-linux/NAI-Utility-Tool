@@ -461,7 +461,7 @@ public sealed partial class MainWindow
     {
         if (_advCboSampler == null || _isSyncingSidebarAdv) return;
         var p = CurrentParams;
-        bool medium = ModelCapabilities.IsMedium(p);
+        bool medium = ModelCapabilities.IsMedium(EffectiveSnapshot(p));
         if (!medium) p.Sampler = GetSelectedComboText(_advCboSampler) ?? p.Sampler;
         p.Schedule = NormalizeScheduleForModel(GetSelectedComboText(_advCboSchedule) ?? p.Schedule, p.Model, sampler: p.Sampler);
         if (!medium) p.Steps = (int)_advNbSteps.Value;

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
@@ -207,7 +207,7 @@ public sealed partial class MainWindow
         if (CurrentRequestUsesAnlas()) return true;
         if (!IsAssetProtectionStepLimitEnabled())
         {
-            int steps = ModelCapabilities.IsMedium(CurrentParams)
+            int steps = ModelCapabilities.IsMedium(EffectiveSnapshot(CurrentParams))
                 ? ModelCapabilities.CreateRequestSnapshot(CurrentParams).Steps
                 : IsAdvancedWindowOpen ? (int)_advNbSteps.Value : CurrentParams.Steps;
             if (steps > 28) return true;

@@ -49,7 +49,7 @@ public partial class NovelAIService
                 System.Net.Http.HttpCompletionOption.ResponseHeadersRead, timeout.Token);
             if (!response.IsSuccessStatusCode)
             {
-                string error = SafeStatus((int)response.StatusCode);
+                string error = await ResponseErrorAsync(response);
                 WriteRequestLog("NovelAI upscale", payload, stopwatch.ElapsedMilliseconds, response, error);
                 return (null, Lf("api.error.status", (int)response.StatusCode, error));
             }

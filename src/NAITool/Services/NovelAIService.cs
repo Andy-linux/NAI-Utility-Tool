@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -65,7 +65,24 @@ public partial class NovelAIService : IDisposable
         return string.IsNullOrWhiteSpace(translated) || translated == key ? fallback : translated;
     }
     private static string SafeStatus(int status) => LocalizedSafeMessage(NovelAIRequestPolicy.StatusKey(status), NovelAIRequestPolicy.Status(status));
-    private static string SafeException(Exception error) => LocalizedSafeMessage(NovelAIRequestPolicy.ExceptionKey(error), NovelAIRequestPolicy.Exception(error));
+    private string SafeException(Exception error)
+    {
+        string summary = error is OperationCanceledException
+            ? NovelAIRequestPolicy.Exception(error) : error.Message;
+        return NovelAIRequestPolicy.Redact(summary, _settings.Accounts.Select(a => a.Token));
+    }
+
+    private async Task<string> ResponseErrorAsync(HttpResponseMessage response, string? requestToken = null)
+    {
+        var secrets = _settings.Accounts.Select(a => a.Token)
+            .Append(requestToken).Append(response.RequestMessage?.Headers.Authorization?.Parameter);
+        string body = await response.Content.ReadAsStringAsync();
+        string details = string.IsNullOrWhiteSpace(body) ? NovelAIRequestPolicy.Status((int)response.StatusCode) : body;
+        foreach (var name in new[] { "x-correlation-id", "x-request-id", "correlation-id" })
+            if (response.Headers.TryGetValues(name, out var ids))
+                details += $"\n{name}: {string.Join(", ", ids)}";
+        return NovelAIRequestPolicy.Redact(details, secrets);
+    }
 
     private bool UsesCustomApiBaseUrl => _settings.Settings.UsesCustomApiBaseUrl;
 
@@ -132,7 +149,7 @@ public partial class NovelAIService : IDisposable
             {
                 HttpStatusCode.OK => (true, L("settings.network.test.success")),
                 HttpStatusCode.Unauthorized => (false, L("settings.network.test.unauthorized")),
-                _ => (false, Lf("settings.network.test.api_error", (int)response.StatusCode, SafeStatus((int)response.StatusCode)))
+                _ => (false, Lf("settings.network.test.api_error", (int)response.StatusCode, await ResponseErrorAsync(response, token)))
             };
         }
         catch (HttpRequestException ex) when (SafeException(ex).Contains("proxy", StringComparison.OrdinalIgnoreCase))
@@ -386,7 +403,7 @@ public partial class NovelAIService : IDisposable
         "nai-diffusion-4-5-full" or "nai-diffusion-4-5-curated";
 
     private static bool SupportsPreciseReferenceModel(string model) =>
-        IsV45Model(model);
+        PreciseReferenceRules.SupportsRequest(model);
 
     private static string ApplyQualityTags(string prompt, NAIParameters parameters)
     {
@@ -431,9 +448,7 @@ public partial class NovelAIService : IDisposable
     {
         byte[] bytes = Convert.FromBase64String(base64Image);
         // Strip recognized stealth alpha bits before filtering, as for the website's reference input.
-        using var bitmap = InpaintImageProcessing.DecodeClean(bytes);
-        if (bitmap == null)
-            return base64Image;
+        using var bitmap = ReferenceImageProcessor.Decode(ReferenceImageProcessor.Clean(bytes));
 
         double srcRatio = (double)bitmap.Width / bitmap.Height;
         var target = new[] { (Width: 1024, Height: 1536), (Width: 1536, Height: 1024), (Width: 1472, Height: 1472) }
@@ -551,17 +566,19 @@ public partial class NovelAIService : IDisposable
 
     private static void ApplyPreciseReferenceParameters(
         Dictionary<string, object?> parameters,
-        List<PreciseReferenceInfo> preciseReferences)
+        List<PreciseReferenceInfo> preciseReferences, string model)
     {
         if (preciseReferences.Count == 0)
             return;
 
         parameters["director_reference_images"] = preciseReferences
-            .Select(x => PrepareDirectorReferenceImage(x.ImageBase64)).ToList();
+            .Select(x => PreciseReferenceRules.IsV5(model)
+                ? Convert.ToBase64String(ReferenceImageProcessor.PrepareV5(Convert.FromBase64String(x.ImageBase64)))
+                : PrepareDirectorReferenceImage(x.ImageBase64)).ToList();
         parameters["director_reference_strength_values"] = preciseReferences
-            .Select(x => Math.Clamp(x.Strength, 0, 1)).ToList();
+            .Select(x => x.Strength).ToList();
         parameters["director_reference_secondary_strength_values"] = preciseReferences
-            .Select(x => 1.0 - Math.Clamp(x.Fidelity, 0, 1)).ToList();
+            .Select(x => 1.0 - x.Fidelity).ToList();
         parameters["director_reference_information_extracted"] = preciseReferences
             .Select(_ => 1.0).ToList();
         parameters["director_reference_descriptions"] = preciseReferences
@@ -569,7 +586,7 @@ public partial class NovelAIService : IDisposable
             {
                 ["caption"] = new Dictionary<string, object?>
                 {
-                    ["base_caption"] = ToApiPreciseReferenceType(x.ReferenceType),
+                    ["base_caption"] = PreciseReferenceRules.Description(x.ReferenceType),
                     ["char_captions"] = new List<object>(),
                 },
                 ["legacy_uc"] = false,
@@ -652,7 +669,11 @@ public partial class NovelAIService : IDisposable
             diagnostic.Stage("request_rejected", new { reason = "missing_api_token" });
             return (null, L("api.error.token_missing_network"));
         }
-        var naiParams = ModelCapabilities.CreateRequestSnapshot(requestParameters ?? _settings.Settings.InpaintParameters);
+        var naiParams = ModelCapabilities.CreateRequestSnapshot(requestParameters ?? _settings.Settings.InpaintParameters, preciseReferences?.Count ?? 0, true);
+        if (preciseReferences is { Count: > 0 }) vibeTransfers = null;
+        try { preciseReferences = PreciseReferenceRules.ForRequest(naiParams.Model, preciseReferences); }
+        catch (ArgumentException ex) { return (null, ex.Message); }
+        if (IsV4PlusModel(naiParams.Model)) vibeTransfers = null;
         bool streamGeneration = _settings.Settings.StreamGeneration && IsV4PlusModel(naiParams.Model);
         if (!_settings.Settings.UsesCustomApiBaseUrl &&
             NovelAiAnlasCalculator.PaidBaseCost(naiParams.Model, width, height, naiParams.Steps,
@@ -786,7 +807,7 @@ public partial class NovelAIService : IDisposable
         }
 
         if (preciseReferences is { Count: > 0 } && SupportsPreciseReferenceModel(naiParams.Model))
-            ApplyPreciseReferenceParameters(parameters, preciseReferences);
+            await Task.Run(() => ApplyPreciseReferenceParameters(parameters, preciseReferences, naiParams.Model), ct);
         else if (vibeTransfers is { Count: > 0 } && SupportsVibeTransferModel(naiParams.Model) && !isV4Plus)
         {
             ApplyVibeTransferParameters(parameters, vibeTransfers, naiParams.Model);
@@ -822,7 +843,7 @@ public partial class NovelAIService : IDisposable
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorText = SafeStatus((int)response.StatusCode);
+                var errorText = await ResponseErrorAsync(response);
                 stopwatch.Stop();
                 WriteRequestLog("Inpaint generation", payload, stopwatch.ElapsedMilliseconds, response, errorText);
                 return (null, Lf("api.error.status", (int)response.StatusCode, errorText));
@@ -903,7 +924,10 @@ public partial class NovelAIService : IDisposable
             diagnostic.Stage("request_rejected", new { reason = "missing_api_token" });
             return (null, L("api.error.token_missing_network"));
         }
-        var naiParams = ModelCapabilities.CreateRequestSnapshot(parametersOverride ?? _settings.Settings.I2IDenoiseParameters);
+        var naiParams = ModelCapabilities.CreateRequestSnapshot(parametersOverride ?? _settings.Settings.I2IDenoiseParameters, preciseReferences?.Count ?? 0);
+        if (preciseReferences is { Count: > 0 }) vibeTransfers = null;
+        try { preciseReferences = PreciseReferenceRules.ForRequest(naiParams.Model, preciseReferences); }
+        catch (ArgumentException ex) { return (null, ex.Message); }
         bool streamGeneration = _settings.Settings.StreamGeneration && IsV4PlusModel(naiParams.Model);
         if ((isEnhance && (width <= 0 || height <= 0 || (long)width * height > EnhanceRules.MaxPixels)) ||
             (upscaledEnhance && (!isEnhance || !EnhanceRules.CanUseMax(naiParams.Model, width, height))))
@@ -1051,7 +1075,7 @@ public partial class NovelAIService : IDisposable
         }
 
         if (preciseReferences is { Count: > 0 } && SupportsPreciseReferenceModel(naiParams.Model))
-            ApplyPreciseReferenceParameters(parameters, preciseReferences);
+            await Task.Run(() => ApplyPreciseReferenceParameters(parameters, preciseReferences, naiParams.Model), ct);
         else if (vibeTransfers is { Count: > 0 } && SupportsVibeTransferModel(naiParams.Model))
         {
             if (IsV4PlusModel(naiParams.Model))
@@ -1089,7 +1113,7 @@ public partial class NovelAIService : IDisposable
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorText = SafeStatus((int)response.StatusCode);
+                var errorText = await ResponseErrorAsync(response);
                 stopwatch.Stop();
                 WriteRequestLog("Image-to-image generation", payload, stopwatch.ElapsedMilliseconds, response, errorText);
                 return (null, Lf("api.error.status", (int)response.StatusCode, errorText));
@@ -1149,7 +1173,10 @@ public partial class NovelAIService : IDisposable
             diagnostic.Stage("request_rejected", new { reason = "missing_api_token" });
             return (null, L("api.error.token_missing_network_api"));
         }
-        var naiParams = ModelCapabilities.CreateRequestSnapshot(requestParameters ?? _settings.Settings.GenParameters);
+        var naiParams = ModelCapabilities.CreateRequestSnapshot(requestParameters ?? _settings.Settings.GenParameters, preciseReferences?.Count ?? 0);
+        if (preciseReferences is { Count: > 0 }) vibeTransfers = null;
+        try { preciseReferences = PreciseReferenceRules.ForRequest(naiParams.Model, preciseReferences); }
+        catch (ArgumentException ex) { return (null, ex.Message); }
         bool streamGeneration = _settings.Settings.StreamGeneration && IsV4PlusModel(naiParams.Model);
         string model = naiParams.Model;
         if (!_settings.Settings.UsesCustomApiBaseUrl &&
@@ -1266,7 +1293,7 @@ public partial class NovelAIService : IDisposable
         }
 
         if (preciseReferences is { Count: > 0 } && SupportsPreciseReferenceModel(model))
-            ApplyPreciseReferenceParameters(parameters, preciseReferences);
+            await Task.Run(() => ApplyPreciseReferenceParameters(parameters, preciseReferences, naiParams.Model), ct);
         else if (vibeTransfers is { Count: > 0 } && SupportsVibeTransferModel(model))
         {
             if (IsV4PlusModel(model))
@@ -1303,7 +1330,7 @@ public partial class NovelAIService : IDisposable
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorText = SafeStatus((int)response.StatusCode);
+                var errorText = await ResponseErrorAsync(response);
                 stopwatch.Stop();
                 LastGenerationErrorStatusCode = (int)response.StatusCode;
                 WriteRequestLog("Image generation", payload, stopwatch.ElapsedMilliseconds, response, errorText);
@@ -1426,7 +1453,7 @@ public partial class NovelAIService : IDisposable
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorText = SafeStatus((int)response.StatusCode);
+                var errorText = await ResponseErrorAsync(response);
                 stopwatch.Stop();
                 WriteRequestLog("Vibe encoding", payload, stopwatch.ElapsedMilliseconds, response, errorText);
                 return (null, Lf("api.error.status", (int)response.StatusCode, errorText));
@@ -1538,7 +1565,7 @@ public partial class NovelAIService : IDisposable
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorText = SafeStatus((int)response.StatusCode);
+                var errorText = await ResponseErrorAsync(response);
                 stopwatch.Stop();
                 WriteRequestLog("Prompt text generation", payload, stopwatch.ElapsedMilliseconds, response, errorText);
                 return (null, Lf("api.error.status", (int)response.StatusCode, errorText));

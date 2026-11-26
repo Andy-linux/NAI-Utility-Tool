@@ -7,12 +7,19 @@ internal static class ModelCapabilities
     internal static bool SupportsEffort(string model) => ModelCapabilityRules.SupportsEffort(model);
     internal static bool IsMedium(NAIParameters p) => SupportsEffort(p.Model) && (p.Effort == "medium" || BaseModel(p.Model) == "nai-diffusion-5-full-medium");
     internal static string HighModel(string model) => ModelCapabilityRules.HighModel(model);
-    internal static NAIParameters CreateRequestSnapshot(NAIParameters p)
+    internal static NAIParameters CreateRequestSnapshot(NAIParameters p, int preciseCardCount = 0, bool inpaint = false)
     {
         var result = System.Text.Json.JsonSerializer.Deserialize<NAIParameters>(System.Text.Json.JsonSerializer.Serialize(p))!;
-        if (IsMedium(p))
+        string preferred = IsMedium(p)
+            ? HighModel(p.Model).Replace("nai-diffusion-5-full", "nai-diffusion-5-full-medium", System.StringComparison.Ordinal)
+            : p.Model;
+        inpaint |= preferred.EndsWith("-inpainting", System.StringComparison.Ordinal);
+        var models = EffectiveGenerationResolver.Resolve(inpaint ? BaseModel(preferred) : preferred, preciseCardCount, inpaint);
+        result.Model = models.RequestModel;
+        if (SupportsEffort(result.Model))
+            result.Effort = BaseModel(result.Model) == "nai-diffusion-5-full-medium" ? "medium" : "high";
+        if (IsMedium(result))
         {
-            result.Model = HighModel(p.Model).Replace("nai-diffusion-5-full", "nai-diffusion-5-full-medium", System.StringComparison.Ordinal);
             result.Steps = 14;
             result.Sampler = "k_euler_ancestral";
             result.CfgRescale = 0;

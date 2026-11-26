@@ -47,6 +47,7 @@ public sealed partial class MainWindow
             PreciseReferenceContainer.Children.Add(BuildPreciseReferenceUI(_genPreciseReferences[i], i));
 
         UpdateReferenceButtonAndPanelState();
+        UpdateEffortUI();
     }
 
     private void RefreshReferencePanels()
@@ -368,52 +369,65 @@ public sealed partial class MainWindow
             infoGrid.Opacity = canEdit ? 1.0 : 0.72;
             root.Children.Add(infoGrid);
 
-            var typeCombo = new ComboBox
-            {
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                MinHeight = 32,
-                FontFamily = UiTextFontFamily,
-            };
+            bool v5 = PreciseReferenceRules.IsV5(EffectiveSnapshot(CurrentParams).Model);
+            var typeCombo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 32, FontFamily = UiTextFontFamily };
             typeCombo.Items.Add(CreateTextComboBoxItem(L("references.precise.type.both")));
             typeCombo.Items.Add(CreateTextComboBoxItem(L("references.precise.type.character")));
             typeCombo.Items.Add(CreateTextComboBoxItem(L("references.precise.type.style")));
+            if (v5 || entry.ReferenceType == PreciseReferenceType.Outfit)
+                typeCombo.Items.Add(CreateTextComboBoxItem("Outfit"));
             typeCombo.SelectedIndex = entry.ReferenceType switch
             {
-                PreciseReferenceType.CharacterAndStyle => 0,
-                PreciseReferenceType.Character => 1,
-                _ => 2,
+                PreciseReferenceType.Character or PreciseReferenceType.CharacterMainOutfit => 1,
+                PreciseReferenceType.Style => 2,
+                PreciseReferenceType.Outfit => 3,
+                _ => 0,
             };
             typeCombo.SelectionChanged += (_, _) =>
             {
                 entry.ReferenceType = typeCombo.SelectedIndex switch
                 {
-                    1 => PreciseReferenceType.Character,
+                    1 => v5 ? PreciseReferenceType.CharacterMainOutfit : PreciseReferenceType.Character,
                     2 => PreciseReferenceType.Style,
+                    3 => PreciseReferenceType.Outfit,
                     _ => PreciseReferenceType.CharacterAndStyle,
                 };
+                RefreshPreciseReferencePanel();
+                UpdateGenerateButtonWarning();
             };
             ApplyMenuTypography(typeCombo);
             typeCombo.IsEnabled = canEdit;
             root.Children.Add(typeCombo);
-
-            entry.Strength = Math.Clamp(entry.Strength, 0, 1);
-            entry.Fidelity = Math.Clamp(entry.Fidelity, 0, 1);
-
-            var strengthRow = BuildReferenceSliderRow(
-                L("references.precise.strength"),
-                0, 1, entry.Strength,
-                value => entry.Strength = Math.Round(value, 2));
+            if (v5 && typeCombo.SelectedIndex < 2)
+            {
+                var outfit = new CheckBox
+                {
+                    Content = "Prefer same outfit", IsEnabled = canEdit,
+                    IsChecked = entry.ReferenceType is PreciseReferenceType.CharacterAndStyle or PreciseReferenceType.CharacterMainOutfit
+                };
+                outfit.Click += (_, _) =>
+                {
+                    entry.ReferenceType = typeCombo.SelectedIndex == 1
+                        ? (outfit.IsChecked == true ? PreciseReferenceType.CharacterMainOutfit : PreciseReferenceType.Character)
+                        : (outfit.IsChecked == true ? PreciseReferenceType.CharacterAndStyle : PreciseReferenceType.CharacterAndStyleAnyOutfit);
+                };
+                root.Children.Add(outfit);
+            }
+            var strengthRow = BuildPreciseReferenceValueRow(L("references.precise.strength"), v5 ? 5 : 1,
+                entry.Strength, value => entry.Strength = value);
             strengthRow.IsHitTestVisible = canEdit;
             strengthRow.Opacity = canEdit ? 1.0 : 0.72;
             root.Children.Add(strengthRow);
-
-            var fidelityRow = BuildReferenceSliderRow(
-                L("references.precise.fidelity"),
-                0, 1, entry.Fidelity,
-                value => entry.Fidelity = Math.Round(value, 2));
-            fidelityRow.IsHitTestVisible = canEdit;
-            fidelityRow.Opacity = canEdit ? 1.0 : 0.72;
-            root.Children.Add(fidelityRow);
+            if (!v5)
+            {
+                var fidelityRow = BuildPreciseReferenceValueRow(L("references.precise.fidelity"), 1,
+                    entry.Fidelity, value => entry.Fidelity = value);
+                fidelityRow.IsHitTestVisible = canEdit;
+                fidelityRow.Opacity = canEdit ? 1.0 : 0.72;
+                root.Children.Add(fidelityRow);
+                if (entry.ReferenceType == PreciseReferenceType.Outfit)
+                    root.Children.Add(new TextBlock { Text = "Outfit is skipped by this model.", TextWrapping = TextWrapping.Wrap });
+            }
         }
 
         if (index < _genPreciseReferences.Count - 1)
@@ -521,6 +535,46 @@ public sealed partial class MainWindow
     }
 
     // BuildReferenceFileRow removed — replaced by inline thumbnail layout
+
+    private StackPanel BuildPreciseReferenceValueRow(string label, double max, double value, Action<double> changed)
+    {
+        var root = new StackPanel { Spacing = 4 };
+        root.Children.Add(new TextBlock { Text = label });
+        var grid = new Grid { ColumnSpacing = 8 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(94) });
+        var slider = new Slider { Minimum = 0, Maximum = max, StepFrequency = 0.05, Value = Math.Max(0, Math.Min(max, value)) };
+        var text = new TextBox { Text = value.ToString("R", System.Globalization.CultureInfo.InvariantCulture) };
+        bool updating = false;
+        void Commit()
+        {
+            if (!double.TryParse(text.Text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double next) ||
+                !double.IsFinite(next))
+            {
+                text.Text = value.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+                return;
+            }
+            updating = true;
+            value = next;
+            changed(next);
+            slider.Value = Math.Max(0, Math.Min(max, next));
+            updating = false;
+        }
+        slider.ValueChanged += (_, _) =>
+        {
+            if (updating) return;
+            value = slider.Value;
+            changed(value);
+            text.Text = value.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        };
+        text.LostFocus += (_, _) => Commit();
+        text.KeyDown += (_, e) => { if (e.Key == Windows.System.VirtualKey.Enter) Commit(); };
+        Grid.SetColumn(text, 1);
+        grid.Children.Add(slider);
+        grid.Children.Add(text);
+        root.Children.Add(grid);
+        return root;
+    }
 
     private StackPanel BuildReferenceSliderRow(
         string label,

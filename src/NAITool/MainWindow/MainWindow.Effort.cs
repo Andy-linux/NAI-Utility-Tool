@@ -26,7 +26,7 @@ public sealed partial class MainWindow
     private void RefreshUcPresetOptions(NAIParameters p)
     {
         if (_advCboUcPreset == null) return;
-        string selected = ModelCapabilities.IsMedium(p) ? "heavy" : NovelAiPromptPresets.ResolveUcId(p);
+        string selected = ModelCapabilities.IsMedium(EffectiveSnapshot(p)) ? "heavy" : NovelAiPromptPresets.ResolveUcId(p);
         _advCboUcPreset.Items.Clear();
         foreach (string id in NovelAiPromptPresets.UcIds(p.Model))
         {
@@ -55,13 +55,14 @@ public sealed partial class MainWindow
     {
         if (EffortPanel == null || TabNegative == null) return;
         var p = CurrentParams;
-        bool medium = ModelCapabilities.IsMedium(p);
+        bool medium = ModelCapabilities.IsMedium(EffectiveSnapshot(p));
         string selectedModel = GetCurrentModelKey();
         bool modelSelectionMatches = selectedModel == p.Model;
         medium = medium && modelSelectionMatches;
         EffortPanel.Visibility = ModelCapabilities.SupportsEffort(selectedModel) ? Visibility.Visible : Visibility.Collapsed;
         EffortLabel.Text = L("panel.effort");
         ToolTipService.SetToolTip(EffortLabel, L("panel.effort.hint"));
+        EffortMedium.IsEnabled = RawPreciseReferenceCardCount() == 0 || IsCurrentInpaintOperation();
         EffortHigh.IsChecked = !medium;
         EffortMedium.IsChecked = medium;
         if (medium && !_isPositiveTab)
@@ -78,7 +79,7 @@ public sealed partial class MainWindow
         _isSyncingSidebarAdv = true;
         try
         {
-            var effective = ModelCapabilities.CreateRequestSnapshot(p);
+            var effective = EffectiveSnapshot(p);
             _advCboQuality.SelectedIndex = !effective.QualityToggle ? 2 : effective.QualityPreset == "light" ? 1 : 0;
             if (_advCboQuality.Items.Count > 1 && _advCboQuality.Items[1] is ComboBoxItem lightQuality)
                 lightQuality.IsEnabled = NovelAiPromptPresets.SupportsLightQuality(p.Model);

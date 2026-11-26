@@ -97,7 +97,7 @@ public sealed partial class MainWindow
 
     private UIElement BuildCharacterUI(CharacterEntry entry, int index)
     {
-        bool medium = ModelCapabilities.IsMedium(CurrentParams);
+        bool medium = ModelCapabilities.IsMedium(EffectiveSnapshot(CurrentParams));
         if (medium)
         {
             SaveCharacterPrompt(entry);

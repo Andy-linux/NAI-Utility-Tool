@@ -31,7 +31,7 @@ public sealed partial class MainWindow
             : Visibility.Collapsed;
         BtnAddCharacter.IsEnabled = SupportsCharacterFeature() && CurrentCharacterEntries.Count < GetMaxCharactersForCurrentModel();
 
-        BtnAddVibeTransfer.Visibility = SupportsVibeTransferFeature() && ActivePreciseReferenceCount() == 0
+        BtnAddVibeTransfer.Visibility = SupportsVibeTransferFeature() && RawPreciseReferenceCardCount() == 0
             ? Visibility.Visible
             : Visibility.Collapsed;
         int maxVibeTransfers = GetMaxAllowedVibeTransfers();
@@ -45,8 +45,7 @@ public sealed partial class MainWindow
                 : L("references.tooltips.vibe");
         ToolTipService.SetToolTip(BtnAddVibeTransfer, vibeToolTip);
 
-        BtnAddPreciseReference.Visibility = SupportsPreciseReferenceFeature() &&
-            (!SupportsVibeTransferFeature() || ActiveVibeTransferCount() == 0)
+        BtnAddPreciseReference.Visibility = SupportsPreciseReferenceFeature()
             ? Visibility.Visible
             : Visibility.Collapsed;
         BtnAddPreciseReference.IsEnabled = CanEditPreciseReferenceFeature() && ActivePreciseReferenceCount() < MaxPreciseReferences;
@@ -67,7 +66,9 @@ public sealed partial class MainWindow
         PreciseReferencePanel.Visibility = ShouldShowPreciseReferencePanel()
             ? Visibility.Visible
             : Visibility.Collapsed;
-        TxtPreciseReferenceHint.Visibility = Visibility.Collapsed;
+        TxtPreciseReferenceHint.Visibility = IsCurrentInpaintOperation() && IsV5ModelKey(GetCurrentModelKey()) &&
+            !PreciseReferenceRules.SupportsRequest(EffectiveSnapshot(CurrentParams).Model) && RawPreciseReferenceCardCount() > 0 ? Visibility.Visible : Visibility.Collapsed;
+        TxtPreciseReferenceHint.Text = "Precise references are not supported by this inpaint model.";
 
         UpdateReferenceButtonRowLayout();
         UpdatePromptAreaHeight();

@@ -27,10 +27,10 @@ internal static class Program
         if (!File.Exists(Path.Combine(nativeDirectory, "Microsoft.WindowsAppRuntime.dll")))
             throw new InvalidOperationException("Build NAITool (x64) first, then supply its bin directory.");
         if (!SetDllDirectory(nativeDirectory)) throw new System.ComponentModel.Win32Exception();
-        try { await RunChecksAsync(); }
+        try { await RunChecksAsync(args.Length > 1 && args[1] == "--v5"); }
         finally { SetDllDirectory(null); }
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static Task RunChecksAsync() => ApiTransportChecks.RunAsync();
+    private static Task RunChecksAsync(bool v5) => v5 ? V5ReferenceTransportChecks.RunAsync() : ApiTransportChecks.RunAsync();
 }

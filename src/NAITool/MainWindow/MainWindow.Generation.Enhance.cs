@@ -149,7 +149,7 @@ public sealed partial class MainWindow
             var dims = EnhanceRules.GetOutputDimensions(sourceWidth, sourceHeight, amount, useMax);
             int cost = EstimateGenEnhanceAnlasCost(dims.Width, dims.Height, strength, noise);
             summary.Text = Lf("enhance.summary", dims.Width, dims.Height, strength, noise);
-            var effective = ModelCapabilities.CreateRequestSnapshot(settings.GenParameters);
+            var effective = EffectiveSnapshot(settings.GenParameters, false);
             bool overCostLimit = !settings.UsesCustomApiBaseUrl &&
                 NovelAiAnlasCalculator.PaidBaseCost(effective.Model, dims.Width, dims.Height,
                     effective.Steps, sm: false, strength: strength) > NovelAiAnlasCalculator.MaxBaseCost;
@@ -397,7 +397,7 @@ public sealed partial class MainWindow
                     return false;
                 }
 
-                if (ActiveVibeTransferCount() > 0 && ActivePreciseReferenceCount() == 0)
+                if (ActiveVibeTransferCount() > 0 && RawPreciseReferenceCardCount() == 0)
                 {
                     string? encodeError = await EnsureVibesEncodedAsync(enhanceParams.Model, ct);
                     if (encodeError != null) { TxtStatus.Text = encodeError; return false; }

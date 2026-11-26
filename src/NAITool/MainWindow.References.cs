@@ -68,8 +68,17 @@ public sealed partial class MainWindow
     private int ActiveVibeTransferCount() =>
         _genVibeTransfers.Count(x => !x.IsDisabled);
 
-    private int ActivePreciseReferenceCount() =>
-        _genPreciseReferences.Count(x => !x.IsDisabled);
+    private int RawPreciseReferenceCardCount() =>
+        IsAssetProtectionPaidFeatureLimitEnabled() ? 0 : _genPreciseReferences.Count;
+    private bool IsCurrentInpaintOperation() => _currentMode == AppMode.I2I && _i2iEditMode != I2IEditMode.Denoise;
+    private NAIParameters EffectiveSnapshot(NAIParameters p, bool? inpaint = null) =>
+        ModelCapabilities.CreateRequestSnapshot(p, RawPreciseReferenceCardCount(), inpaint ?? IsCurrentInpaintOperation());
+    private int ActivePreciseReferenceCount()
+    {
+        var model = EffectiveSnapshot(CurrentParams).Model;
+        return PreciseReferenceRules.SupportsRequest(model)
+            ? PreciseReferenceRules.Filter(model, GetPreciseReferenceData()).Count : 0;
+    }
 
     private string GetCurrentModelKey() => GetSelectedComboText(CboModel) ?? CurrentParams.Model;
 
@@ -119,27 +128,26 @@ public sealed partial class MainWindow
         IsV4PlusModelKey(GetCurrentModelKey()) && IsAssetProtectionPaidFeatureLimitEnabled();
 
     private bool IsPreciseReferenceBlockedByAssetProtection() =>
-        IsPromptMode(_currentMode) && IsV45ModelKey(GetCurrentModelKey()) && IsAssetProtectionPaidFeatureLimitEnabled();
+        IsPromptMode(_currentMode) && (IsV45ModelKey(GetCurrentModelKey()) || IsV5ModelKey(GetCurrentModelKey())) && IsAssetProtectionPaidFeatureLimitEnabled();
 
     private bool SupportsPreciseReferenceFeature()
     {
         if (!IsPromptMode(_currentMode)) return false;
-        return IsV45ModelKey(GetCurrentModelKey()) && !IsAssetProtectionPaidFeatureLimitEnabled();
+        return (IsV45ModelKey(GetCurrentModelKey()) || IsV5ModelKey(GetCurrentModelKey())) && !IsAssetProtectionPaidFeatureLimitEnabled();
     }
 
     private bool SupportsPreciseReferenceFeature(AppMode mode)
     {
         if (!IsPromptMode(mode)) return false;
-        return IsV45ModelKey(GetCurrentModelKey()) && !IsAssetProtectionPaidFeatureLimitEnabled();
+        return (IsV45ModelKey(GetCurrentModelKey()) || IsV5ModelKey(GetCurrentModelKey())) && !IsAssetProtectionPaidFeatureLimitEnabled();
     }
 
     private bool CanEditVibeTransferFeature() =>
         SupportsVibeTransferFeature() &&
-        ActivePreciseReferenceCount() == 0;
+        RawPreciseReferenceCardCount() == 0;
 
     private bool CanEditPreciseReferenceFeature() =>
-        SupportsPreciseReferenceFeature() &&
-        (!SupportsVibeTransferFeature() || ActiveVibeTransferCount() == 0);
+        SupportsPreciseReferenceFeature();
 
     private bool ShouldShowVibeTransferPanel() =>
         SupportsVibeTransferFeature() && _genVibeTransfers.Count > 0;
@@ -180,8 +188,8 @@ public sealed partial class MainWindow
         if (!_settings.HasApiTokens)
             return 0;
 
+        parameters = EffectiveSnapshot(parameters, imageToImageOverride.HasValue ? !imageToImageOverride.Value && IsCurrentInpaintOperation() : null);
         bool medium = ModelCapabilities.IsMedium(parameters);
-        parameters = ModelCapabilities.CreateRequestSnapshot(parameters);
         model = parameters.Model;
         int steps = medium ? parameters.Steps : stepOverride ?? parameters.Steps;
         bool imageToImage = imageToImageOverride ??
@@ -197,7 +205,7 @@ public sealed partial class MainWindow
         int refCost = 0;
         bool isV4Plus = IsV4PlusModelKey(model);
 
-        var activeVibes = SupportsVibeTransferFeature()
+        var activeVibes = SupportsVibeTransferFeature() && RawPreciseReferenceCardCount() == 0
             ? _genVibeTransfers.Where(v => !v.IsDisabled).ToList()
             : new List<VibeTransferEntry>();
         if (isV4Plus && !IsAssetProtectionPaidFeatureLimitEnabled() && activeVibes.Count > 0)
@@ -206,8 +214,8 @@ public sealed partial class MainWindow
                 activeVibes.Count(v => !v.IsEncodedFile), activeVibes.Count, 0);
         }
 
-        int activePreciseCount = ActivePreciseReferenceCount();
-        if (IsV45ModelKey(model) && !IsAssetProtectionPaidFeatureLimitEnabled() && activePreciseCount > 0)
+        int activePreciseCount = PreciseReferenceRules.SupportsRequest(model) ? PreciseReferenceRules.Filter(model, GetPreciseReferenceData()).Count : 0;
+        if (activePreciseCount > 0)
         {
             refCost += NovelAiAnlasCalculator.ReferenceCost(0, 0, activePreciseCount);
         }
@@ -229,13 +237,9 @@ public sealed partial class MainWindow
 
         int activeVibeCount = SupportsVibeTransferFeature() ? ActiveVibeTransferCount() : 0;
         int activePreciseCount = ActivePreciseReferenceCount();
-
-        if (activeVibeCount > 0 &&
-            activePreciseCount > 0 &&
-            !IsAssetProtectionPaidFeatureLimitEnabled() &&
-            IsV45ModelKey(GetCurrentModelKey()))
+        if (activePreciseCount > MaxPreciseReferences)
         {
-            error = L("references.validation.mixed_reference_types");
+            error = Lf("references.error.precise_count_limit", MaxPreciseReferences);
             return false;
         }
 
@@ -308,7 +312,7 @@ public sealed partial class MainWindow
         if (meta.PreciseReferences.Count > 0)
         {
             _genPreciseReferences.Clear();
-            foreach (var reference in meta.PreciseReferences.Take(MaxPreciseReferences))
+            foreach (var reference in meta.PreciseReferences)
             {
                 if (string.IsNullOrWhiteSpace(reference.ImageBase64))
                     continue;
@@ -318,8 +322,9 @@ public sealed partial class MainWindow
                     FileName = string.IsNullOrWhiteSpace(reference.FileName) ? L("references.imported.precise_label") : reference.FileName,
                     ImageBase64 = reference.ImageBase64,
                     ReferenceType = reference.ReferenceType,
-                    Strength = Math.Clamp(reference.Strength, 0, 1),
-                    Fidelity = Math.Clamp(reference.Fidelity, 0, 1),
+                    Strength = reference.Strength,
+                    Fidelity = reference.Fidelity,
+                    IsDisabled = !reference.Enabled,
                 });
             }
         }
@@ -357,7 +362,7 @@ public sealed partial class MainWindow
         bool InputsStillCurrent() =>
             SupportsVibeTransferFeature() && string.Equals(GetCurrentModelKey(), model, StringComparison.Ordinal) &&
             ReferenceEquals(_genVibeTransfers, sourceEntries) && _normalizeVibeStrengths == normalize &&
-            ActivePreciseReferenceCount() == 0 &&
+            RawPreciseReferenceCardCount() == 0 &&
             _genVibeTransfers.Where(x => !x.IsDisabled).SequenceEqual(requests.Select(x => x.Entry)) &&
             requests.All(x => x.Entry.InformationExtracted == x.Extraction && x.Entry.Strength == x.Strength &&
                 string.Equals(x.Entry.OriginalImageBase64 ?? x.Entry.ImageBase64, x.Source, StringComparison.Ordinal));
@@ -422,7 +427,7 @@ public sealed partial class MainWindow
     private List<VibeTransferInfo>? GetVibeTransferData()
     {
         if (!SupportsVibeTransferFeature()) return null;
-        if (ActivePreciseReferenceCount() > 0) return null;
+        if (RawPreciseReferenceCardCount() > 0) return null;
 
         var result = _genVibeTransfers
             .Where(x => !x.IsDisabled && !string.IsNullOrWhiteSpace(x.ImageBase64) &&
@@ -446,18 +451,18 @@ public sealed partial class MainWindow
 
     private List<PreciseReferenceInfo>? GetPreciseReferenceData()
     {
-        if (!SupportsPreciseReferenceFeature()) return null;
-        if (SupportsVibeTransferFeature() && ActiveVibeTransferCount() > 0) return null;
+        if (RawPreciseReferenceCardCount() == 0) return null;
 
         var result = _genPreciseReferences
-            .Where(x => !x.IsDisabled && !string.IsNullOrWhiteSpace(x.ImageBase64))
+            .Where(x => !string.IsNullOrWhiteSpace(x.ImageBase64))
             .Select(x => new PreciseReferenceInfo
             {
                 FileName = x.FileName,
                 ImageBase64 = x.ImageBase64,
                 ReferenceType = x.ReferenceType,
-                Strength = Math.Clamp(x.Strength, 0, 1),
-                Fidelity = Math.Clamp(x.Fidelity, 0, 1),
+                Strength = x.Strength,
+                Fidelity = x.Fidelity,
+                Enabled = !x.IsDisabled,
             })
             .ToList();
 
