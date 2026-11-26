@@ -5,6 +5,9 @@ public enum PreciseReferenceType
     CharacterAndStyle,
     Character,
     Style,
+    Outfit,
+    CharacterSameOutfit,
+    CharacterAndStyleAnyOutfit,
 }
 
 public sealed class VibeTransferInfo

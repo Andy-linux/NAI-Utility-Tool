@@ -145,7 +145,7 @@ public sealed partial class MainWindow
             NegativePrompt = negativePrompt,
             Characters = CreateCharacterSignatureData(characters, ModelCapabilities.IsMedium(parameters)),
             Vibes = CreateVibeSignatureData(NovelAiAnlasCalculator.IsV5Model(parameters.Model) ? null : vibes),
-            PreciseReferences = CreatePreciseReferenceSignatureData(IsV45ModelKey(parameters.Model) ? preciseReferences : null),
+            PreciseReferences = CreatePreciseReferenceSignatureData(preciseReferences),
         };
 
         return new GenerationRequestSignature
@@ -208,7 +208,7 @@ public sealed partial class MainWindow
             ImageOffsetY = imageOffset.Y,
             Characters = CreateCharacterSignatureData(characters, ModelCapabilities.IsMedium(parameters)),
             Vibes = CreateVibeSignatureData(NovelAiAnlasCalculator.IsV5Model(parameters.Model) ? null : vibes),
-            PreciseReferences = CreatePreciseReferenceSignatureData(IsV45ModelKey(parameters.Model) ? preciseReferences : null),
+            PreciseReferences = CreatePreciseReferenceSignatureData(preciseReferences),
         };
 
         return new GenerationRequestSignature

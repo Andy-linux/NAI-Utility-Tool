@@ -304,6 +304,7 @@ public sealed partial class MainWindow
         if (!entry.IsCollapsed)
         {
             bool canEdit = CanEditPreciseReferenceFeature() && !entry.IsDisabled;
+            bool v5 = ModelCapabilities.SupportsOutfitReference(GetCurrentModelKey());
 
             var infoGrid = new Grid { ColumnSpacing = 10, Margin = new Thickness(0, 2, 0, 0) };
             infoGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -377,43 +378,75 @@ public sealed partial class MainWindow
             typeCombo.Items.Add(CreateTextComboBoxItem(L("references.precise.type.both")));
             typeCombo.Items.Add(CreateTextComboBoxItem(L("references.precise.type.character")));
             typeCombo.Items.Add(CreateTextComboBoxItem(L("references.precise.type.style")));
+            if (v5 || entry.ReferenceType == PreciseReferenceType.Outfit)
+                typeCombo.Items.Add(CreateTextComboBoxItem(L("references.precise.type.outfit")));
             typeCombo.SelectedIndex = entry.ReferenceType switch
             {
-                PreciseReferenceType.CharacterAndStyle => 0,
-                PreciseReferenceType.Character => 1,
-                _ => 2,
+                PreciseReferenceType.Character or PreciseReferenceType.CharacterSameOutfit => 1,
+                PreciseReferenceType.Style => 2,
+                PreciseReferenceType.Outfit => 3,
+                _ => 0,
+            };
+            var outfitToggle = new CheckBox
+            {
+                Content = L("references.precise.same_outfit"),
+                IsEnabled = canEdit,
+                IsChecked = entry.ReferenceType is PreciseReferenceType.CharacterSameOutfit or PreciseReferenceType.CharacterAndStyle,
+                Visibility = v5 && typeCombo.SelectedIndex < 2 ? Visibility.Visible : Visibility.Collapsed,
             };
             typeCombo.SelectionChanged += (_, _) =>
             {
-                entry.ReferenceType = typeCombo.SelectedIndex switch
+                int selected = typeCombo.SelectedIndex;
+                if (selected < 0) return;
+                entry.ReferenceType = selected switch
                 {
                     1 => PreciseReferenceType.Character,
                     2 => PreciseReferenceType.Style,
+                    3 => PreciseReferenceType.Outfit,
                     _ => PreciseReferenceType.CharacterAndStyle,
                 };
+                outfitToggle.IsChecked = selected == 0;
+                outfitToggle.Visibility = v5 && selected < 2 ? Visibility.Visible : Visibility.Collapsed;
+                UpdateReferenceButtonAndPanelState();
+                UpdateGenerateButtonWarning();
             };
+            void UpdateOutfitPreference(object sender, RoutedEventArgs args)
+            {
+                if (!v5 || typeCombo.SelectedIndex is not (0 or 1)) return;
+                bool preferSameOutfit = outfitToggle.IsChecked == true;
+                entry.ReferenceType = (typeCombo.SelectedIndex, preferSameOutfit) switch
+                {
+                    (1, true) => PreciseReferenceType.CharacterSameOutfit,
+                    (1, false) => PreciseReferenceType.Character,
+                    (0, false) => PreciseReferenceType.CharacterAndStyleAnyOutfit,
+                    _ => PreciseReferenceType.CharacterAndStyle,
+                };
+            }
+            outfitToggle.Checked += UpdateOutfitPreference;
+            outfitToggle.Unchecked += UpdateOutfitPreference;
             ApplyMenuTypography(typeCombo);
             typeCombo.IsEnabled = canEdit;
             root.Children.Add(typeCombo);
-
-            entry.Strength = Math.Clamp(entry.Strength, 0, 1);
-            entry.Fidelity = Math.Clamp(entry.Fidelity, 0, 1);
+            root.Children.Add(outfitToggle);
 
             var strengthRow = BuildReferenceSliderRow(
                 L("references.precise.strength"),
-                0, 1, entry.Strength,
+                0, v5 ? 5 : 1, entry.Strength,
                 value => entry.Strength = Math.Round(value, 2));
             strengthRow.IsHitTestVisible = canEdit;
             strengthRow.Opacity = canEdit ? 1.0 : 0.72;
             root.Children.Add(strengthRow);
 
-            var fidelityRow = BuildReferenceSliderRow(
-                L("references.precise.fidelity"),
-                0, 1, entry.Fidelity,
-                value => entry.Fidelity = Math.Round(value, 2));
-            fidelityRow.IsHitTestVisible = canEdit;
-            fidelityRow.Opacity = canEdit ? 1.0 : 0.72;
-            root.Children.Add(fidelityRow);
+            if (!v5)
+            {
+                var fidelityRow = BuildReferenceSliderRow(
+                    L("references.precise.fidelity"),
+                    0, 1, entry.Fidelity,
+                    value => entry.Fidelity = Math.Round(value, 2));
+                fidelityRow.IsHitTestVisible = canEdit;
+                fidelityRow.Opacity = canEdit ? 1.0 : 0.72;
+                root.Children.Add(fidelityRow);
+            }
         }
 
         if (index < _genPreciseReferences.Count - 1)

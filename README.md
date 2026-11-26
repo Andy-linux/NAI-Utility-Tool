@@ -92,7 +92,8 @@ First launch opens the main interface; configure the API, language and local mod
 ### Reference Images and Vibe
 
 - Supports official NAI Vibe Transfer.
-- Supports official NAI Precise Reference, with character, style, and character-plus-style reference types.
+- Supports NovelAI Precise Reference on V4.5 and V5. V5 Full (High and Medium) and Curated add outfit references and a “Prefer same outfit” option for character references. V5 supports reference strengths up to 5, and skips precise references during inpainting.
+- Each active precise reference costs 5 Anlas per generated image. Eligible Opus requests can still waive the base generation cost.
 - Supports local Vibe pre-encode caching to avoid repeated encoding cost.
 - Includes a Vibe pre-encode manager for viewing, cleaning, relocating source images, and exporting encoded files.
 - Can optionally copy Vibe source images into the local workspace for long-term reference management.

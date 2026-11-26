@@ -13,11 +13,11 @@ internal readonly record struct ApiRequestCost(
     }
 
     public static ApiRequestCost Image(string model, int width, int height, int steps,
-        bool sm = false, double strength = 1, int referenceAnlas = 0, bool characterReference = false, bool smDyn = false) => new(
+        bool sm = false, double strength = 1, int referenceAnlas = 0, bool smDyn = false) => new(
         NovelAiAnlasCalculator.IsV5Model(model),
         NovelAiAnlasCalculator.PaidBaseCost(model, width, height, steps, sm, strength, smDyn),
         referenceAnlas,
-        !characterReference && width > 0 && height > 0 && steps > 0 && steps <= 28 && (long)width * height <= 1048576);
+        width > 0 && height > 0 && steps > 0 && steps <= 28 && (long)width * height <= 1048576);
 }
 
 /// <summary>One cursor shared by every operation.</summary>

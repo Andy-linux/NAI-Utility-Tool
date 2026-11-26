@@ -13,6 +13,135 @@ internal static class ApiTransportChecks
         if (!condition) throw new InvalidOperationException(message);
     }
 
+    public static async Task RunPreciseReferenceAsync()
+    {
+        int before = _checks;
+        var settings = new SettingsService();
+        settings.SetApiTokens(["test-a"]);
+        using var handler = new AccountHandler();
+        using var client = new HttpClient(handler);
+        using var service = new NovelAIService(settings);
+        const BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Instance;
+        typeof(NovelAIService).GetField("_httpClient", flags)!.SetValue(service, client);
+        typeof(NovelAIService).GetField("_httpClientProxyKey", flags)!.SetValue(service, "");
+
+        using var bitmap = new SkiaSharp.SKBitmap(60, 90);
+        bitmap.Erase(SkiaSharp.SKColors.Coral);
+        using var png = bitmap.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+        string base64 = Convert.ToBase64String(png.ToArray());
+        List<PreciseReferenceInfo> references =
+        [
+            new() { ImageBase64 = base64, ReferenceType = PreciseReferenceType.Outfit, Strength = 4.25 },
+            new() { ImageBase64 = base64, ReferenceType = PreciseReferenceType.CharacterSameOutfit, Strength = 2, Fidelity = .6 },
+            new() { ImageBase64 = base64, ReferenceType = PreciseReferenceType.CharacterAndStyleAnyOutfit, Strength = 5, Fidelity = .8 },
+        ];
+
+        var p = settings.Settings.GenParameters;
+        p.Model = "nai-diffusion-5-full";
+        p.Steps = 28;
+        p.Effort = "high";
+        handler.Balances["test-a"] = (14, 90);
+        await service.GenerateAsync(1024, 1024, "sample", "", preciseReferences: references);
+        Check(handler.PostCount == 0, "Opus with available V5 usage still needs 15 Anlas for three references.");
+        handler.Balances["test-a"] = (15, 90);
+        await service.RefreshAccountsAsync();
+        await service.GenerateAsync(1024, 1024, "sample", "", preciseReferences: references);
+        Check(handler.PostCount == 1, "Opus V5 usage covers base generation; 15 Anlas covers the references.");
+        CheckV5Payload("nai-diffusion-5-full", "generate");
+
+        handler.V5UsageNegative = true;
+        handler.Balances["test-a"] = (44, 0);
+        await service.RefreshAccountsAsync();
+        await service.GenerateAsync(1024, 1024, "sample", "", preciseReferences: references);
+        Check(handler.PostCount == 1, "With exhausted V5 usage, 44 Anlas does not cover 30 base + 15 reference Anlas.");
+        handler.Balances["test-a"] = (45, 0);
+        await service.RefreshAccountsAsync();
+        await service.GenerateAsync(1024, 1024, "sample", "", preciseReferences: references);
+        Check(handler.PostCount == 2, "With exhausted V5 usage, exactly 45 Anlas covers the request.");
+        handler.V5UsageNegative = false;
+        handler.Balances["test-a"] = (5, 95);
+        await service.RefreshAccountsAsync();
+        await service.GenerateAsync(1024, 1024, "sample", "", preciseReferences: [references[0]]);
+        Check(handler.PostCount == 3, "An eligible Opus request with one reference can proceed with 5 Anlas.");
+        handler.Balances["test-a"] = (45, 90);
+
+        p.Effort = "medium";
+        await service.GenerateAsync(832, 1216, "sample", "", preciseReferences: references);
+        CheckV5Payload("nai-diffusion-5-full-medium", "generate");
+
+        p.Model = "nai-diffusion-5-curated";
+        p.Effort = "high";
+        await service.ImageToImageAsync(base64, 512, 512, "sample", "",
+            preciseReferences: references, parametersOverride: p);
+        CheckV5Payload("nai-diffusion-5-curated", "img2img");
+
+        p.Model = "nai-diffusion-5-full-inpainting";
+        await service.InpaintAsync(base64, base64, 512, 512, "sample", "",
+            preciseReferences: references, requestParameters: p);
+        using (var doc = JsonDocument.Parse(handler.LastPostBody!))
+        {
+            Check(doc.RootElement.GetProperty("action").GetString() == "infill", "V5 inpaint was dispatched.");
+            Check(!doc.RootElement.GetProperty("parameters").TryGetProperty("director_reference_images", out _),
+                "V5 inpaint omits all precise references.");
+        }
+
+        p.Model = "nai-diffusion-4-5-full";
+        await service.GenerateAsync(512, 512, "sample", "", preciseReferences: references);
+        using (var doc = JsonDocument.Parse(handler.LastPostBody!))
+        {
+            var parameters = doc.RootElement.GetProperty("parameters");
+            Check(Captions(parameters).SequenceEqual(["character", "character&style"]),
+                "V4.5 skips clothing-only references and uses legacy character captions.");
+            Check(parameters.GetProperty("director_reference_strength_values")[0].GetDouble() == 1 &&
+                  Math.Abs(parameters.GetProperty("director_reference_secondary_strength_values")[0].GetDouble() - .4) < .0001,
+                "V4.5 retains its existing strength range and fidelity.");
+            Check(ReferenceSize(parameters) == (1024, 1536), "V4.5 retains its existing padded reference dimensions.");
+        }
+
+        using (var doc = JsonDocument.Parse(JsonSerializer.Serialize(new
+        {
+            director_reference_images = new[] { base64, base64 },
+            director_reference_strength_values = new[] { 4.25, 5 },
+            director_reference_descriptions = new[] { "costume", "character_mainoutfit" },
+        })))
+        {
+            var metadata = ImageMetadataService.TryParseJson(doc.RootElement.GetRawText());
+            Check(metadata?.PreciseReferences.Count == 2 &&
+                  metadata.PreciseReferences[0].ReferenceType == PreciseReferenceType.Outfit &&
+                  metadata.PreciseReferences[0].Strength == 4.25 &&
+                  metadata.PreciseReferences[1].ReferenceType == PreciseReferenceType.CharacterSameOutfit,
+                "V5 metadata preserves new reference types and strengths above 1.");
+        }
+        Console.WriteLine($"Passed {_checks - before} precise reference transport and metadata checks.");
+
+        void CheckV5Payload(string model, string action)
+        {
+            using var doc = JsonDocument.Parse(handler.LastPostBody!);
+            var payload = doc.RootElement;
+            var parameters = payload.GetProperty("parameters");
+            Check(payload.GetProperty("model").GetString() == model && payload.GetProperty("action").GetString() == action,
+                $"Correct request model and action for {model}.");
+            Check(Captions(parameters).SequenceEqual(["costume", "character_mainoutfit", "character&style_anyoutfit"]),
+                "V5 uses the website's outfit and character captions.");
+            Check(parameters.GetProperty("director_reference_strength_values").EnumerateArray().Select(x => x.GetDouble())
+                .SequenceEqual([4.25, 2, 5]), "V5 preserves reference strengths above 1.");
+            Check(parameters.GetProperty("director_reference_secondary_strength_values").EnumerateArray().All(x => x.GetDouble() == 0),
+                "V5 sends zero secondary strength despite saved V4.5 fidelity.");
+            Check(ReferenceSize(parameters) == (832, 1216), "V5 crops the reference to its selected aspect-ratio bucket.");
+        }
+
+        static IEnumerable<string?> Captions(JsonElement parameters) =>
+            parameters.GetProperty("director_reference_descriptions").EnumerateArray()
+                .Select(x => x.GetProperty("caption").GetProperty("base_caption").GetString());
+
+        static (int Width, int Height) ReferenceSize(JsonElement parameters)
+        {
+            using var image = SkiaSharp.SKBitmap.Decode(Convert.FromBase64String(
+                parameters.GetProperty("director_reference_images")[0].GetString()!));
+            return (image.Width, image.Height);
+        }
+    }
+
     public static async Task RunAsync()
     {
         // This executable's own output directory is the isolated config root; never load app user data.
@@ -169,7 +298,7 @@ internal static class ApiTransportChecks
         settings.Settings.ApiCallMode = ApiCallMode.Random;
         var costType = typeof(NovelAIService).Assembly.GetType("NAITool.Services.ApiRequestCost")!;
         var cost = costType.GetMethod("Image", BindingFlags.Public | BindingFlags.Static)!
-            .Invoke(null, ["nai-diffusion-5-full", 1024, 1024, 28, false, 1d, 1]);
+            .Invoke(null, ["nai-diffusion-5-full", 1024, 1024, 28, false, 1d, 1, false]);
         var estimate = typeof(NovelAIService).GetMethod("EstimateAnlas", BindingFlags.NonPublic | BindingFlags.Instance)!
             .Invoke(service, [cost]);
         Check(Equals(estimate, 1), "Random cost preview excludes the higher cost of an account that cannot afford the request.");
@@ -181,6 +310,8 @@ internal static class ApiTransportChecks
         public int GetCount => _getCount;
         public int PostCount => _postCount;
         public string? LastPostToken { get; private set; }
+        public string? LastPostBody { get; private set; }
+        public bool V5UsageNegative { get; set; }
         public ConcurrentDictionary<string, (int Anlas, int V5)> Balances { get; } = new();
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -203,13 +334,15 @@ internal static class ApiTransportChecks
                         subscription = new
                         {
                             tier = 3, active = true, trainingStepsLeft = balance,
-                            usage = new { percent = v5, isNegative = false, timeUntilNextPercent = 60 },
+                            expiresAt = DateTimeOffset.UtcNow.AddDays(20).ToUnixTimeSeconds(),
+                            usage = new { percent = v5, isNegative = V5UsageNegative, timeUntilNextPercent = 60 },
                         },
                     })),
                 };
             }
             Interlocked.Increment(ref _postCount);
             LastPostToken = token;
+            LastPostBody = await request.Content!.ReadAsStringAsync(ct);
             return new(HttpStatusCode.BadRequest) { Content = new StringContent("synthetic response; no generation") };
         }
     }

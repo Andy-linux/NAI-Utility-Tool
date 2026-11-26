@@ -7,6 +7,13 @@ internal static class ModelCapabilities
         ? model[..^"-inpainting".Length] : model;
 
     internal static bool SupportsEffort(string model) => BaseModel(model) is "nai-diffusion-5-full" or "nai-diffusion-5-full-medium";
+    internal static bool SupportsOutfitReference(string model) => HighModel(BaseModel(model)) is
+        "nai-diffusion-5" or "nai-diffusion-5-full" or "nai-diffusion-5-curated";
+
+    internal static bool SupportsPreciseReference(string model, bool inpaint = false) => BaseModel(model) is
+        "nai-diffusion-4-5-full" or "nai-diffusion-4-5-curated" ||
+        !inpaint && model == BaseModel(model) && SupportsOutfitReference(model);
+
     internal static bool IsMedium(NAIParameters p) => SupportsEffort(p.Model) && (p.Effort == "medium" || BaseModel(p.Model) == "nai-diffusion-5-full-medium");
     internal static string HighModel(string model) => model switch
     {

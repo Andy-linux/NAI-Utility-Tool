@@ -385,9 +385,6 @@ public partial class NovelAIService : IDisposable
         "nai-diffusion-4-curated" or "nai-diffusion-4-curated-preview" or
         "nai-diffusion-4-5-full" or "nai-diffusion-4-5-curated";
 
-    private static bool SupportsPreciseReferenceModel(string model) =>
-        IsV45Model(model);
-
     private static string ApplyQualityTags(string prompt, NAIParameters parameters)
     {
         return NovelAiPromptPresets.AddQuality(prompt, parameters);
@@ -420,22 +417,59 @@ public partial class NovelAIService : IDisposable
             parameters.Remove("noise_schedule");
     }
 
-    private static string ToApiPreciseReferenceType(PreciseReferenceType type) => type switch
+    private static string ToApiPreciseReferenceType(PreciseReferenceType type, bool v5) => type switch
     {
-        PreciseReferenceType.Character => "character",
+        PreciseReferenceType.CharacterSameOutfit when v5 => "character_mainoutfit",
+        PreciseReferenceType.Character or PreciseReferenceType.CharacterSameOutfit => "character",
+        PreciseReferenceType.CharacterAndStyleAnyOutfit when v5 => "character&style_anyoutfit",
         PreciseReferenceType.Style => "style",
+        PreciseReferenceType.Outfit => "costume",
         _ => "character&style",
     };
 
-    private static string PrepareDirectorReferenceImage(string base64Image)
+    // V5 uses the website's aspect-ratio buckets, covering ~1 MP before the centered crop.
+    private static readonly (int Width, int Height)[] V5PortraitReferenceSizes =
+    [
+        (256, 4096), (256, 4032), (256, 3968), (256, 3904), (256, 3840), (256, 3776), (256, 3712),
+        (256, 3648), (256, 3584), (256, 3520), (256, 3456), (256, 3392), (256, 3328),
+        (320, 3264), (320, 3200), (320, 3136), (320, 3072), (320, 3008), (320, 2944),
+        (320, 2880), (320, 2816), (320, 2752), (384, 2688), (384, 2624), (384, 2560),
+        (384, 2496), (384, 2432), (384, 2368), (448, 2304), (448, 2240), (448, 2176),
+        (448, 2112), (512, 2048), (512, 1984), (512, 1920), (512, 1856), (576, 1792),
+        (576, 1728), (576, 1664), (640, 1600), (640, 1536), (704, 1472), (704, 1408),
+        (768, 1344), (768, 1280), (832, 1216), (896, 1152), (960, 1088), (1024, 1024),
+    ];
+
+    private static string PrepareDirectorReferenceImage(string base64Image, bool v5)
     {
         byte[] bytes = Convert.FromBase64String(base64Image);
         // Strip recognized stealth alpha bits before filtering, as for the website's reference input.
         using var bitmap = InpaintImageProcessing.DecodeClean(bytes);
         if (bitmap == null)
-            return base64Image;
+            throw new InvalidDataException(L("references.error.invalid_precise_image"));
 
         double srcRatio = (double)bitmap.Width / bitmap.Height;
+        if (v5)
+        {
+            var bucket = V5PortraitReferenceSizes
+                .Concat(V5PortraitReferenceSizes.Reverse().Skip(1).Select(size => (Width: size.Height, Height: size.Width)))
+                .MinBy(size => Math.Abs(Math.Log(srcRatio) - Math.Log((double)size.Width / size.Height)));
+            double scale = Math.Max((double)bucket.Width / bitmap.Width, (double)bucket.Height / bitmap.Height);
+            int resizedWidth = Math.Max(bucket.Width, (int)Math.Floor(bitmap.Width * scale + .5));
+            int resizedHeight = Math.Max(bucket.Height, (int)Math.Floor(bitmap.Height * scale + .5));
+            int left = (resizedWidth - bucket.Width) / 2;
+            int top = (resizedHeight - bucket.Height) / 2;
+            using var cropped = new SKBitmap(bucket.Width, bucket.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
+            using var cropCanvas = new SKCanvas(cropped);
+            cropCanvas.Clear(SKColors.Transparent);
+            using var sourceImage = SKImage.FromBitmap(bitmap);
+            cropCanvas.DrawImage(sourceImage, new SKRect(-left, -top, resizedWidth - left, resizedHeight - top),
+                new SKSamplingOptions(SKCubicResampler.Mitchell));
+            using var result = SKImage.FromBitmap(cropped);
+            using var encoded = result.Encode(SKEncodedImageFormat.Png, 100);
+            return Convert.ToBase64String(encoded.ToArray());
+        }
+
         var target = new[] { (Width: 1024, Height: 1536), (Width: 1536, Height: 1024), (Width: 1472, Height: 1472) }
             .OrderBy(size => Math.Abs((double)size.Width / size.Height - srcRatio)).First();
         int TargetW = target.Width, TargetH = target.Height;
@@ -549,19 +583,30 @@ public partial class NovelAIService : IDisposable
             parameters["reference_information_extracted_multiple"] = vibeTransfers.Select(x => x.InformationExtracted).ToList();
     }
 
+    internal static List<PreciseReferenceInfo>? GetSupportedPreciseReferences(
+        string model, List<PreciseReferenceInfo>? preciseReferences, bool inpaint = false)
+    {
+        if (preciseReferences == null || !ModelCapabilities.SupportsPreciseReference(model, inpaint))
+            return null;
+        var active = preciseReferences.Where(x =>
+            ModelCapabilities.SupportsOutfitReference(model) || x.ReferenceType != PreciseReferenceType.Outfit).ToList();
+        return active.Count > 0 ? active : null;
+    }
+
     private static void ApplyPreciseReferenceParameters(
         Dictionary<string, object?> parameters,
-        List<PreciseReferenceInfo> preciseReferences)
+        List<PreciseReferenceInfo> preciseReferences, string model)
     {
         if (preciseReferences.Count == 0)
             return;
 
+        bool v5 = ModelCapabilities.SupportsOutfitReference(model);
         parameters["director_reference_images"] = preciseReferences
-            .Select(x => PrepareDirectorReferenceImage(x.ImageBase64)).ToList();
+            .Select(x => PrepareDirectorReferenceImage(x.ImageBase64, v5)).ToList();
         parameters["director_reference_strength_values"] = preciseReferences
-            .Select(x => Math.Clamp(x.Strength, 0, 1)).ToList();
+            .Select(x => Math.Clamp(x.Strength, 0, v5 ? 5 : 1)).ToList();
         parameters["director_reference_secondary_strength_values"] = preciseReferences
-            .Select(x => 1.0 - Math.Clamp(x.Fidelity, 0, 1)).ToList();
+            .Select(x => v5 ? 0.0 : 1.0 - Math.Clamp(x.Fidelity, 0, 1)).ToList();
         parameters["director_reference_information_extracted"] = preciseReferences
             .Select(_ => 1.0).ToList();
         parameters["director_reference_descriptions"] = preciseReferences
@@ -569,7 +614,7 @@ public partial class NovelAIService : IDisposable
             {
                 ["caption"] = new Dictionary<string, object?>
                 {
-                    ["base_caption"] = ToApiPreciseReferenceType(x.ReferenceType),
+                    ["base_caption"] = ToApiPreciseReferenceType(x.ReferenceType, v5),
                     ["char_captions"] = new List<object>(),
                 },
                 ["legacy_uc"] = false,
@@ -785,8 +830,9 @@ public partial class NovelAIService : IDisposable
             parameters["sm_dyn"] = false;
         }
 
-        if (preciseReferences is { Count: > 0 } && SupportsPreciseReferenceModel(naiParams.Model))
-            ApplyPreciseReferenceParameters(parameters, preciseReferences);
+        preciseReferences = GetSupportedPreciseReferences(naiParams.Model, preciseReferences, inpaint: true);
+        if (preciseReferences != null)
+            ApplyPreciseReferenceParameters(parameters, preciseReferences, naiParams.Model);
         else if (vibeTransfers is { Count: > 0 } && SupportsVibeTransferModel(naiParams.Model) && !isV4Plus)
         {
             ApplyVibeTransferParameters(parameters, vibeTransfers, naiParams.Model);
@@ -810,8 +856,7 @@ public partial class NovelAIService : IDisposable
             var requestCt = requestTimeoutCts.Token;
             var account = await SelectAccountAsync(ApiRequestCost.Image(naiParams.Model, width, height, naiParams.Steps,
                     strength: IsV4PlusModel(naiParams.Model) ? naiParams.InpaintStrength : 1,
-                    referenceAnlas: GenerationReferenceAnlas(naiParams.Model, vibeTransfers, preciseReferences),
-                    characterReference: SupportsPreciseReferenceModel(naiParams.Model) && preciseReferences is { Count: > 0 }, smDyn: false), requestCt);
+                    referenceAnlas: GenerationReferenceAnlas(naiParams.Model, vibeTransfers, preciseReferences)), requestCt);
             using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
             if (streamGeneration)
                 request.Headers.Accept.ParseAdd("application/octet-stream");
@@ -1050,8 +1095,9 @@ public partial class NovelAIService : IDisposable
             parameters["sm_dyn"] = false;
         }
 
-        if (preciseReferences is { Count: > 0 } && SupportsPreciseReferenceModel(naiParams.Model))
-            ApplyPreciseReferenceParameters(parameters, preciseReferences);
+        preciseReferences = GetSupportedPreciseReferences(naiParams.Model, preciseReferences);
+        if (preciseReferences != null)
+            ApplyPreciseReferenceParameters(parameters, preciseReferences, naiParams.Model);
         else if (vibeTransfers is { Count: > 0 } && SupportsVibeTransferModel(naiParams.Model))
         {
             if (IsV4PlusModel(naiParams.Model))
@@ -1077,8 +1123,7 @@ public partial class NovelAIService : IDisposable
             var requestCt = requestTimeoutCts.Token;
             var account = await SelectAccountAsync(ApiRequestCost.Image(naiParams.Model, pricedSize.Width, pricedSize.Height, naiParams.Steps,
                     strength: naiParams.DenoiseStrength,
-                    referenceAnlas: GenerationReferenceAnlas(naiParams.Model, vibeTransfers, preciseReferences),
-                    characterReference: SupportsPreciseReferenceModel(naiParams.Model) && preciseReferences is { Count: > 0 }, smDyn: false), requestCt);
+                    referenceAnlas: GenerationReferenceAnlas(naiParams.Model, vibeTransfers, preciseReferences)), requestCt);
             using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
             if (streamGeneration)
                 request.Headers.Accept.ParseAdd("application/octet-stream");
@@ -1265,8 +1310,9 @@ public partial class NovelAIService : IDisposable
             parameters["sm_dyn"] = naiParams.Sm && naiParams.SmDyn;
         }
 
-        if (preciseReferences is { Count: > 0 } && SupportsPreciseReferenceModel(model))
-            ApplyPreciseReferenceParameters(parameters, preciseReferences);
+        preciseReferences = GetSupportedPreciseReferences(model, preciseReferences);
+        if (preciseReferences != null)
+            ApplyPreciseReferenceParameters(parameters, preciseReferences, model);
         else if (vibeTransfers is { Count: > 0 } && SupportsVibeTransferModel(model))
         {
             if (IsV4PlusModel(model))
@@ -1292,7 +1338,7 @@ public partial class NovelAIService : IDisposable
             var requestCt = requestTimeoutCts.Token;
             var account = await SelectAccountAsync(ApiRequestCost.Image(model, width, height, naiParams.Steps, sm: naiParams.Sm,
                     referenceAnlas: GenerationReferenceAnlas(model, vibeTransfers, preciseReferences),
-                    characterReference: SupportsPreciseReferenceModel(model) && preciseReferences is { Count: > 0 }, smDyn: naiParams.Sm && naiParams.SmDyn), requestCt);
+                    smDyn: naiParams.Sm && naiParams.SmDyn), requestCt);
             using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
             if (streamGeneration)
                 request.Headers.Accept.ParseAdd("application/octet-stream");

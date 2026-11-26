@@ -9,8 +9,10 @@ internal static class Program
     public static async Task Main(string[] args)
     {
         string nativeDirectory;
-        if (args.Length > 0)
-            nativeDirectory = Path.GetFullPath(args[0]);
+        bool preciseReferenceOnly = args.Contains("--precise-reference");
+        string? nativePath = args.FirstOrDefault(arg => arg != "--precise-reference");
+        if (nativePath != null)
+            nativeDirectory = Path.GetFullPath(nativePath);
         else
         {
             var root = new DirectoryInfo(AppContext.BaseDirectory);
@@ -27,10 +29,14 @@ internal static class Program
         if (!File.Exists(Path.Combine(nativeDirectory, "Microsoft.WindowsAppRuntime.dll")))
             throw new InvalidOperationException("Build NAITool (x64) first, then supply its bin directory.");
         if (!SetDllDirectory(nativeDirectory)) throw new System.ComponentModel.Win32Exception();
-        try { await RunChecksAsync(); }
+        try { await RunChecksAsync(preciseReferenceOnly); }
         finally { SetDllDirectory(null); }
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static Task RunChecksAsync() => ApiTransportChecks.RunAsync();
+    private static async Task RunChecksAsync(bool preciseReferenceOnly)
+    {
+        await ApiTransportChecks.RunPreciseReferenceAsync();
+        if (!preciseReferenceOnly) await ApiTransportChecks.RunAsync();
+    }
 }

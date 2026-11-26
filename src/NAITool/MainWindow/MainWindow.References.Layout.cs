@@ -31,7 +31,7 @@ public sealed partial class MainWindow
             : Visibility.Collapsed;
         BtnAddCharacter.IsEnabled = SupportsCharacterFeature() && CurrentCharacterEntries.Count < GetMaxCharactersForCurrentModel();
 
-        BtnAddVibeTransfer.Visibility = SupportsVibeTransferFeature() && ActivePreciseReferenceCount() == 0
+        BtnAddVibeTransfer.Visibility = CanEditVibeTransferFeature()
             ? Visibility.Visible
             : Visibility.Collapsed;
         int maxVibeTransfers = GetMaxAllowedVibeTransfers();
@@ -64,10 +64,18 @@ public sealed partial class MainWindow
             : Visibility.Collapsed;
         TxtVibeTransferHint.Text = L("references.hint.asset_protection_vibe");
 
-        PreciseReferencePanel.Visibility = ShouldShowPreciseReferencePanel()
+        bool v5Inpaint = _currentMode == AppMode.I2I && _i2iEditMode == I2IEditMode.Inpaint &&
+            IsV5ModelKey(GetCurrentModelKey()) && _genPreciseReferences.Any(x => !x.IsDisabled);
+        bool showReferences = ShouldShowPreciseReferencePanel();
+        PreciseReferencePanel.Visibility = showReferences || v5Inpaint
             ? Visibility.Visible
             : Visibility.Collapsed;
-        TxtPreciseReferenceHint.Visibility = Visibility.Collapsed;
+        PreciseReferenceContainer.Visibility = showReferences ? Visibility.Visible : Visibility.Collapsed;
+        bool outfitSkipped = showReferences &&
+            !ModelCapabilities.SupportsOutfitReference(GetCurrentModelKey()) &&
+            _genPreciseReferences.Any(x => !x.IsDisabled && x.ReferenceType == PreciseReferenceType.Outfit);
+        TxtPreciseReferenceHint.Text = L(v5Inpaint ? "references.precise.v5_inpaint_unsupported" : "references.precise.outfit_skipped");
+        TxtPreciseReferenceHint.Visibility = v5Inpaint || outfitSkipped ? Visibility.Visible : Visibility.Collapsed;
 
         UpdateReferenceButtonRowLayout();
         UpdatePromptAreaHeight();

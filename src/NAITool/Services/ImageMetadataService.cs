@@ -1164,13 +1164,15 @@ public static class ImageMetadataService
 
     private static void ParsePreciseReferences(JsonElement root, ImageMetadata meta)
     {
+        // Source/model identification may be completed after the PNG comment is read.
+        const double maxStrength = 5;
         if (root.TryGetProperty("director_reference_images", out var dirImageArray) &&
             dirImageArray.ValueKind == JsonValueKind.Array)
         {
             var strengthValues = TryReadDoubleArray(root, "director_reference_strength_values");
             var secondaryValues = TryReadDoubleArray(root, "director_reference_secondary_strength_values");
-            bool hasDescriptions = root.TryGetProperty("director_reference_descriptions", out var descArray)
-                && descArray.ValueKind == JsonValueKind.Array;
+            var descriptions = root.TryGetProperty("director_reference_descriptions", out var descArray)
+                && descArray.ValueKind == JsonValueKind.Array ? descArray.EnumerateArray().ToArray() : [];
 
             int index = 0;
             foreach (var item in dirImageArray.EnumerateArray())
@@ -1183,11 +1185,14 @@ public static class ImageMetadataService
                 }
 
                 string typeValue = "";
-                if (hasDescriptions)
+                if (index < descriptions.Length)
                 {
-                    var descElements = descArray.EnumerateArray().ToList();
-                    if (index < descElements.Count &&
-                        descElements[index].TryGetProperty("caption", out var caption) &&
+                    var description = descriptions[index];
+                    if (description.ValueKind == JsonValueKind.String)
+                        typeValue = description.GetString() ?? "";
+                    else if (description.ValueKind == JsonValueKind.Object &&
+                        description.TryGetProperty("caption", out var caption) &&
+                        caption.ValueKind == JsonValueKind.Object &&
                         caption.TryGetProperty("base_caption", out var baseCap))
                     {
                         typeValue = baseCap.GetString() ?? "";
@@ -1200,7 +1205,7 @@ public static class ImageMetadataService
                     ImageBase64 = imageBase64,
                     FileName = LocalizationService.Instance.Format("references.imported.precise_numbered", index + 1),
                     ReferenceType = ParsePreciseReferenceType(typeValue),
-                    Strength = Math.Clamp(index < strengthValues.Count ? strengthValues[index] : 1.0, 0, 1),
+                    Strength = Math.Clamp(index < strengthValues.Count ? strengthValues[index] : 1.0, 0, maxStrength),
                     Fidelity = Math.Clamp(Math.Round(1.0 - secondaryStrength, 2), 0, 1),
                 });
                 index++;
@@ -1228,7 +1233,7 @@ public static class ImageMetadataService
                     ImageBase64 = imageBase64,
                     FileName = TryReadString(item, "fileName", "filename", "name", "label"),
                     ReferenceType = ParsePreciseReferenceType(TryReadString(item, "referenceType", "reference_type", "type")),
-                    Strength = Math.Clamp(TryReadDouble(item, "strength", 1.0, "reference_strength"), 0, 1),
+                    Strength = Math.Clamp(TryReadDouble(item, "strength", 1.0, "reference_strength"), 0, maxStrength),
                     Fidelity = Math.Clamp(TryReadDouble(item, "fidelity", 0.0, "reference_fidelity"), 0, 1),
                 });
                 index++;
@@ -1272,7 +1277,7 @@ public static class ImageMetadataService
                 ImageBase64 = imageBase64,
                 FileName = fileName,
                 ReferenceType = ParsePreciseReferenceType(typeValue),
-                Strength = Math.Clamp(currentIndex < legacyStrengthValues.Count ? legacyStrengthValues[currentIndex] : 1.0, 0, 1),
+                Strength = Math.Clamp(currentIndex < legacyStrengthValues.Count ? legacyStrengthValues[currentIndex] : 1.0, 0, maxStrength),
                 Fidelity = Math.Clamp(currentIndex < fidelityValues.Count ? fidelityValues[currentIndex] : 0.0, 0, 1),
             });
             currentIndex++;
@@ -1356,6 +1361,9 @@ public static class ImageMetadataService
         {
             "character" => PreciseReferenceType.Character,
             "style" => PreciseReferenceType.Style,
+            "costume" or "outfit" => PreciseReferenceType.Outfit,
+            "character_mainoutfit" or "charactersameoutfit" => PreciseReferenceType.CharacterSameOutfit,
+            "character&style_anyoutfit" or "characterandstyleanyoutfit" => PreciseReferenceType.CharacterAndStyleAnyOutfit,
             "character_style" => PreciseReferenceType.CharacterAndStyle,
             "character&style" => PreciseReferenceType.CharacterAndStyle,
             "character+style" => PreciseReferenceType.CharacterAndStyle,

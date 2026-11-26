@@ -329,7 +329,9 @@ public sealed partial class MainWindow
 
         if (!SupportsPreciseReferenceFeature())
         {
-            TxtStatus.Text = L("references.error.precise_requires_v45_model");
+            TxtStatus.Text = L(IsV5ModelKey(GetCurrentModelKey()) && _currentMode == AppMode.I2I && _i2iEditMode == I2IEditMode.Inpaint
+                ? "references.precise.v5_inpaint_unsupported"
+                : "references.error.precise_requires_v45_model");
             return true;
         }
 
