@@ -412,7 +412,7 @@ public sealed partial class MainWindow
             {
                 entry.ReferenceType = typeCombo.SelectedIndex switch
                 {
-                    1 => v5 ? PreciseReferenceType.CharacterMainOutfit : PreciseReferenceType.Character,
+                    1 => PreciseReferenceType.Character,
                     2 => PreciseReferenceType.Style,
                     3 => PreciseReferenceType.Outfit,
                     _ => PreciseReferenceType.CharacterAndStyle,
@@ -571,12 +571,14 @@ public sealed partial class MainWindow
         var slider = new Slider { Minimum = 0, Maximum = max, StepFrequency = 0.05, Value = Math.Max(0, Math.Min(max, value)) };
         var text = new TextBox { Text = value.ToString("R", System.Globalization.CultureInfo.InvariantCulture) };
         bool updating = false;
-        void Commit()
+        void Commit(bool restoreInvalid)
         {
+            if (updating) return;
             if (!double.TryParse(text.Text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double next) ||
                 !double.IsFinite(next))
             {
-                text.Text = value.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+                if (restoreInvalid)
+                    text.Text = value.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
                 return;
             }
             updating = true;
@@ -588,12 +590,15 @@ public sealed partial class MainWindow
         slider.ValueChanged += (_, _) =>
         {
             if (updating) return;
+            updating = true;
             value = slider.Value;
             changed(value);
             text.Text = value.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+            updating = false;
         };
-        text.LostFocus += (_, _) => Commit();
-        text.KeyDown += (_, e) => { if (e.Key == Windows.System.VirtualKey.Enter) Commit(); };
+        text.TextChanged += (_, _) => Commit(false);
+        text.LostFocus += (_, _) => Commit(true);
+        text.KeyDown += (_, e) => { if (e.Key == Windows.System.VirtualKey.Enter) Commit(true); };
         Grid.SetColumn(text, 1);
         grid.Children.Add(slider);
         grid.Children.Add(text);

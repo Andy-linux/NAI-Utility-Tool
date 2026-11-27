@@ -13,7 +13,7 @@ internal readonly record struct ApiRequestCost(
     }
 
     public static ApiRequestCost Image(string model, int width, int height, int steps,
-        bool sm = false, double strength = 1, int referenceAnlas = 0, bool characterReference = false, bool smDyn = false) => new(
+        bool sm = false, double strength = 1, int referenceAnlas = 0, bool smDyn = false) => new(
         NovelAiAnlasCalculator.IsV5Model(model),
         NovelAiAnlasCalculator.PaidBaseCost(model, width, height, steps, sm, strength, smDyn),
         referenceAnlas,

@@ -832,7 +832,7 @@ public partial class NovelAIService : IDisposable
             var account = await SelectAccountAsync(ApiRequestCost.Image(naiParams.Model, width, height, naiParams.Steps,
                     strength: IsV4PlusModel(naiParams.Model) ? naiParams.InpaintStrength : 1,
                     referenceAnlas: GenerationReferenceAnlas(naiParams.Model, vibeTransfers, preciseReferences),
-                    characterReference: SupportsPreciseReferenceModel(naiParams.Model) && preciseReferences is { Count: > 0 }, smDyn: false), requestCt);
+                    smDyn: false), requestCt);
             using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
             if (streamGeneration)
                 request.Headers.Accept.ParseAdd("application/octet-stream");
@@ -1102,7 +1102,7 @@ public partial class NovelAIService : IDisposable
             var account = await SelectAccountAsync(ApiRequestCost.Image(naiParams.Model, pricedSize.Width, pricedSize.Height, naiParams.Steps,
                     strength: naiParams.DenoiseStrength,
                     referenceAnlas: GenerationReferenceAnlas(naiParams.Model, vibeTransfers, preciseReferences),
-                    characterReference: SupportsPreciseReferenceModel(naiParams.Model) && preciseReferences is { Count: > 0 }, smDyn: false), requestCt);
+                    smDyn: false), requestCt);
             using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
             if (streamGeneration)
                 request.Headers.Accept.ParseAdd("application/octet-stream");
@@ -1319,7 +1319,7 @@ public partial class NovelAIService : IDisposable
             var requestCt = requestTimeoutCts.Token;
             var account = await SelectAccountAsync(ApiRequestCost.Image(model, width, height, naiParams.Steps, sm: naiParams.Sm,
                     referenceAnlas: GenerationReferenceAnlas(model, vibeTransfers, preciseReferences),
-                    characterReference: SupportsPreciseReferenceModel(model) && preciseReferences is { Count: > 0 }, smDyn: naiParams.Sm && naiParams.SmDyn), requestCt);
+                    smDyn: naiParams.Sm && naiParams.SmDyn), requestCt);
             using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
             if (streamGeneration)
                 request.Headers.Accept.ParseAdd("application/octet-stream");

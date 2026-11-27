@@ -60,7 +60,7 @@ public sealed partial class MainWindow
         public string ImageBase64 { get; set; } = "";
         public PreciseReferenceType ReferenceType { get; set; } = PreciseReferenceType.CharacterAndStyle;
         public double Strength { get; set; } = 1.0;
-        public double Fidelity { get; set; }
+        public double Fidelity { get; set; } = 1.0;
         public bool IsCollapsed { get; set; }
         public bool IsDisabled { get; set; }
     }
@@ -197,7 +197,6 @@ public sealed partial class MainWindow
         var cost = ApiRequestCost.Image(model, width, height, steps,
             sm: parameters.Sm && !imageToImage && _currentMode != AppMode.I2I,
             smDyn: parameters.Sm && parameters.SmDyn && !imageToImage && _currentMode != AppMode.I2I,
-            characterReference: SupportsPreciseReferenceFeature() && ActivePreciseReferenceCount() > 0,
             strength: imageToImage ? parameters.DenoiseStrength
                 : _currentMode == AppMode.I2I && IsV4PlusModelKey(model) ? parameters.InpaintStrength : 1);
 
