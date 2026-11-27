@@ -6,13 +6,13 @@
 
 NAI Utility Tool 是一个面向 NovelAI 图像工作流的 Windows 桌面客户端。它基于 .NET 9、WinUI 3、Windows App SDK、Win2D、SkiaSharp 和 ONNX Runtime 构建，目标不是替代 NovelAI 官方站点，而是把日常高频操作整合到一个本地工具里：生成、重绘、遮罩编辑、提示词管理、参考图工作流、批量自动化、后期处理、超分、元数据检视和本地反推。
 
-当前版本：[**1.3.0_fork.2.1**](https://github.com/Andy-linux/NAI-Utility-Tool/releases/tag/1.3.0_fork.2.1)，提供 Windows x64 自包含安装器、ZIP 和 7z 便携包。
+当前版本：[**1.3.0_fork.3**](https://github.com/Andy-linux/NAI-Utility-Tool/releases/tag/1.3.0_fork.3)，提供 Windows x64 自包含安装器、ZIP 和 7z 便携包。
 
-## fork.3（最终本地发行候选）
+## fork.3：V5 精确参考、图像管线与计费对齐
 
 支持 V5 Full/Curated 精确参考、服装偏好、有效 High 档位及 97 尺寸桶 Lanczos3 参考图处理。保留参考原字节与非预乘 RGBA（含透明像素 RGB），超大图在解码前检查尺寸。Character 默认关闭同服装，新建参考卡 Fidelity 为 1.0，有限数值即时提交且不截断；ZIP 参考归档保留数值及启用状态。按实际请求型号和新版 Medium 公式计费，保留 V5 Source 与服务端诊断，共享规则位于 NAI.Parity.Core。
 
-收尾阶段恢复历史行为测试并改为惰性构建历史路径索引。19 组开发离线套件全部通过，六组固定 Seed 官网／中转真图的 RGB、屏蔽 Alpha 最低位和原始 Comment 字节均一致，Ed25519 验签有效。本候选仍需维护者授权才能发布，上方链接继续指向已公开版本。
+同步恢复全部历史行为测试并将历史路径索引改为惰性构建。19 组离线测试套件（64,511 项断言）全部通过，六组固定 Seed 官网／中转真图的 RGB、屏蔽 Alpha 最低位和原始 Comment 字节均一致，Ed25519 验签有效；已完成实机 WinUI 3 GUI 验证及 `fork.2.1 → fork.3` 在线更新与原地升级验收。
 
 ## fork.2.1：浏览器原图导入与可选维护更新
 

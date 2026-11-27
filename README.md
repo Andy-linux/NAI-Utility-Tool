@@ -6,13 +6,13 @@ Language: English | [简体中文](README-CN.md)
 
 NAI Utility Tool is a Windows desktop client for NovelAI image workflows. It is built with .NET 9, WinUI 3, Windows App SDK, Win2D, SkiaSharp, and ONNX Runtime. It is not intended to replace the official NovelAI website; instead, it brings day-to-day local workflows into one tool: generation, image-to-image editing, mask editing, prompt management, reference-image workflows, batch automation, post-processing, upscaling, metadata inspection, and local reverse tagging.
 
-Current release: [**1.3.0_fork.2.1**](https://github.com/Andy-linux/NAI-Utility-Tool/releases/tag/1.3.0_fork.2.1), with a self-contained Windows x64 installer and ZIP/7z portable packages.
+Current release: [**1.3.0_fork.3**](https://github.com/Andy-linux/NAI-Utility-Tool/releases/tag/1.3.0_fork.3), with a self-contained Windows x64 installer and ZIP/7z portable packages.
 
-## fork.3 (final local release candidate)
+## fork.3: V5 precise references, imaging pipeline and pricing parity
 
 V5 Full/Curated precise references, outfit preference, effective High selection and the 97-bucket Lanczos3 reference pipeline. Original reference bytes and straight RGBA are preserved, including transparent RGB; oversized reference headers are checked before decode. Character defaults to no same-outfit preference; new cards have Fidelity 1.0 and finite numeric edits are committed immediately without clamping. ZIP reference archives retain their values and enabled states. Pricing follows effective request models and the updated Medium formula; V5 Source identifiers and provider errors are preserved. Shared parity rules live in NAI.Parity.Core.
 
-The closeout also restores the legacy behavior suites and lazily builds history path indices. All 19 development offline suites passed; six fixed-seed website/relay comparisons matched RGB, masked Alpha and original Comment bytes, with valid Ed25519 signatures. This remains a local candidate until release-owner approval; the preceding link still points to the published version.
+The release also restores the legacy behavior suites and lazily builds history path indices. All 19 offline suites (64,511 assertions) pass; six fixed-seed website/relay comparisons matched RGB, masked Alpha and original Comment bytes with valid Ed25519 signatures, verified alongside WinUI 3 GUI testing and live `fork.2.1 → fork.3` online update and in-place upgrade checks.
 
 ## fork.2.1: browser originals and optional maintenance updates
 

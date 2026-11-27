@@ -22,7 +22,7 @@ The user chooses a release, downloads it, then explicitly requests installation.
 fork.2 has no update UI. Its first upgrade to fork.2.1 requires downloading and running Setup once; subsequent versions can be selected inside the client. A local/mock check of a future release is not evidence of a published online upgrade.
 
 
-### fork.3 final local candidate
+### fork.3 release
 
-Informational version: 1.3.0_fork.3; file version: 1.3.0.4. The existing maintenance update contract is unchanged. The release includes V5 reference parity, reference value preservation, straight-RGBA processing, corrected pricing and restored legacy behavior tests. Final packages are built from the final local commit, and the maintenance upgrade is tested against an isolated fork.2.1 copy. Remote publication requires owner approval.
+Informational version: `1.3.0_fork.3`; file version: `1.3.0.4`. The existing maintenance update contract is unchanged. The release includes V5 reference parity, reference value preservation, straight-RGBA processing, corrected pricing and restored legacy behavior tests. Published from tag `1.3.0_fork.3` (`aac5936`) with verified Setup/ZIP/7z/`SHA256SUMS.txt` assets and live `fork.2.1 → fork.3` upgrade verification.
 
