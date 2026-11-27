@@ -8,9 +8,11 @@ NAI Utility Tool 是一个面向 NovelAI 图像工作流的 Windows 桌面客户
 
 当前版本：[**1.3.0_fork.2.1**](https://github.com/Andy-linux/NAI-Utility-Tool/releases/tag/1.3.0_fork.2.1)，提供 Windows x64 自包含安装器、ZIP 和 7z 便携包。
 
-## fork.3（本地发行候选）
+## fork.3（最终本地发行候选）
 
-支持 V5 Full/Curated 精确参考、服装偏好、有效 High 档位及 97 尺寸桶 Lanczos3 参考图处理。保留原始参考图字节，数值输入和 ZIP 草稿保留有限数值。更新 Medium 计费公式、有效参考及按请求计费，识别新版 V5 Source 哈希，保留脱敏后的服务端诊断。共享纯规则逐步抽离至 NAI.Parity.Core。本候选尚未发布，上方链接仍指向当前已发布版本。
+支持 V5 Full/Curated 精确参考、服装偏好、有效 High 档位及 97 尺寸桶 Lanczos3 参考图处理。保留参考原字节与非预乘 RGBA（含透明像素 RGB），超大图在解码前检查尺寸。Character 默认关闭同服装，新建参考卡 Fidelity 为 1.0，有限数值即时提交且不截断；ZIP 参考归档保留数值及启用状态。按实际请求型号和新版 Medium 公式计费，保留 V5 Source 与服务端诊断，共享规则位于 NAI.Parity.Core。
+
+收尾阶段恢复历史行为测试并改为惰性构建历史路径索引。19 组开发离线套件全部通过，六组固定 Seed 官网／中转真图的 RGB、屏蔽 Alpha 最低位和原始 Comment 字节均一致，Ed25519 验签有效。本候选仍需维护者授权才能发布，上方链接继续指向已公开版本。
 
 ## fork.2.1：浏览器原图导入与可选维护更新
 

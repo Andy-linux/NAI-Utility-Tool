@@ -8,9 +8,11 @@ NAI Utility Tool is a Windows desktop client for NovelAI image workflows. It is 
 
 Current release: [**1.3.0_fork.2.1**](https://github.com/Andy-linux/NAI-Utility-Tool/releases/tag/1.3.0_fork.2.1), with a self-contained Windows x64 installer and ZIP/7z portable packages.
 
-## fork.3 (local release candidate)
+## fork.3 (final local release candidate)
 
-V5 Full/Curated precise references, outfit preference, effective High selection and the 97-bucket Lanczos3 reference pipeline. Reference inputs retain original bytes; numeric fields and ZIP drafts preserve finite values. Pricing uses the updated Medium formula, effective references and per-request costs. New V5 Source hashes and redacted provider diagnostics are recognized. Shared pure rules are extracted to NAI.Parity.Core. This candidate is not published; the preceding release link remains the current published release.
+V5 Full/Curated precise references, outfit preference, effective High selection and the 97-bucket Lanczos3 reference pipeline. Original reference bytes and straight RGBA are preserved, including transparent RGB; oversized reference headers are checked before decode. Character defaults to no same-outfit preference; new cards have Fidelity 1.0 and finite numeric edits are committed immediately without clamping. ZIP reference archives retain their values and enabled states. Pricing follows effective request models and the updated Medium formula; V5 Source identifiers and provider errors are preserved. Shared parity rules live in NAI.Parity.Core.
+
+The closeout also restores the legacy behavior suites and lazily builds history path indices. All 19 development offline suites passed; six fixed-seed website/relay comparisons matched RGB, masked Alpha and original Comment bytes, with valid Ed25519 signatures. This remains a local candidate until release-owner approval; the preceding link still points to the published version.
 
 ## fork.2.1: browser originals and optional maintenance updates
 
