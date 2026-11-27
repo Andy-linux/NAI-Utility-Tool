@@ -33,7 +33,7 @@ internal static partial class InpaintImageProcessing
             var p = pixels[i];
             pixels[i] = p.WithAlpha(p.Alpha == 254 ? (byte)255 : p.Alpha == 1 ? (byte)0 : p.Alpha);
         }
-        bitmap.Pixels = pixels;
+        ReferenceImageProcessor.WritePixels(bitmap, pixels);
         return bitmap;
     }
 
@@ -44,9 +44,7 @@ internal static partial class InpaintImageProcessing
         using var bitmap = DecodeClean(bytes, out bool hasStealth);
         bool isWebp = ImageOutputNaming.Extension(bytes) == ".webp";
         if (bitmap == null || (!hasStealth && !isWebp)) return bytes;
-        using var image = SKImage.FromBitmap(bitmap);
-        using var encoded = image.Encode(SKEncodedImageFormat.Png, 100);
-        return encoded.ToArray();
+        return ReferenceImageProcessor.Encode(bitmap);
     }
 
     internal static byte[] EncodeMask(SKBitmap source)
@@ -107,11 +105,10 @@ internal static partial class InpaintImageProcessing
             pixels[y * width + x] = new SKColor(Channel(foreground.Red, background.Red), Channel(foreground.Green, background.Green),
                 Channel(foreground.Blue, background.Blue), (byte)Math.Round(combinedAlpha * 255));
         }
-        output.Pixels = pixels;
-        using var image = SKImage.FromBitmap(output);
-        using var png = image.Encode(SKEncodedImageFormat.Png, 100);
+        ReferenceImageProcessor.WritePixels(output, pixels);
+        var png = ReferenceImageProcessor.Encode(output);
         // Preserve the response's Info and alpha payload; signature validity depends on the resulting pixels.
-        return ImageMetadataService.ReapplyNovelAiMetadata(png.ToArray(), generated, width, height);
+        return ImageMetadataService.ReapplyNovelAiMetadata(png, generated, width, height);
     }
 
     private static byte[] CreateFeatherMask(SKBitmap mask, int width, int height)

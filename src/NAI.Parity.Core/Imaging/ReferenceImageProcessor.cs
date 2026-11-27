@@ -112,6 +112,8 @@ public static class ReferenceImageProcessor
 
     public static ReferenceBucket SelectBucket(int width, int height)
     {
+        width = Math.Max(width, 1);
+        height = Math.Max(height, 1);
         var ratio = Math.Log((double)width / height);
         var target = Buckets[0];
         double distance = double.PositiveInfinity;
@@ -123,7 +125,8 @@ public static class ReferenceImageProcessor
         if (target.Width == width && target.Height == height)
             return new(width, height, width, height, 0, 0, true);
         double scale = Math.Max((double)target.Width / width, (double)target.Height / height);
-        int rw = (int)Math.Floor(width * scale + .5), rh = (int)Math.Floor(height * scale + .5);
+        int rw = Math.Max((int)Math.Floor(width * scale + .5), target.Width);
+        int rh = Math.Max((int)Math.Floor(height * scale + .5), target.Height);
         return new(target.Width, target.Height, rw, rh, (rw-target.Width)/2, (rh-target.Height)/2, false);
     }
 
@@ -141,7 +144,7 @@ public static class ReferenceImageProcessor
     }
 
     // PNG scanlines retain RGB even where alpha is zero; Skia's encoder zeros those colors.
-    private static byte[] Encode(SKBitmap bitmap)
+    public static byte[] Encode(SKBitmap bitmap)
     {
         using var output = new MemoryStream();
         output.Write(new byte[] { 137,80,78,71,13,10,26,10 });
@@ -184,11 +187,33 @@ public static class ReferenceImageProcessor
         output.Write(value);
     }
 
+    public static void WritePixels(SKBitmap bitmap, SKColor[] colors)
+    {
+        var rgba = new byte[colors.Length * 4];
+        for (int i = 0; i < colors.Length; i++)
+        {
+            var p = colors[i];
+            rgba[i * 4] = p.Red;
+            rgba[i * 4 + 1] = p.Green;
+            rgba[i * 4 + 2] = p.Blue;
+            rgba[i * 4 + 3] = p.Alpha;
+        }
+        for (int y = 0; y < bitmap.Height; y++)
+            System.Runtime.InteropServices.Marshal.Copy(rgba, y * bitmap.Width * 4,
+                IntPtr.Add(bitmap.GetPixels(), y * bitmap.RowBytes), bitmap.Width * 4);
+    }
+
     public static byte[] Clean(byte[] bytes)
     {
-        if (bytes.Length >= 2 && bytes[0] == 0xff && bytes[1] == 0xd8) return bytes;
+        if (bytes.Length >= 3 && bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff) return bytes;
+        if (bytes.Length >= 24 && bytes.AsSpan(0, 8).SequenceEqual(new byte[] {137,80,78,71,13,10,26,10}) &&
+            bytes.AsSpan(12, 4).SequenceEqual("IHDR"u8) &&
+            (ulong)BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(16,4)) *
+            BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(20,4)) > 0x1000000) return bytes;
+        using (var data = SKData.CreateCopy(bytes))
+        using (var codec = SKCodec.Create(data) ?? throw new InvalidDataException("Unable to decode reference image."))
+            if ((long)codec.Info.Width * codec.Info.Height > 0x1000000) return bytes;
         using var bitmap = Decode(bytes);
-        if ((long)bitmap.Width * bitmap.Height > 0x1000000) return bytes;
         var pixels = bitmap.Pixels;
         var marker = Encoding.ASCII.GetBytes("stealth_pngcomp");
         if (pixels.Length < marker.Length * 8) return bytes;

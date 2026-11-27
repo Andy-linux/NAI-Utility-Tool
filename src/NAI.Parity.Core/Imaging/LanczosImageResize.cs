@@ -63,7 +63,14 @@ public static class LanczosImageResize
         var output = new SKBitmap(width, height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
         if (source.Width == width && source.Height == height)
         {
-            output.Pixels = source.Pixels;
+            if (source.ColorType == SKColorType.Rgba8888 && source.AlphaType == SKAlphaType.Unpremul)
+            {
+                var bytes = source.Bytes;
+                for (int y = 0; y < height; y++)
+                    System.Runtime.InteropServices.Marshal.Copy(bytes, y * source.RowBytes,
+                        IntPtr.Add(output.GetPixels(), y * output.RowBytes), width * 4);
+            }
+            else ReferenceImageProcessor.WritePixels(output, source.Pixels);
             return output;
         }
         var pixels = source.Pixels;

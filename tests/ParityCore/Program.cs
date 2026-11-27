@@ -82,6 +82,31 @@ else if (suite == "metadata")
 }
 else if (suite == "imaging")
 {
+    using (var transparent = new SkiaSharp.SKBitmap(2, 1, SkiaSharp.SKColorType.Rgba8888, SkiaSharp.SKAlphaType.Unpremul))
+    {
+        byte[] rgba = [53, 81, 219, 0, 19, 200, 72, 127];
+        System.Runtime.InteropServices.Marshal.Copy(rgba, 0, transparent.GetPixels(), rgba.Length);
+        using var sameSize = LanczosImageResize.Resize(transparent, 2, 1);
+        Check(sameSize.Bytes.SequenceEqual(rgba), "Same-size resize preserves transparent RGB");
+        using var roundtrip = ReferenceImageProcessor.Decode(ReferenceImageProcessor.Encode(sameSize));
+        Check(roundtrip.Bytes.SequenceEqual(rgba), "Straight PNG preserves transparent RGB");
+    }
+    foreach (var (width, height) in new[] { (0, 0), (0, 4096), (4096, 0), (1, 16384), (16384, 1), (97, 3001), (3001, 97) })
+    {
+        var bounds = ReferenceImageProcessor.SelectBucket(width, height);
+        Check(bounds.ResizeWidth >= bounds.Width && bounds.ResizeHeight >= bounds.Height &&
+              bounds.Left >= 0 && bounds.Top >= 0 &&
+              bounds.Left + bounds.Width <= bounds.ResizeWidth && bounds.Top + bounds.Height <= bounds.ResizeHeight,
+              $"Bucket crop stays in bounds: {width}x{height}");
+    }
+    byte[] largeHeader = [137,80,78,71,13,10,26,10, 0,0,0,13, 73,72,68,82, 0,0,16,1, 0,0,16,0];
+    Check(ReferenceEquals(ReferenceImageProcessor.Clean(largeHeader), largeHeader), "Oversized PNG header passes without pixel decode");
+    byte[] jpegHeader = [0xff,0xd8,0xff];
+    Check(ReferenceEquals(ReferenceImageProcessor.Clean(jpegHeader), jpegHeader), "Full JPEG magic passes unchanged");
+    bool rejectedShortJpeg = false;
+    try { ReferenceImageProcessor.Clean([0xff,0xd8]); }
+    catch (InvalidDataException) { rejectedShortJpeg = true; }
+    Check(rejectedShortJpeg, "Incomplete JPEG marker is not treated as JPEG");
     foreach (var row in Load("v5-reference-buckets.json").GetProperty("vectors").EnumerateArray())
     {
         int I(string k) => row.GetProperty(k).GetInt32();
