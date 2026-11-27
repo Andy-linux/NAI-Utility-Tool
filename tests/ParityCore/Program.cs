@@ -1,7 +1,7 @@
 using System.Text.Json;
 using NAITool.Services;
 
-if (args.Length != 2) throw new ArgumentException("Usage: ParityCore <suite> <website contract directory>");
+if (args.Length is < 2 or > 3) throw new ArgumentException("Usage: ParityCore <suite> <website contract directory> [image fixture directory]");
 string suite = args[0], directory = args[1];
 int checks = 0;
 void Check(bool ok, string description)
@@ -116,7 +116,7 @@ else if (suite == "imaging")
             actual.Left == I("left") && actual.Top == I("top") &&
             actual.Unchanged == row.GetProperty("unchanged").GetBoolean(), $"Bucket: {row}, actual {actual}");
     }
-    string fixtureDir = @"F:\nai\.runs\restart-20261126\fixtures\reference-oracle";
+    string fixtureDir = args.Length == 3 ? args[2] : Path.Combine(directory, "../../../../.runs/restart-20261126/fixtures/reference-oracle");
     foreach (var row in Load("reference-image-oracle.json").GetProperty("vectors").EnumerateArray())
     {
         string id = row.GetProperty("id").GetString()!;

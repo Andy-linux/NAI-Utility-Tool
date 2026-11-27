@@ -1,4 +1,6 @@
 using System.Net;
+using System.IO.Compression;
+using SkiaSharp;
 using System.Reflection;
 using System.Text.Json;
 using NAITool.Services;
@@ -24,7 +26,12 @@ internal static class V5ReferenceTransportChecks
         typeof(NovelAIService).GetField("_httpClient", flags)!.SetValue(service, client);
         typeof(NovelAIService).GetField("_httpClientProxyKey", flags)!.SetValue(service, "");
         await service.RefreshAccountsAsync();
-        string image = Convert.ToBase64String(File.ReadAllBytes(@"F:\nai\.runs\restart-20261126\fixtures\reference-oracle\exact.png"));
+        using var bitmap = new SKBitmap(832, 1216, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+        bitmap.Erase(SKColors.CornflowerBlue);
+        using var encodedImage = SKImage.FromBitmap(bitmap);
+        using var encoded = encodedImage.Encode(SKEncodedImageFormat.Png, 100);
+        byte[] fixtureBytes = encoded.ToArray();
+        string image = Convert.ToBase64String(fixtureBytes);
         var p = new NAIParameters { Model="nai-diffusion-5-full", Effort="medium", Steps=23, Seed="123456", QualityToggle=false };
         var a = new PreciseReferenceInfo { ImageBase64=image, ReferenceType=PreciseReferenceType.CharacterMainOutfit, Strength=6.1, Fidelity=-.25 };
         var disabled = new PreciseReferenceInfo { Enabled=false, ImageBase64="invalid" };
@@ -67,13 +74,13 @@ internal static class V5ReferenceTransportChecks
         int posts=handler.Posts;
         var excess=await service.GenerateAsync(832,1216,"landscape","",preciseReferences:Enumerable.Repeat(a,17).ToList(),requestParameters:new NAIParameters());
         Check(excess.Error!=null && handler.Posts==posts, "17 effective cards rejected before HTTP");
-        using (var archive = File.OpenRead(@"F:\nai\.runs\restart-20261126\website-reference_images.zip"))
+        using (var archive = WebsiteArchive(fixtureBytes))
         {
             var cards = PreciseReferenceArchive.Read(archive);
             Check(cards.Count == 1 && cards[0].Strength == 6.1 && cards[0].Fidelity == 1 &&
                 cards[0].Enabled && cards[0].ReferenceType == PreciseReferenceType.CharacterAndStyle,
-                "Read actual website reference ZIP");
-            var original = Convert.ToBase64String(File.ReadAllBytes(@"F:\nai\.runs\restart-20261126\fixtures\reference-oracle\character.png"));
+                "Read website-format reference ZIP");
+            var original = image;
             Check(cards[0].ImageBase64 == original, "ZIP keeps original image bytes");
             cards[0].Strength = -.51;
             cards[0].Fidelity = 1.2;
@@ -91,6 +98,19 @@ internal static class V5ReferenceTransportChecks
         Console.WriteLine($"Passed {checks} V5 request and archive behavior assertions (synthetic HTTP).");
     }
 
+    private static MemoryStream WebsiteArchive(byte[] image)
+    {
+        var stream = new MemoryStream();
+        using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            using (var entry = zip.CreateEntry("character.png").Open()) entry.Write(image);
+            using var metadata = new StreamWriter(zip.CreateEntry("metadata.json").Open());
+            metadata.Write("""[{"filename":"character.png","description":"character&style","strength":6.1,"fidelity":1,"information_extracted":1,"enabled":true}]""");
+        }
+        stream.Position = 0;
+        return stream;
+    }
+
     private sealed class Handler : HttpMessageHandler
     {
         public JsonElement LastBody { get; private set; }
@@ -98,7 +118,7 @@ internal static class V5ReferenceTransportChecks
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             if (request.Method==HttpMethod.Get)
-                return new(HttpStatusCode.OK){Content=new StringContent("""{"subscription":{"tier":3,"active":true,"trainingStepsLeft":1000,"usage":{"percent":100,"isNegative":false,"timeUntilNextPercent":60}}}""")};
+                return new(HttpStatusCode.OK){Content=new StringContent(JsonSerializer.Serialize(new { subscription = new { tier = 3, active = true, trainingStepsLeft = 1000, expiresAt = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds(), usage = new { percent = 100, isNegative = false, timeUntilNextPercent = 60 } } }))};
             Posts++;
             LastBody=JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct)).RootElement.Clone();
             var response=new HttpResponseMessage(HttpStatusCode.BadRequest)

@@ -73,7 +73,7 @@ internal static class UpscaleChecks
         handler.ResponseBytes = Zip(output);
         var result = await service.UpscaleImageAsync(input);
         Check(result.Error == null && result.ImageBytes!.SequenceEqual(output), "ZIP metadata entry is skipped; original result bytes survive.");
-        Check(handler.Uri == "https://image.novelai.net/ai/upscale", "Official route ignores custom generation URL.");
+        Check(handler.Uri == "https://unused.invalid/custom-generation/ai/upscale", "Upscale follows configured API root.");
         Check(handler.Authorization == "Bearer upscale-test-token" && handler.Accept == "application/zip", "Explicit token and ZIP negotiation.");
         Check(handler.Payload.EnumerateObject().Count() == 3, "Only current protocol fields are sent, no legacy width/height/scale.");
         Check(handler.Payload.GetProperty("model").GetString() == "nai-diffusion-5-curated", "Official upscaler model.");
@@ -115,12 +115,14 @@ internal static class UpscaleChecks
 
         foreach (var status in new[] { HttpStatusCode.Unauthorized, HttpStatusCode.PaymentRequired, HttpStatusCode.TooManyRequests, HttpStatusCode.InternalServerError })
         {
+            settings.Accounts[0].IsTokenValid = true;
             handler.Status = status;
             before = handler.Count;
             result = await service.UpscaleImageAsync(input);
-            Check(result.ImageBytes == null && result.Error!.Contains(((int)status).ToString()) && handler.Count == before + 1,
+            Check(result.ImageBytes == null && result.Error!.Contains(((int)status).ToString()) && result.Error.Contains("test response") && handler.Count == before + 1,
                 $"HTTP {(int)status} is surfaced without an automatic paid retry.");
         }
+        settings.Accounts[0].IsTokenValid = true;
         handler.Status = HttpStatusCode.OK;
         handler.ResponseBytes = Zip(null);
         result = await service.UpscaleImageAsync(input);

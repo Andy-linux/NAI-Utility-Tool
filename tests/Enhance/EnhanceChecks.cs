@@ -44,14 +44,14 @@ internal static class EnhanceChecks
             Check(Rule<List<double>>("GetAvailableAmounts", size.Item1, size.Item2).SequenceEqual(new[] { 1d, 1.5 }), "Portrait/square supported amounts.");
         var small = Rule<List<double>>("GetAvailableAmounts", 512, 512);
         Check(small.SequenceEqual(new[] { 1d, 1.5, 2d }), "Small images permit 2x.");
-        Check(Rule<List<double>>("GetAvailableAmounts", 1000, 1000).SequenceEqual(new[] { 1d }), "Unaligned scaling is omitted.");
+        Check(Rule<List<double>>("GetAvailableAmounts", 1000, 1000).SequenceEqual(new[] { 1d, 1.5 }), "64-aligned output permits 1.5x.");
         foreach (var size in new[] { (0, 1024), (-1, 512), (2048, 2048), (int.MaxValue, int.MaxValue) })
             Check(Rule<List<double>>("GetAvailableAmounts", size.Item1, size.Item2).Count == 0, "Invalid/oversized source rejected.");
         Check(Rule<double>("GetPreferredAmount", new List<double> { 1d }, 2d) == 1, "Remembered unsupported scale falls back.");
         Check(Rule<bool>("CanUseMax", V5, 1024, 1024), "V5 supports Max.");
         Check(!Rule<bool>("CanUseMax", "nai-diffusion-4-5-full", 1024, 1024), "V4.5 omits Max.");
         Check(!Rule<bool>("CanUseMax", V5, 2048, 1536), "Near-limit images omit Max.");
-        Check(Rule<(int, int)>("GetOutputDimensions", 832, 1216, 1.5, false) == (1248, 1824), "Portrait 1.5x dimensions.");
+        Check(Rule<(int, int)>("GetOutputDimensions", 832, 1216, 1.5, false) == (1280, 1856), "Portrait 1.5x dimensions align to nearest 64.");
         foreach (var size in new[] { (512, 512), (832, 1216), (1216, 832), (1024, 1024), (1024, 2048) })
         {
             var output = Rule<(int W, int H)>("GetOutputDimensions", size.Item1, size.Item2, 1d, true);
@@ -70,7 +70,7 @@ internal static class EnhanceChecks
         {
             var result = (string)prepare.Invoke(null, [png.ToArray(), side, side])!;
             using var decoded = SKBitmap.Decode(Convert.FromBase64String(result));
-            Check(decoded.Width == side && decoded.Height == side, "Prepared image matches request dimensions.");
+            Check(Convert.FromBase64String(result).SequenceEqual(png.ToArray()) && decoded.Width == 64 && decoded.Height == 64, "Enhance sends original bytes; target dimensions belong to request parameters.");
             Check(decoded.GetPixel(0, 0).Alpha == 128, "Lossless preparation retains transparency.");
         }
         try
@@ -106,19 +106,19 @@ internal static class EnhanceChecks
             var sent = payload.GetProperty("parameters");
             Check(sent.GetProperty("width").GetInt32() == 1024 && sent.GetProperty("height").GetInt32() == 1024, "Request dimensions preserved.");
             Check(sent.GetProperty("strength").GetDouble() == 0.6 && sent.GetProperty("noise").GetDouble() == 0.2, "Strength/noise reach API.");
-            Check(sent.GetProperty("params_version").GetInt32() == (mode.Item1 ? 4 : 3), "Protocol change is scoped to Enhance.");
-            Check(sent.GetProperty("v4_negative_prompt").GetProperty("legacy_uc").GetBoolean() == !mode.Item1,
-                "V5 Enhance uses modern negative prompts without changing plain img2img.");
+            Check(sent.GetProperty("params_version").GetInt32() == 4, "Current image-to-image and Enhance both use protocol version 4.");
+            Check(!sent.GetProperty("v4_negative_prompt").GetProperty("legacy_uc").GetBoolean(),
+                "V5 uses modern negative prompts for both image-to-image and Enhance.");
             Check(sent.TryGetProperty("upscaled_enhance", out var max) == mode.Item2 && (!mode.Item2 || max.GetBoolean()), "Max uses the API upscale flag.");
             string prompt = payload.GetProperty("input").GetString()!;
             Check(prompt.Contains("-2::upscaled, blurry::") == (mode.Item1 && !mode.Item2), "Prompt hint only on standard Enhance.");
+            Check(sent.GetProperty("extra_noise_seed").GetUInt64() == 4294967294, "Image requests preserve large extra noise seeds.");
             if (mode.Item1)
             {
-                Check(sent.GetProperty("extra_noise_seed").GetUInt64() == 4294967294, "Extra noise seed preserves large integers.");
-                Check(!sent.GetProperty("sm").GetBoolean() && !sent.GetProperty("color_correct").GetBoolean() &&
+                Check(!sent.TryGetProperty("sm", out _) && !sent.TryGetProperty("sm_dyn", out _) && !sent.GetProperty("color_correct").GetBoolean() &&
                     sent.GetProperty("add_original_image").GetBoolean(), "Enhance request flags.");
             }
-            else Check(!sent.TryGetProperty("extra_noise_seed", out _), "Plain img2img is unchanged.");
+            else Check(!sent.TryGetProperty("add_original_image", out _) && !sent.TryGetProperty("color_correct", out _), "Enhance-only flags are absent from plain img2img.");
         }
         int count = handler.Count;
         parameters.Steps = 100;

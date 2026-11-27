@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/NAITool/Models/InpaintRegion.cs" Link="InpaintRegion.cs" />
     <Compile Include="../../src/NAITool/Models/MaskTranslation.cs" Link="MaskTranslation.cs" />
     <Compile Include="../../src/NAITool/Commands/UndoManager.cs" Link="UndoManager.cs" />
   </ItemGroup>

@@ -45,8 +45,12 @@ internal static class ApiTransportChecks
         settings.Settings.ApiCallMode = ApiCallMode.MostQuota;
         await service.GenerateAsync(1024, 1024, "test", "");
         Check(handler.LastPostToken == "test-b", "V5 generation chooses maximum V5 balance.");
+        settings.Settings.ApiCallMode = ApiCallMode.LeastQuota;
+        await service.GenerateAsync(1024, 1024, "test", "");
+        Check(handler.LastPostToken == "test-zero", "Zero percent without negative flag remains free eligible.");
+        settings.Settings.ApiCallMode = ApiCallMode.MostQuota;
         await service.GenerateAsync(1024, 1536, "test", "");
-        Check(handler.LastPostToken == "test-a", "Paid V5 generation prioritizes Anlas and skips zero V5.");
+        Check(handler.LastPostToken == "test-zero", "Paid V5 generation prioritizes available Anlas.");
         settings.Settings.ApiCallMode = ApiCallMode.LeastQuota;
         await service.GenerateAsync(1024, 1536, "test", "");
         Check(handler.LastPostToken == "test-b", "Paid V5 generation chooses minimum sufficient Anlas.");
@@ -67,7 +71,7 @@ internal static class ApiTransportChecks
         }
         Check(sequence.SequenceEqual(new[] { "test-a", "test-b", "test-a", "test-b" }),
             "Free generation rotates even in random mode, without duplicate weighting.");
-        Check(handler.PostCount == 9, "Each operation has exactly one POST, no automatic retries.");
+        Check(handler.PostCount == 10, "Each operation has exactly one POST, no automatic retries.");
 
         foreach (var account in settings.Accounts) account.RefreshedAt = DateTimeOffset.MinValue;
         int postsBeforeEdit = handler.PostCount;
@@ -121,6 +125,7 @@ internal static class ApiTransportChecks
         {
             Accounts = [loaded.Accounts[0], loaded.Accounts[0], new ApiAccount { EncryptedApiToken = "invalid-ciphertext" }],
         }));
+        File.Delete(configPath + ".bak"); // Exercise partial recovery when no usable backup exists.
         var partiallyDecrypted = new SettingsService();
         partiallyDecrypted.Load();
         Check(partiallyDecrypted.ApiTokenDecryptFailed && partiallyDecrypted.HasApiTokens &&
@@ -136,6 +141,8 @@ internal static class ApiTransportChecks
         settings.SetApiTokens(["test-too-small", "test-exact", "test-zero", "test-exact"]);
         settings.Settings.GenParameters.Model = "nai-diffusion-5-full";
         handler.Balances["test-too-small"] = (44, 90);
+        handler.Balances["test-zero"] = (0, 0);
+        handler.NegativeV5["test-zero"] = true;
         foreach (var mode in Enum.GetValues<ApiCallMode>())
         {
             settings.Settings.ApiCallMode = mode;
@@ -146,7 +153,7 @@ internal static class ApiTransportChecks
                 int before = handler.PostCount;
                 await service.GenerateAsync(1024, 1536, "test", "");
                 Check(handler.PostCount == before + 1 && handler.LastPostToken == "test-exact",
-                    $"Only the account with sufficient Anlas and available V5 receives the generation POST: {mode}.");
+                    $"Only the account with sufficient Anlas receives the generation POST: {mode}.");
             }
 
             // The last POST invalidates its balance; the next selection must refresh and exclude it.
@@ -154,13 +161,14 @@ internal static class ApiTransportChecks
             int postsBeforeBlockedRequest = handler.PostCount;
             var blocked = await service.GenerateAsync(1024, 1536, "test", "");
             Check(blocked.Error != null && handler.PostCount == postsBeforeBlockedRequest,
-                $"No generation POST is sent when every account is insufficient or has zero V5: {mode}.");
+                $"No generation POST is sent when every account has insufficient Anlas: {mode}.");
         }
 
         settings.SetApiTokens(["test-preview-opus", "test-preview-tablet"]);
+        service.InvalidateMismatchedAccountCaches();
         settings.Accounts[0].Info = new NovelAiAccountInfo
         {
-            AnlasBalance = 100, V5UsagePercent = 90, IsOpus = true, HasActiveSubscription = true,
+            AnlasBalance = 100, V5UsagePercent = 90, V5UsageIsNegative = false, IsOpus = true, HasActiveSubscription = true,
         };
         settings.Accounts[1].Info = new NovelAiAccountInfo
         {
@@ -169,7 +177,7 @@ internal static class ApiTransportChecks
         settings.Settings.ApiCallMode = ApiCallMode.Random;
         var costType = typeof(NovelAIService).Assembly.GetType("NAITool.Services.ApiRequestCost")!;
         var cost = costType.GetMethod("Image", BindingFlags.Public | BindingFlags.Static)!
-            .Invoke(null, ["nai-diffusion-5-full", 1024, 1024, 28, false, 1d, 1]);
+            .Invoke(null, ["nai-diffusion-5-full", 1024, 1024, 28, false, 1d, 1, false]);
         var estimate = typeof(NovelAIService).GetMethod("EstimateAnlas", BindingFlags.NonPublic | BindingFlags.Instance)!
             .Invoke(service, [cost]);
         Check(Equals(estimate, 1), "Random cost preview excludes the higher cost of an account that cannot afford the request.");
@@ -182,6 +190,7 @@ internal static class ApiTransportChecks
         public int PostCount => _postCount;
         public string? LastPostToken { get; private set; }
         public ConcurrentDictionary<string, (int Anlas, int V5)> Balances { get; } = new();
+        public ConcurrentDictionary<string, bool> NegativeV5 { get; } = new();
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
@@ -202,8 +211,8 @@ internal static class ApiTransportChecks
                     {
                         subscription = new
                         {
-                            tier = 3, active = true, trainingStepsLeft = balance,
-                            usage = new { percent = v5, isNegative = false, timeUntilNextPercent = 60 },
+                            tier = 3, active = true, trainingStepsLeft = balance, expiresAt = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds(),
+                            usage = new { percent = v5, isNegative = NegativeV5.ContainsKey(token!), timeUntilNextPercent = 60 },
                         },
                     })),
                 };
