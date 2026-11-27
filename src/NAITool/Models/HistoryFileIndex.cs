@@ -8,7 +8,7 @@ public sealed class HistoryFileIndex : IReadOnlyList<string>
     public sealed record Day(string Date, string[] Files, int Start);
     public static HistoryFileIndex Empty { get; } = new([]);
     public IReadOnlyList<Day> Days { get; }
-    private readonly Dictionary<string, int> _indicesByPath = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Lazy<Dictionary<string, int>> _indicesByPath;
     public int Count { get; }
 
     public HistoryFileIndex(IEnumerable<KeyValuePair<string, string[]>> days)
@@ -20,11 +20,18 @@ public sealed class HistoryFileIndex : IReadOnlyList<string>
             if (pair.Value.Length == 0) continue;
             var day = new Day(pair.Key, pair.Value, count);
             result.Add(day);
-            for (int i = 0; i < day.Files.Length; i++) _indicesByPath[day.Files[i]] = count + i;
             count = checked(count + day.Files.Length);
         }
         Days = result;
         Count = count;
+        _indicesByPath = new(() =>
+        {
+            var indices = new Dictionary<string, int>(Count, StringComparer.OrdinalIgnoreCase);
+            foreach (var day in Days)
+                for (int i = 0; i < day.Files.Length; i++)
+                    indices[day.Files[i]] = day.Start + i;
+            return indices;
+        });
     }
 
     public string this[int index]
@@ -46,7 +53,7 @@ public sealed class HistoryFileIndex : IReadOnlyList<string>
 
     public int IndexOf(string path)
     {
-        return _indicesByPath.TryGetValue(path, out int index) ? index : -1;
+        return _indicesByPath.Value.TryGetValue(path, out int index) ? index : -1;
     }
 
     public HistoryFileIndex Filter(IReadOnlySet<string> paths) => paths.Count == 0 ? Empty : new(
